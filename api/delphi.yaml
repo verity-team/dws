@@ -75,7 +75,7 @@ paths:
       description: |
          get the donation data for the wallet address in question
       security:
-         - accessCode: [write]
+         - accessCode: [read]
       operationId: userData
       responses:
         "200":
