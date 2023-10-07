@@ -1,7 +1,22 @@
 # truth memes donation web site
 
-## rules
-1. all amounts are passed as string and should be decoded to a `decimal` type to preserve precision
+## general
+
+We want to build a 1-page web site similar to https://wallstmemes.com/-- the donation widget needs to be on top of the page. It shall allow a user to donate ETH, USDT or USDC.
+
+## requirements & rules
+1. all amounts are passed as strings and should be decoded to a `decimal` type to preserve precision
+1. users may be sent to our web site via a link that contains an affiliate code e.g.
+
+    ```https://tm.io/donate?afc=AivCuktyds0```
+
+    If such an affiliate code is present then it needs to be passed to the `dws` backend after a donation transaction. We cannot capture it in the ethereum transaction if the latter involves calling an `erc-20` smart contract -- the `data` property (of the ethereum transaction) holds the arguments of the function invoked on the smart contract.
+
+1. the frontend needs to get the token price from the `dsw` backend upon each refresh
+
+1. the frontend needs to get the ETH price from the `dsw` backend
+    1. every minute
+    1. whenever the user presses the "donate" button and the asset he is giving is ETH
 
 ## use cases
 
@@ -20,7 +35,7 @@ A user comes to our donation web site and connects his metamask wallet that is s
 
     ```json
     {
-      "user_data": [
+      "donations": [
         {
           "amount": "1.23",
           "asset": "ETH",
@@ -34,14 +49,13 @@ A user comes to our donation web site and connects his metamask wallet that is s
           "tokens": "380000",
           "price": "0.002",
           "date": "2023-10-06T12:52:10+00:00"
-        },
-        {
-          "total": "1360000",
-          "staked": "28000",
-          "date": "2023-10-06T13:04:24+00:00",
-          "rewards": "0"
         }
-      ]
+      ],
+      "stats": {
+        "total": "1360000",
+        "staked": "0",
+        "rewards": "0"
+      }
     }
     ```
 
@@ -51,9 +65,30 @@ A user comes to our donation web site and connects his metamask wallet that is s
 1. if he has not staked any tokens allow him to do so
 1. if he _has_ staked tokens already allow him to unstake them (takes 7 days from the time the unstaking was requested)
 
-### donate ETH
+### donate
 
-### donate stable coin (usdt or usdc)
+Display the token price and allow the user to
+1. select the asset (ETH, USDT or USDC)
+1. specify the amount he wants to donate
+
+Whenever the amount changes: display the amount of tokens corresponding to the donation amount specified.
+
+If the user is donating ETH the token amount needs to be calculated as follows:
+
+    `ceiling(DA * EP / TP)`
+
+where
+- DA = donation amount in ETH
+- EP = ethereum price in USD
+- TP = token price
+
+If the user is donating in stable coin the formula is simpler:
+
+    `ceiling(DA / TP)`
+
+After the user presses the "donate" button: construct the ethereum transaction and [send it](https://docs.metamask.io/wallet/how-to/send-transactions/) to the network.
+
+If the user came via an affiliate code - call the `dws` backend and pass the `txHash` and the affiliate code to it.
 
 ### stake funds
 
