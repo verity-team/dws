@@ -4,7 +4,7 @@
 
 We want to build a 1-page web site similar to https://wallstmemes.com/ -- the donation widget needs to be on top of the page. It shall allow a user to donate ETH, USDT or USDC.
 
-The backend used by the donation web site frontend is called `delphi` and it will expose a REST API to the frontend.
+The backend used by the donation web site frontend is called `delphi` and it will expose a [REST API](https://app.swaggerhub.com/apis/MUHAREM_1/delphi/) to the frontend.
 
 ## requirements & rules
 1. all amounts are passed as strings and should be decoded to a `decimal` type to preserve precision
