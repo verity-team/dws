@@ -1,0 +1,242 @@
+openapi: 3.0.3
+info:
+  title: delphi (donation web site backend)
+  version: '1.0.0'
+  contact:
+    name: API support
+    url: https://support.tm.io
+    email: info@verity.team
+  license:
+    name: GNU Affero General Public License v3 (AGPL-3.0)
+    url: https://www.gnu.org/licenses/agpl-3.0.en.html
+  description: |
+    The delphi backend provides all the functions needed by the donation web
+    site.
+
+servers:
+- url: https://api.tm.io/delphi/v1
+  description: delphi (donation web site backend)
+
+security:
+  - accessCode:
+      - read
+      - write
+paths:
+  /affiliate_tx:
+    post:
+      summary: set affiliate code for donation
+      description: |
+         Call this endpoint to set the affiliate code for a donation
+      security:
+         - accessCode: [write]
+      operationId: setAffiliateCode
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/affiliate_request'
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: |
+            Bad input parameter; error message provides details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+        "401":
+          description: |
+            Client lacks valid authentication credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+        "5XX":
+          description: |
+            Servers are not working as expected. The request is probably valid
+            but needs to be retried later.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+  /data/{address}:
+    get:
+      summary: get the donation data for the wallet address in question
+      parameters:
+        - in: path
+          name: address
+          required: true
+          schema:
+            type: string
+          description: |
+            The wallet address for which to obtain data
+          example: "0xDEd1Fe6B3f61c8F1d874bb86F086D10FFc3F0154"
+      description: |
+         get the donation data for the wallet address in question
+      security:
+         - accessCode: [write]
+      operationId: userData
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/user_data'
+        "400":
+          description: |
+            Bad input parameter; error message provides details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+        "401":
+          description: |
+            Client lacks valid authentication credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+        "5XX":
+          description: |
+            Servers are not working as expected. The request is probably valid
+            but needs to be retried later.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+components:
+  schemas:
+    error:
+      required:
+      - code
+      - message
+      properties:
+        code:
+          type: integer
+          description: error code
+          example: 115
+        message:
+          type: string
+          description: error message
+          example: all your bytes are wrong
+        wrapped_err:
+          type: string
+          description: wrapped error
+          example:
+            "ENOENT: no such file or directory, open '/data/user/api/common.yaml'"
+    user_data:
+      required:
+      - donations
+      - stats
+      properties:
+        donations:
+          type: array
+          description: an array of donations
+          items:
+            $ref: '#/components/schemas/donation'
+        stats:
+          $ref: '#/components/schemas/stats'
+    donation:
+      required:
+      - amount
+      - asset
+      - tokens
+      - price
+      - ts
+      properties:
+        amount:
+          description: amount donated
+          type: string
+          example: "1.23"
+        usd_amount:
+          description: optional USD amount, omitted in case of USD stable coins
+          type: string
+          example: "2009.82"
+        asset:
+          description: asset donated
+          type: string
+          enum: [eth, usdt, usdc]
+          example: "eth"
+        tokens:
+          description: amount of tokens corresponding to the donated amount
+          type: string
+          example: "980000"
+        price:
+          description: token price at the time of donation
+          type: string
+          example: "0.002"
+        ts:
+          type: string
+          format: date-time
+          example: "2023-10-06T12:52:10+00:00"
+    price:
+      required:
+      - asset
+      - price
+      - ts
+      properties:
+        asset:
+          type: string
+          enum: [eth, truth]
+          example: "eth"
+        price:
+          description: asset price in USD
+          type: string
+          example: "1633.89"
+        ts:
+          type: string
+          format: date-time
+          example: "2023-10-05T11:56:10+00:00"
+    stats:
+      required:
+      - total
+      - staked
+      - reward
+      - status
+      properties:
+        total:
+          description: total number of tokens the user is eligible to claim
+          type: string
+          example: "980000"
+        staked:
+          description: number of tokens the user staked; must be <= `total`
+          type: string
+          example: "979999"
+        reward:
+          description: staking rewards the user is eligible to claim
+          type: string
+          example: "979"
+        status:
+          type: string
+          enum: [none, staking, unstaking]
+          example: "staking"
+        ts:
+          description: date/time at which the staking status was last modified
+          type: string
+          format: date-time
+          example: "2023-10-05T09:23:10+00:00"
+    affiliate_request:
+      required:
+      - code
+      - tx_hash
+      properties:
+        code:
+          description: affiliate code for the donation in question
+          type: string
+          example: "TruffUdBuk6"
+        tx_hash:
+          description: transaction hash for the donation in question
+          type: string
+          example: "0x558c8b86f75b0149ddca028a44a302eebe47c032e8ca8834f07aa6f1c5ae3fac"
+  securitySchemes:
+    accessCode:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: 'http://example.com/oauth/auth'
+          tokenUrl: 'http://example.com/oauth/token'
+          scopes:
+            write: allows modifying resources
+            read: allows reading resources
