@@ -2,7 +2,7 @@
 
 ## general
 
-We want to build a 1-page web site similar to https://wallstmemes.com/-- the donation widget needs to be on top of the page. It shall allow a user to donate ETH, USDT or USDC.
+We want to build a 1-page web site similar to https://wallstmemes.com/ -- the donation widget needs to be on top of the page. It shall allow a user to donate ETH, USDT or USDC.
 
 ## requirements & rules
 1. all amounts are passed as strings and should be decoded to a `decimal` type to preserve precision
@@ -15,12 +15,13 @@ We want to build a 1-page web site similar to https://wallstmemes.com/-- the don
 1. the frontend needs to get the token price from the `dsw` backend upon each refresh
 
 1. the frontend needs to get the ETH price from the `dsw` backend
-    1. every minute
-    1. whenever the user presses the "donate" button and the asset he is giving is ETH
+    1. upon each refresh
+    1. once a minute
+    1. whenever the user presses the "donate" button and the asset he is donating is ETH
 
 ## use cases
 
-### connect web3 wallet (ethereum mainnet) - no donation
+### connect web3 wallet (ethereum mainnet) - no donations yet
 
 A user comes to our donation web site and connects his metamask wallet that is switched to the ethereum mainnet:
 1. get the wallet address
@@ -75,7 +76,7 @@ Whenever the amount changes: display the amount of tokens corresponding to the d
 
 If the user is donating ETH the token amount needs to be calculated as follows:
 
-    `ceiling(DA * EP / TP)`
+    ceiling(DA * EP / TP)
 
 where
 - DA = donation amount in ETH
@@ -84,7 +85,7 @@ where
 
 If the user is donating in stable coin the formula is simpler:
 
-    `ceiling(DA / TP)`
+    ceiling(DA / TP)
 
 After the user presses the "donate" button: construct the ethereum transaction and [send it](https://docs.metamask.io/wallet/how-to/send-transactions/) to the network.
 
