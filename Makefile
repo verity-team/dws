@@ -24,3 +24,7 @@ run_dws_db:
 
 dws_db_prompt:
 	export PGPASSWORD=postgres && psql -U postgres -h localhost -p 27501 -d dwsdb
+
+codegen:
+	oapi-codegen -config configs/models.cfg.yaml api/delphi.yaml
+	oapi-codegen -config configs/server.cfg.yaml api/delphi.yaml
