@@ -297,7 +297,7 @@ components:
           example: "9880000"
           maxLength: 16
         staked:
-          description: number of tokens the user staked; must be <= `total`
+          description: number of tokens the user staked; must be <= `tokens`
           type: string
           example: "979999"
           maxLength: 16
