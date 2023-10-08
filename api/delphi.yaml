@@ -188,6 +188,8 @@ components:
       - asset
       - tokens
       - price
+      - tx_hash
+      - status
       - ts
       properties:
         amount:
@@ -211,6 +213,15 @@ components:
           description: token price at the time of donation
           type: string
           example: "0.002"
+        tx_hash:
+          description: transaction hash for the donation in question
+          type: string
+          example: "0x558c8b86f75b0149ddca028a44a302eebe47c032e8ca8834f07aa6f1c5ae3fac"
+        status:
+          description: ethereum blockchain status of the donation
+          type: string
+          enum: [unconfirmed, confirmed, failed]
+          example: "unconfirmed"
         ts:
           type: string
           format: date-time
