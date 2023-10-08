@@ -1,0 +1,25 @@
+version: '3'
+
+services:
+
+  dws-db:
+    restart: always
+    hostname: dws-db
+    image: postgres:14
+    ports:
+      - '127.0.0.1:27501:5432'
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=dwsdb
+    volumes:
+      - dws_db_volume:/var/lib/postgresql/data:z
+      - ../db/01-schema.sql:/docker-entrypoint-initdb.d/initial_1.sql:z
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  dws_db_volume:

@@ -7,14 +7,27 @@ import (
 	"os"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	echomiddleware "github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/gommon/log"
 	middleware "github.com/oapi-codegen/echo-middleware"
 	"github.com/verity-team/dws/api"
 	"github.com/verity-team/dws/internal/delphi/server"
 )
 
+var (
+	bts, rev, version string
+)
+
 func main() {
+	err := godotenv.Overload()
+	if err != nil {
+		log.Warn("Error loading .env file")
+	}
+	version = fmt.Sprintf("%s::%s", bts, rev)
+	log.Info("version = ", version)
+
 	port := flag.String("port", "8080", "Port for test HTTP server")
 	flag.Parse()
 
@@ -28,8 +41,13 @@ func main() {
 	// that server names match. We don't know how this thing will be run.
 	swagger.Servers = nil
 
+	dsn := getDSN()
+	db, err := sqlx.Open("postgres", dsn)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
 	// Create an instance of our handler which satisfies the generated interface
-	db, err := connect()
 	ds := server.NewDelphiServer(db)
 
 	// This is how you set up a basic Echo router
@@ -47,6 +65,35 @@ func main() {
 	e.Logger.Fatal(e.Start(net.JoinHostPort("0.0.0.0", *port)))
 }
 
-func connect() (*sqlx.DB, error) {
-	return nil, nil
+func getDSN() string {
+	var (
+		host, port, user, passwd, database string
+		present                            bool
+	)
+
+	host, present = os.LookupEnv("DWS_DB_HOST")
+	if !present {
+		log.Fatal("DWS_DB_HOST variable not set")
+	}
+	port, present = os.LookupEnv("DWS_DB_PORT")
+	if !present {
+		log.Fatal("DWS_DB_PORT variable not set")
+	}
+	user, present = os.LookupEnv("DWS_DB_USER")
+	if !present {
+		log.Fatal("DWS_DB_USER variable not set")
+	}
+	passwd, present = os.LookupEnv("DWS_DB_PASSWORD")
+	if !present {
+		log.Fatal("DWS_DB_PASSWORD variable not set")
+	}
+	database, present = os.LookupEnv("DWS_DB_DATABASE")
+	if !present {
+		log.Fatal("DWS_DB_DATABASE variable not set")
+	}
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", host, port, user, passwd, database)
+
+	log.Infof("host: '%s'", host)
+	log.Infof("database: '%s'", database)
+	return dsn
 }
