@@ -22,7 +22,7 @@ security:
       - read
       - write
 paths:
-  /affiliate_tx:
+  /donation/affiliate:
     post:
       summary: set affiliate code for donation
       description: |
@@ -60,7 +60,44 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/error'
-  /data/{address}:
+  /donation/data/:
+    get:
+      summary: get general donation data
+      description: |
+         get the prices and the funds accumulated so far
+      security:
+         - accessCode: [read]
+      operationId: donationData
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/donation_data'
+        "400":
+          description: |
+            Bad input parameter; error message provides details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+        "401":
+          description: |
+            Client lacks valid authentication credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+        "5XX":
+          description: |
+            Servers are not working as expected. The request is probably valid
+            but needs to be retried later.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+  /user/data/{address}:
     get:
       summary: get the donation data for the wallet address in question
       parameters:
@@ -121,11 +158,18 @@ components:
           type: string
           description: error message
           example: all your bytes are wrong
-        wrapped_err:
-          type: string
-          description: wrapped error
-          example:
-            "ENOENT: no such file or directory, open '/data/user/api/common.yaml'"
+    donation_data:
+      required:
+      - prices
+      - stats
+      properties:
+        prices:
+          type: array
+          description: an array of prices
+          items:
+            $ref: '#/components/schemas/price'
+        stats:
+          $ref: '#/components/schemas/donation_stats'
     user_data:
       required:
       - donations
@@ -137,7 +181,7 @@ components:
           items:
             $ref: '#/components/schemas/donation'
         stats:
-          $ref: '#/components/schemas/stats'
+          $ref: '#/components/schemas/user_stats'
     donation:
       required:
       - amount
@@ -189,17 +233,40 @@ components:
           type: string
           format: date-time
           example: "2023-10-05T11:56:10+00:00"
-    stats:
+    donation_stats:
       required:
       - total
+      - tokens
+      - status
+      properties:
+        total:
+          description: total funds raised in USD
+          type: string
+          example: "1980000"
+        tokens:
+          description: number of tokens claimable by donors
+          type: string
+          example: "979999"
+        status:
+          type: string
+          enum: [open, paused, closed]
+          example: "open"
+    user_stats:
+      required:
+      - total
+      - tokens
       - staked
       - reward
       - status
       properties:
         total:
-          description: total number of tokens the user is eligible to claim
+          description: total funds donated by this address in USD
           type: string
-          example: "980000"
+          example: "31415"
+        tokens:
+          description: number of tokens the user is eligible to claim
+          type: string
+          example: "9880000"
         staked:
           description: number of tokens the user staked; must be <= `total`
           type: string
