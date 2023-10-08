@@ -106,6 +106,7 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 42
           description: |
             The wallet address for which to obtain data
           example: "0xDEd1Fe6B3f61c8F1d874bb86F086D10FFc3F0154"
@@ -156,6 +157,7 @@ components:
           example: 115
         message:
           type: string
+          maxLength: 128
           description: error message
           example: all your bytes are wrong
     donation_data:
@@ -196,36 +198,44 @@ components:
           description: amount donated
           type: string
           example: "1.23"
+          maxLength: 16
         usd_amount:
           description: optional USD amount, omitted in case of USD stable coins
           type: string
           example: "2009.82"
+          maxLength: 16
         asset:
           description: asset donated
           type: string
           enum: [eth, usdt, usdc]
           example: "eth"
+          maxLength: 8
         tokens:
           description: amount of tokens corresponding to the donated amount
           type: string
           example: "980000"
+          maxLength: 16
         price:
           description: token price at the time of donation
           type: string
           example: "0.002"
+          maxLength: 16
         tx_hash:
           description: transaction hash for the donation in question
           type: string
           example: "0x558c8b86f75b0149ddca028a44a302eebe47c032e8ca8834f07aa6f1c5ae3fac"
+          maxLength: 66
         status:
           description: ethereum blockchain status of the donation
           type: string
           enum: [unconfirmed, confirmed, failed]
           example: "unconfirmed"
+          maxLength: 16
         ts:
           type: string
           format: date-time
           example: "2023-10-06T12:52:10+00:00"
+          maxLength: 32
     price:
       required:
       - asset
@@ -236,14 +246,17 @@ components:
           type: string
           enum: [eth, truth]
           example: "eth"
+          maxLength: 8
         price:
           description: asset price in USD
           type: string
           example: "1633.89"
+          maxLength: 16
         ts:
           type: string
           format: date-time
           example: "2023-10-05T11:56:10+00:00"
+          maxLength: 32
     donation_stats:
       required:
       - total
@@ -254,14 +267,17 @@ components:
           description: total funds raised in USD
           type: string
           example: "1980000"
+          maxLength: 16
         tokens:
           description: number of tokens claimable by donors
           type: string
           example: "979999"
+          maxLength: 16
         status:
           type: string
           enum: [open, paused, closed]
           example: "open"
+          maxLength: 8
     user_stats:
       required:
       - total
@@ -274,27 +290,33 @@ components:
           description: total funds donated by this address in USD
           type: string
           example: "31415"
+          maxLength: 16
         tokens:
           description: number of tokens the user is eligible to claim
           type: string
           example: "9880000"
+          maxLength: 16
         staked:
           description: number of tokens the user staked; must be <= `total`
           type: string
           example: "979999"
+          maxLength: 16
         reward:
           description: staking rewards the user is eligible to claim
           type: string
           example: "979"
+          maxLength: 16
         status:
           type: string
           enum: [none, staking, unstaking]
           example: "staking"
+          maxLength: 16
         ts:
           description: date/time at which the staking status was last modified
           type: string
           format: date-time
           example: "2023-10-05T09:23:10+00:00"
+          maxLength: 32
     affiliate_request:
       required:
       - code
@@ -304,10 +326,12 @@ components:
           description: affiliate code for the donation in question
           type: string
           example: "TruffUdBuk6"
+          maxLength: 12
         tx_hash:
           description: transaction hash for the donation in question
           type: string
           example: "0x558c8b86f75b0149ddca028a44a302eebe47c032e8ca8834f07aa6f1c5ae3fac"
+          maxLength: 66
   securitySchemes:
     accessCode:
       type: oauth2
