@@ -50,10 +50,17 @@ func main() {
 	// Create an instance of our handler which satisfies the generated interface
 	ds := server.NewDelphiServer(db)
 
+	blv := echomiddleware.BodyLimitConfig{
+		Limit: "1K",
+	}
+
 	// This is how you set up a basic Echo router
 	e := echo.New()
 	// Log all requests
 	e.Use(echomiddleware.Logger())
+
+	e.Use(echomiddleware.BodyLimitWithConfig(blv))
+
 	// Use our validation middleware to check all requests against the
 	// OpenAPI schema.
 	e.Use(middleware.OapiRequestValidator(swagger))

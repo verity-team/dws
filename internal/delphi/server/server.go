@@ -26,7 +26,7 @@ func (s *DelphiServer) SetAffiliateCode(ctx echo.Context) error {
 		log.Error("failed to bind POST param (AffiliateRequest)")
 		return err
 	}
-	return db.AddAffiliateCD(afc)
+	return db.AddAffiliateCD(s.db, afc)
 }
 
 func (s *DelphiServer) DonationData(ctx echo.Context) error {

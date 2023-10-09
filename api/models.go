@@ -7,10 +7,6 @@ import (
 	"time"
 )
 
-const (
-	AccessCodeScopes = "accessCode.Scopes"
-)
-
 // Defines values for DonationAsset.
 const (
 	DonationAssetEth  DonationAsset = "eth"
