@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@metamask/sdk-react": "^0.8.0"
+  }
+}
