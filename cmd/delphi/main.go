@@ -60,6 +60,7 @@ func main() {
 	e.Use(echomiddleware.Logger())
 
 	e.Use(echomiddleware.BodyLimitWithConfig(blv))
+	e.Use(echomiddleware.Secure())
 
 	// Use our validation middleware to check all requests against the
 	// OpenAPI schema.
