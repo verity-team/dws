@@ -12,11 +12,15 @@ all: build
 
 clean:
 	rm -f $(BIN_DIR)/delphi
+	rm -f $(BIN_DIR)/pulitzer
 
 build:
 	rm -f $(BIN_DIR)/delphi
 	go build -o $(BIN_DIR)/delphi -v -ldflags \
-  		"-X main.rev=$(version) -X main.bts=$(timestamp)" cmd/delphi/main.go
+		"-X main.rev=$(version) -X main.bts=$(timestamp)" cmd/delphi/main.go
+	rm -f $(BIN_DIR)/pulitzer
+	go build -o $(BIN_DIR)/pulitzer -v -ldflags \
+		"-X main.rev=$(version) -X main.bts=$(timestamp)" cmd/pulitzer/main.go
 
 
 run_db:
