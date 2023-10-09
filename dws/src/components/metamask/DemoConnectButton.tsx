@@ -1,12 +1,12 @@
 "use client";
 
 import { useSDK } from "@metamask/sdk-react";
-import { ReactElement, useMemo, useState } from "react";
+import { ReactElement, useState } from "react";
 import TextButton from "../common/TextButton";
-import DonateForm from "./donate/DonateForm";
+import Donate from "./donate/Donate";
 
 const DemoConnectButton = (): ReactElement => {
-  const { sdk, connected, chainId } = useSDK();
+  const { sdk } = useSDK();
 
   const [account, setAccount] = useState<string>();
 
@@ -26,24 +26,19 @@ const DemoConnectButton = (): ReactElement => {
     }
   };
 
-  const userConnected: boolean = useMemo(
-    () => account != null && connected,
-    [account, connected]
-  );
-
   return (
     <div className="p-16">
       <div className="flex items-center space-x-2">
         <TextButton onClick={handleWalletConnect}>
           Connect with wallet
         </TextButton>
-        {userConnected && (
+        {account && (
           <div>
             Connected with <b>{account}</b>
           </div>
         )}
       </div>
-      {account != null && connected && <DonateForm account={account} />}
+      {account && <Donate account={account} />}
     </div>
   );
 };

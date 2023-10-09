@@ -1,24 +1,23 @@
-import { ReactElement, useCallback, useState } from "react";
+import { ReactElement, useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Undefinable } from "@/utils/types";
 import { toWei } from "web3-utils";
+import { AvailableToken } from "./Donate";
+import TextError from "@/components/common/TextError";
 
 interface DonateFormData {
   amount: number;
 }
 
-type AvailableToken = "ETH" | "USDT";
-
-const avaiableTokens: Array<AvailableToken> = ["ETH", "USDT"];
-
 interface DonateFormProps {
+  selectedToken: AvailableToken;
   account: string;
 }
 
 const DonateForm = ({
+  selectedToken,
   account,
 }: DonateFormProps): ReactElement<DonateFormData> => {
-  const [selectedToken, setSelectedToken] = useState<AvailableToken>("ETH");
   const [rewardToken, setRewardToken] = useState<number>(0);
 
   const {
@@ -28,13 +27,9 @@ const DonateForm = ({
     getValues,
   } = useForm<DonateFormData>();
 
-  const handleChangeToken = useCallback((token: AvailableToken): void => {
-    setSelectedToken(token);
-  }, []);
-
   // TODO: Connect this with price API later
-  // TODO: Add library to avoid floating-point error later
-  const handleSwapTokenToReward = () => {
+  // TODO: Add BN.js for all calculation to avoid floating point errors
+  const handleSwapTokenToReward = useCallback(() => {
     const [amount] = getValues(["amount"]);
 
     const rewardTokenPrice = process.env
@@ -49,9 +44,9 @@ const DonateForm = ({
     const reward = Math.ceil((amount * tokenPrice) / rewardTokenPrice);
 
     setRewardToken(isNaN(reward) ? 0 : reward);
-  };
+  }, [getValues, selectedToken]);
 
-  const handleDonation = async (data: DonateFormData) => {
+  const handleDonate = async (data: DonateFormData) => {
     const ethereum = window.ethereum;
     if (ethereum == null) {
       alert("Ethereum object not available in window. Check your Metamask");
@@ -63,8 +58,6 @@ const DonateForm = ({
       alert("Receive wallet not set. Unable to donate");
       return;
     }
-
-    console.log(receiveWallet);
 
     try {
       const txHash = await ethereum.request({
@@ -87,40 +80,48 @@ const DonateForm = ({
     }
   };
 
-  return (
-    <form onSubmit={handleSubmit(handleDonation)}>
-      <div className="flex flex-col">
-        <div className="py-2">Donate in</div>
-        {avaiableTokens.map((token) => (
-          <div key={token} className="py-1">
-            <input
-              type="radio"
-              name="token"
-              value={token}
-              checked={selectedToken === token}
-              onChange={() => handleChangeToken(token)}
-            />
-            <label>{token}</label>
-          </div>
-        ))}
-      </div>
+  // TODO: Change fallback value if needed
+  const minDonateAmount: number = useMemo(() => {
+    if (selectedToken === "ETH") {
+      const minETH = Number(process.env.NEXT_PUBLIC_MIN_ETH);
+      if (isNaN(minETH)) {
+        return 0.005;
+      }
+      return minETH;
+    }
 
-      <div className="flex px-4 py-2 justify-start items-center"></div>
+    if (selectedToken === "USDT") {
+      const minUSDT = Number(process.env.NEXT_PUBLIC_MIN_USDT);
+      if (isNaN(minUSDT)) {
+        return 5;
+      }
+      return minUSDT;
+    }
+
+    return 0;
+  }, [selectedToken]);
+
+  return (
+    <form onSubmit={handleSubmit(handleDonate)}>
       <div>
         <input
           className="w-1/5 px-4 py-2 rounded-lg border focus:border-2"
           defaultValue={0}
           {...register("amount", {
-            required: true,
             valueAsNumber: true,
             onChange: handleSwapTokenToReward,
+            required: true,
+            min: {
+              value: minDonateAmount,
+              message: `The minimum donate amount for ${selectedToken} is ${minDonateAmount}`,
+            },
           })}
         />
-        <span className="px-1">{selectedToken}</span>
-        <div className="flex justify-start items-center m-2">FOR</div>
-        <span className="px-1"> {rewardToken} GMS Token</span>
+        <span className="px-1">
+          {selectedToken} for {rewardToken} GMS Token
+        </span>
+        {errors.amount && <TextError>{errors.amount.message}</TextError>}
       </div>
-
       <button type="submit" className="px-4 py-2 rounded-lg border-2 mt-3">
         Donate
       </button>
