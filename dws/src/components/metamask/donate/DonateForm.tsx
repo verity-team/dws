@@ -1,17 +1,23 @@
-import { useCallback, useState } from "react";
+import { ReactElement, useCallback, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Undefinable } from "@/utils/types";
+import { toWei } from "web3-utils";
 
 interface DonateFormData {
   amount: number;
-  rewardAmount: number;
 }
 
 type AvailableToken = "ETH" | "USDT";
 
 const avaiableTokens: Array<AvailableToken> = ["ETH", "USDT"];
 
-const DonateForm = () => {
+interface DonateFormProps {
+  account: string;
+}
+
+const DonateForm = ({
+  account,
+}: DonateFormProps): ReactElement<DonateFormData> => {
   const [selectedToken, setSelectedToken] = useState<AvailableToken>("ETH");
   const [rewardToken, setRewardToken] = useState<number>(0);
 
@@ -27,6 +33,7 @@ const DonateForm = () => {
   }, []);
 
   // TODO: Connect this with price API later
+  // TODO: Add library to avoid floating-point error later
   const handleSwapTokenToReward = () => {
     const [amount] = getValues(["amount"]);
 
@@ -44,7 +51,41 @@ const DonateForm = () => {
     setRewardToken(isNaN(reward) ? 0 : reward);
   };
 
-  const handleDonation = () => {};
+  const handleDonation = async (data: DonateFormData) => {
+    const ethereum = window.ethereum;
+    if (ethereum == null) {
+      alert("Ethereum object not available in window. Check your Metamask");
+      return;
+    }
+
+    const receiveWallet = process.env.NEXT_PUBLIC_DONATE_PUBKEY;
+    if (receiveWallet == null) {
+      alert("Receive wallet not set. Unable to donate");
+      return;
+    }
+
+    console.log(receiveWallet);
+
+    try {
+      const txHash = await ethereum.request({
+        method: "eth_sendTransaction",
+        params: [
+          {
+            from: account,
+            to: receiveWallet,
+            value: toWei(data.amount, "ether"),
+            // gasLimit: '0x5028', // Customizable by the user during MetaMask confirmation.
+            // maxPriorityFeePerGas: '0x3b9aca00', // Customizable by the user during MetaMask confirmation.
+            // maxFeePerGas: '0x2540be400', // Customizable by the user during MetaMask confirmation.
+          },
+        ],
+      });
+
+      alert(`Successfully transfered. TxHash: ${txHash}`);
+    } catch (err: any) {
+      console.log(err.message);
+    }
+  };
 
   return (
     <form onSubmit={handleSubmit(handleDonation)}>

@@ -3,7 +3,7 @@
 import { useSDK } from "@metamask/sdk-react";
 import { ReactElement, useMemo, useState } from "react";
 import TextButton from "../common/TextButton";
-import DonateForm from "./DonateForm";
+import DonateForm from "./donate/DonateForm";
 
 const DemoConnectButton = (): ReactElement => {
   const { sdk, connected, chainId } = useSDK();
@@ -43,7 +43,7 @@ const DemoConnectButton = (): ReactElement => {
           </div>
         )}
       </div>
-      {userConnected && <DonateForm />}
+      {account != null && connected && <DonateForm account={account} />}
     </div>
   );
 };
