@@ -1,7 +1,8 @@
 "use client";
 
 import { useSDK } from "@metamask/sdk-react";
-import { ReactElement, useState } from "react";
+import { ReactElement, useContext, useState } from "react";
+import { ClientAFC } from "../ClientRoot";
 
 const DemoConnectButton = (): ReactElement => {
   const { sdk, connected, chainId } = useSDK();
