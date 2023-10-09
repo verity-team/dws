@@ -37,14 +37,19 @@ BEFORE UPDATE ON donation
 FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
 
+CREATE INDEX ON donation (address);
+
 DROP TABLE IF EXISTS price;
 CREATE TABLE price (
     id BIGSERIAL PRIMARY KEY,
     asset VARCHAR(16) NOT NULL,
-    price NUMERIC(12,2) NOT NULL,
+    price NUMERIC(15,5) NOT NULL,
 
     created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())
 );
+CREATE INDEX ON price (created_at);
+
+INSERT INTO price(asset, price) VALUES('truth', 0.002);
 
 DROP TABLE IF EXISTS last_block;
 CREATE TABLE last_block (
@@ -97,3 +102,4 @@ CREATE TRIGGER user_stats_update_timestamp
 BEFORE UPDATE ON user_stats
 FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
+CREATE INDEX ON user_stats (address);

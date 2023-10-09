@@ -1,6 +1,8 @@
 package server
 
 import (
+	"net/http"
+
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"
@@ -29,7 +31,11 @@ func (s *DelphiServer) SetAffiliateCode(ctx echo.Context) error {
 }
 
 func (s *DelphiServer) DonationData(ctx echo.Context) error {
-	return nil
+	dd, err := db.GetDonationData(s.db)
+	if err != nil {
+		return err
+	}
+	return ctx.JSON(http.StatusOK, *dd)
 }
 
 func (s *DelphiServer) UserData(ctx echo.Context, address string) error {
