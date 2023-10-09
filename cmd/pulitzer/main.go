@@ -189,7 +189,7 @@ func getETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 	var prices []decimal.Decimal
 
 	if binanceOk {
-		log.Infof("Ethereum Price from Binance: $%s USD", binancePrice.StringFixed(2))
+		log.Infof("Ethereum Price from Binance: $%s", binancePrice.StringFixed(2))
 		prices = append(prices, binancePrice)
 	} else {
 		err := errors.New("failed to get Ethereum Price from Binance")
@@ -197,7 +197,7 @@ func getETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 	}
 
 	if krakenOk {
-		log.Infof("Ethereum Price from Kraken: $%s USD", krakenPrice.StringFixed(2))
+		log.Infof("Ethereum Price from Kraken: $%s", krakenPrice.StringFixed(2))
 		prices = append(prices, krakenPrice)
 	} else {
 		err := errors.New("failed to get Ethereum Price from Kraken")
@@ -205,7 +205,7 @@ func getETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 	}
 
 	if bitfinexOk {
-		log.Infof("Ethereum Price from bitfinex: $%s USD", bitfinexPrice.StringFixed(2))
+		log.Infof("Ethereum Price from bitfinex: $%s", bitfinexPrice.StringFixed(2))
 		prices = append(prices, bitfinexPrice)
 	} else {
 		err := errors.New("failed to get Ethereum Price from bitfinex")
@@ -213,7 +213,7 @@ func getETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 	}
 
 	if coinbaseOk {
-		log.Infof("Ethereum Price from coinbase: $%s USD", coinbasePrice.StringFixed(2))
+		log.Infof("Ethereum Price from coinbase: $%s", coinbasePrice.StringFixed(2))
 		prices = append(prices, coinbasePrice)
 	} else {
 		err := errors.New("failed to get Ethereum Price from coinbase")
@@ -221,7 +221,7 @@ func getETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 	}
 
 	if cexioOk {
-		log.Infof("Ethereum Price from cexio: $%s USD", cexioPrice.StringFixed(2))
+		log.Infof("Ethereum Price from cexio: $%s", cexioPrice.StringFixed(2))
 		prices = append(prices, cexioPrice)
 	} else {
 		err := errors.New("failed to get Ethereum Price from cexio")
@@ -229,7 +229,7 @@ func getETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 	}
 
 	if kucoinOk {
-		log.Infof("Ethereum Price from kucoin: $%s USD", kucoinPrice.StringFixed(2))
+		log.Infof("Ethereum Price from kucoin: $%s", kucoinPrice.StringFixed(2))
 		prices = append(prices, kucoinPrice)
 	} else {
 		err := errors.New("failed to get Ethereum Price from kucoin")
