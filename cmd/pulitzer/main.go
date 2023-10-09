@@ -89,151 +89,54 @@ func getETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 	// Create a wait group to synchronize the goroutines
 	var wg sync.WaitGroup
 
-	// Create channels to receive the results from the goroutines
-	binanceResultCh := make(chan decimal.Decimal, 1)
-	krakenResultCh := make(chan decimal.Decimal, 1)
-	bitfinexResultCh := make(chan decimal.Decimal, 1)
-	coinbaseResultCh := make(chan decimal.Decimal, 1)
-	cexioResultCh := make(chan decimal.Decimal, 1)
-	kucoinResultCh := make(chan decimal.Decimal, 1)
+	// ethereum price sources and the functions to call to get the price
+	sources := map[string]func() (decimal.Decimal, error){
+		"binance":  pulitzer.GetWeightedAvgPriceFromBinance,
+		"kraken":   pulitzer.GetKrakenETHPrice,
+		"bitfinex": pulitzer.GetBitfinexETHPrice,
+		"coinbase": pulitzer.GetCoinbaseETHPrice,
+		"cexio":    pulitzer.GetCexIOETHUSDLastPrice,
+		"kucoin":   pulitzer.GetKuCoinETHUSDTPrice,
+	}
 
-	// Start the first goroutine to fetch Ethereum price from Binance
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		ethereumPrice, err := pulitzer.GetWeightedAvgPriceFromBinance()
-		if err != nil {
-			log.Errorf("Error fetching Ethereum price from Binance:", err)
-			return
-		}
-		binanceResultCh <- ethereumPrice
-		close(binanceResultCh)
-	}()
+	// channels the go routines will use to send back the price
+	var channels map[string]chan decimal.Decimal
+	channels = make(map[string]chan decimal.Decimal, len(sources))
 
-	// Start the second goroutine to fetch Ethereum price from Kraken
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		ethereumPrice, err := pulitzer.GetKrakenETHPrice()
-		if err != nil {
-			log.Errorf("Error fetching Ethereum price from Kraken:", err)
-			return
-		}
-		krakenResultCh <- ethereumPrice
-		close(krakenResultCh)
-	}()
+	// start one go routine per price source
+	for k := range sources {
+		channels[k] = make(chan decimal.Decimal, 1)
 
-	// Start the third goroutine to fetch Ethereum price from bitfinex
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		ethereumPrice, err := pulitzer.GetBitfinexETHPrice()
-		if err != nil {
-			log.Errorf("Error fetching Ethereum price from bitfinex:", err)
-			return
-		}
-		bitfinexResultCh <- ethereumPrice
-		close(bitfinexResultCh)
-	}()
+		// start the go routine to fetch the ethereum price from the source
+		wg.Add(1)
+		go func(source string, f func() (decimal.Decimal, error), ch chan decimal.Decimal) {
+			defer wg.Done()
+			defer close(ch)
 
-	// Start the 4th goroutine to fetch Ethereum price from coinbase
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		ethereumPrice, err := pulitzer.GetCoinbaseETHPrice()
-		if err != nil {
-			log.Errorf("Error fetching Ethereum price from coinbase:", err)
-			return
-		}
-		coinbaseResultCh <- ethereumPrice
-		close(coinbaseResultCh)
-	}()
-
-	// Start the 5th goroutine to fetch Ethereum price from cexio
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		ethereumPrice, err := pulitzer.GetCexIOETHUSDLastPrice()
-		if err != nil {
-			log.Errorf("Error fetching Ethereum price from cexio:", err)
-			return
-		}
-		cexioResultCh <- ethereumPrice
-		close(cexioResultCh)
-	}()
-
-	// Start the 6th goroutine to fetch Ethereum price from kucoin
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		ethereumPrice, err := pulitzer.GetKuCoinETHUSDTPrice()
-		if err != nil {
-			log.Errorf("Error fetching Ethereum price from kucoin:", err)
-			return
-		}
-		kucoinResultCh <- ethereumPrice
-		close(kucoinResultCh)
-	}()
+			price, err := f()
+			if err != nil {
+				log.Errorf("error fetching ethereum price from %s:", source, err)
+				return
+			}
+			ch <- price
+		}(k, sources[k], channels[k])
+	}
 
 	// Wait for all goroutines to finish
 	wg.Wait()
 
 	// Receive and print the results from the channels
-	binancePrice, binanceOk := <-binanceResultCh
-	krakenPrice, krakenOk := <-krakenResultCh
-	bitfinexPrice, bitfinexOk := <-bitfinexResultCh
-	coinbasePrice, coinbaseOk := <-coinbaseResultCh
-	cexioPrice, cexioOk := <-cexioResultCh
-	kucoinPrice, kucoinOk := <-kucoinResultCh
-
 	var prices []decimal.Decimal
 
-	if binanceOk {
-		log.Infof("Ethereum Price from Binance: $%s", binancePrice.StringFixed(2))
-		prices = append(prices, binancePrice)
-	} else {
-		err := errors.New("failed to get Ethereum Price from Binance")
-		log.Error(err)
-	}
-
-	if krakenOk {
-		log.Infof("Ethereum Price from Kraken: $%s", krakenPrice.StringFixed(2))
-		prices = append(prices, krakenPrice)
-	} else {
-		err := errors.New("failed to get Ethereum Price from Kraken")
-		log.Error(err)
-	}
-
-	if bitfinexOk {
-		log.Infof("Ethereum Price from bitfinex: $%s", bitfinexPrice.StringFixed(2))
-		prices = append(prices, bitfinexPrice)
-	} else {
-		err := errors.New("failed to get Ethereum Price from bitfinex")
-		log.Error(err)
-	}
-
-	if coinbaseOk {
-		log.Infof("Ethereum Price from coinbase: $%s", coinbasePrice.StringFixed(2))
-		prices = append(prices, coinbasePrice)
-	} else {
-		err := errors.New("failed to get Ethereum Price from coinbase")
-		log.Error(err)
-	}
-
-	if cexioOk {
-		log.Infof("Ethereum Price from cexio: $%s", cexioPrice.StringFixed(2))
-		prices = append(prices, cexioPrice)
-	} else {
-		err := errors.New("failed to get Ethereum Price from cexio")
-		log.Error(err)
-	}
-
-	if kucoinOk {
-		log.Infof("Ethereum Price from kucoin: $%s", kucoinPrice.StringFixed(2))
-		prices = append(prices, kucoinPrice)
-	} else {
-		err := errors.New("failed to get Ethereum Price from kucoin")
-		log.Error(err)
+	for k := range channels {
+		price, ok := <-channels[k]
+		if ok {
+			log.Infof("ethereum price from %s: $%s", k, price.StringFixed(2))
+			prices = append(prices, price)
+		} else {
+			err := errors.New(fmt.Sprintf("failed to get ethereum price from %s", k))
+			log.Error(err)
+		}
 	}
 
 	if len(prices) < 3 {
@@ -242,7 +145,6 @@ func getETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 	}
 
 	av, err := calculateAveragePrice(prices)
-
 	if err != nil {
 		log.Error(err)
 		return decimal.Zero, err
