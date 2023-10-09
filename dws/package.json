@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "format": "npx prettier --write \"**/*.{ts,tsx, js, jsx, json}\"",
     "lint": "next lint"
   },
   "dependencies": {
@@ -23,8 +24,15 @@
     "eslint": "^8",
     "eslint-config-next": "13.5.4",
     "postcss": "^8",
+    "prettier": "^3.0.3",
     "tailwindcss": "^3",
     "typescript": "^5"
   },
-  "packageManager": "yarn@1.22.19"
+  "packageManager": "yarn@1.22.19",
+  "prettier": {
+    "trailingComma": "es5",
+    "tabWidth": 2,
+    "semi": true,
+    "singleQuote": false
+  }
 }
