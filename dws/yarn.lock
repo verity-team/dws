@@ -393,11 +393,6 @@
     util "^0.12.4"
     uuid "^8.3.2"
 
-"@metamask/types@^1.1.0":
-  version "1.1.0"
-  resolved "https://registry.yarnpkg.com/@metamask/types/-/types-1.1.0.tgz#9bd14b33427932833c50c9187298804a18c2e025"
-  integrity sha512-EEV/GjlYkOSfSPnYXfOosxa3TqYtIW3fhg6jdw+cok/OhMgNn4wCfbENFqjytrHMU2f7ZKtBAvtiP5V8H44sSw==
-
 "@metamask/utils@^5.0.0":
   version "5.0.2"
   resolved "https://registry.yarnpkg.com/@metamask/utils/-/utils-5.0.2.tgz#140ba5061d90d9dac0280c19cab101bc18c8857c"
