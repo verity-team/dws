@@ -3,8 +3,11 @@ import DemoConnectButton from "@/components/metamask/DemoConnectButton";
 
 export default function Home() {
   return (
-    <ClientRoot>
-      <DemoConnectButton />
-    </ClientRoot>
+    <>
+      <div>Welcome to DWS. Testing...</div>
+      <ClientRoot>
+        <DemoConnectButton />
+      </ClientRoot>
+    </>
   );
 }
