@@ -61,6 +61,8 @@ BEFORE UPDATE ON last_block
 FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
 
+INSERT INTO last_block(chain, last_block) VALUES('eth', 18312345);
+
 DROP TABLE IF EXISTS donation_stats;
 CREATE TABLE donation_stats (
     id BIGSERIAL PRIMARY KEY,
@@ -75,6 +77,8 @@ CREATE TRIGGER donation_stats_update_timestamp
 BEFORE UPDATE ON donation_stats
 FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
+
+INSERT INTO donation_stats(total, tokens, status) VALUES(0, 0, 'open');
 
 DROP TABLE IF EXISTS user_stats;
 CREATE TABLE user_stats (
