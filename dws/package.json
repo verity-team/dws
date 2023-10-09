@@ -7,8 +7,7 @@
         "build": "next build",
         "start": "next start",
         "format": "npx prettier --write \"**/*.{ts,tsx}\"",
-        "lint": "next lint",
-        "pre-commit": "yarn format && yarn lint"
+        "lint": "next lint"
     },
     "dependencies": {
         "@metamask/sdk-react": "^0.8.0",
@@ -24,8 +23,6 @@
         "autoprefixer": "^10",
         "eslint": "^8",
         "eslint-config-next": "13.5.4",
-        "husky": "^8.0.3",
-        "lint-staged": "^14.0.1",
         "postcss": "^8",
         "prettier": "^3.0.3",
         "tailwindcss": "^3",
@@ -37,10 +34,5 @@
         "tabWidth": 2,
         "semi": true,
         "singleQuote": false
-    },
-    "lint-staged": {
-        "*.{js, jsx, ts, tsx, json}": [
-            "yarn pre-commit"
-        ]
     }
 }
