@@ -1,11 +1,16 @@
 "use client";
 
+import { Nullable } from "@/utils/types";
 import { MetaMaskProvider } from "@metamask/sdk-react";
-import React, { ReactElement, ReactNode, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
+import React, { ReactElement, ReactNode, createContext, useMemo } from "react";
 
 interface ClientRootProps {
   children: ReactNode;
 }
+
+// Affiliate code
+export const ClientAFC = createContext<Nullable<string>>(null);
 
 // For importing provider and all kind of wrapper for client components
 const ClientRoot = ({
@@ -26,9 +31,12 @@ const ClientRoot = ({
     []
   );
 
+  const searchParams = useSearchParams();
+  const affliateCode = searchParams.get("afc");
+
   return (
     <MetaMaskProvider debug={true} sdkOptions={metamaskSettings}>
-      {children}
+      <ClientAFC.Provider value={affliateCode}>{children}</ClientAFC.Provider>
     </MetaMaskProvider>
   );
 };

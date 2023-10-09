@@ -2,9 +2,11 @@
 
 import { useSDK } from "@metamask/sdk-react";
 import { ReactElement, useState } from "react";
+import TextButton from "../common/TextButton";
+import Donate from "./donate/Donate";
 
 const DemoConnectButton = (): ReactElement => {
-  const { sdk, connected, chainId } = useSDK();
+  const { sdk } = useSDK();
 
   const [account, setAccount] = useState<string>();
 
@@ -25,23 +27,18 @@ const DemoConnectButton = (): ReactElement => {
   };
 
   return (
-    <div className="w-screen h-screen flex flex-col items-center justify-center">
-      <button
-        type="button"
-        className="px-4 py-2 rounded-lg border-2 border-black text-xl"
-        onClick={handleWalletConnect}
-      >
-        Connect with wallet
-      </button>
-      <div className="mt-4 flex flex-col items-center">
-        {connected && (
-          <>
-            {chainId && `Connected chain: ${chainId}`}
-            <p></p>
-            {account && `Connected account: ${account}`}
-          </>
+    <div className="p-16">
+      <div className="flex items-center space-x-2">
+        <TextButton onClick={handleWalletConnect}>
+          Connect with wallet
+        </TextButton>
+        {account && (
+          <div>
+            Connected with <b>{account}</b>
+          </div>
         )}
       </div>
+      {account && <Donate account={account} />}
     </div>
   );
 };
