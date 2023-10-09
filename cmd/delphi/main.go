@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	echomiddleware "github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
+	_ "github.com/lib/pq"
 	middleware "github.com/oapi-codegen/echo-middleware"
 	"github.com/verity-team/dws/api"
 	"github.com/verity-team/dws/internal/delphi/server"

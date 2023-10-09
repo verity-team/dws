@@ -4,7 +4,6 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"
-	_ "github.com/lib/pq"
 	"github.com/verity-team/dws/api"
 	"github.com/verity-team/dws/internal/delphi/db"
 )

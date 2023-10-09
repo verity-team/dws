@@ -3,18 +3,40 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/go-co-op/gocron"
+	"github.com/jmoiron/sqlx"
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
 	"github.com/verity-team/dws/internal/pulitzer"
 )
 
+var (
+	bts, rev, version string
+)
+
 func main() {
+	err := godotenv.Overload()
+	if err != nil {
+		log.Warn("Error loading .env file")
+	}
+	version = fmt.Sprintf("%s::%s", bts, rev)
+	log.Info("version = ", version)
+
+	dsn := getDSN()
+	db, err := sqlx.Open("postgres", dsn)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
 	s := gocron.NewScheduler(time.UTC)
-	s.Every("1m").Do(getETHPrice)
+	s.Every("1m").Do(getETHPrice, db)
 	s.StartBlocking()
 }
 
@@ -63,7 +85,7 @@ func checkPriceDeviation(prices []decimal.Decimal) error {
 	return nil
 }
 
-func getETHPrice() (decimal.Decimal, error) {
+func getETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 	// Create a wait group to synchronize the goroutines
 	var wg sync.WaitGroup
 
@@ -227,5 +249,61 @@ func getETHPrice() (decimal.Decimal, error) {
 	} else {
 		log.Infof("average price: $%s", av.StringFixed(2))
 	}
+
+	err = persistETHPrice(db, av)
+	if err != nil {
+		log.Errorf("failed to persist ETH price, %v", err)
+		return decimal.Zero, err
+	}
+
 	return av, nil
+}
+
+func persistETHPrice(db *sqlx.DB, avp decimal.Decimal) error {
+	q := `
+		INSERT INTO price(asset, price) VALUES(:asset, :price)
+		`
+	qd := map[string]interface{}{
+		"asset": "eth",
+		"price": avp,
+	}
+	_, err := db.NamedExec(q, qd)
+	if err != nil {
+		log.Errorf("Failed to insert ETH price, %v", err)
+		return err
+	}
+	return nil
+}
+
+func getDSN() string {
+	var (
+		host, port, user, passwd, database string
+		present                            bool
+	)
+
+	host, present = os.LookupEnv("DWS_DB_HOST")
+	if !present {
+		log.Fatal("DWS_DB_HOST variable not set")
+	}
+	port, present = os.LookupEnv("DWS_DB_PORT")
+	if !present {
+		log.Fatal("DWS_DB_PORT variable not set")
+	}
+	user, present = os.LookupEnv("DWS_DB_USER")
+	if !present {
+		log.Fatal("DWS_DB_USER variable not set")
+	}
+	passwd, present = os.LookupEnv("DWS_DB_PASSWORD")
+	if !present {
+		log.Fatal("DWS_DB_PASSWORD variable not set")
+	}
+	database, present = os.LookupEnv("DWS_DB_DATABASE")
+	if !present {
+		log.Fatal("DWS_DB_DATABASE variable not set")
+	}
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", host, port, user, passwd, database)
+
+	log.Infof("host: '%s'", host)
+	log.Infof("database: '%s'", database)
+	return dsn
 }
