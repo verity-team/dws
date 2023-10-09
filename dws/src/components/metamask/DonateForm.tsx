@@ -41,7 +41,7 @@ const DonateForm = () => {
     const tokenPrice = selectedToken === "ETH" ? 1600 : 1;
     const reward = Math.ceil((amount * tokenPrice) / rewardTokenPrice);
 
-    setRewardToken(reward);
+    setRewardToken(isNaN(reward) ? 0 : reward);
   };
 
   const handleDonation = () => {};
