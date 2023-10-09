@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/shopspring/decimal"
+	log "github.com/sirupsen/logrus"
 )
 
 type BitfinexTickerResponse struct {
@@ -58,5 +59,6 @@ func GetBitfinexETHPrice() (decimal.Decimal, error) {
 		return decimal.Zero, err
 	}
 
+	log.Info("bitfinex: ", midValue)
 	return midValue, nil
 }

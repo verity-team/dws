@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/gommon/log"
 	"github.com/shopspring/decimal"
+	log "github.com/sirupsen/logrus"
 )
 
 type KrakenTickerResponse struct {
