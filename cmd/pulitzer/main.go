@@ -73,6 +73,7 @@ func getETHPrice() (decimal.Decimal, error) {
 	bitfinexResultCh := make(chan decimal.Decimal, 1)
 	coinbaseResultCh := make(chan decimal.Decimal, 1)
 	cexioResultCh := make(chan decimal.Decimal, 1)
+	kucoinResultCh := make(chan decimal.Decimal, 1)
 
 	// Start the first goroutine to fetch Ethereum price from Binance
 	wg.Add(1)
@@ -139,6 +140,19 @@ func getETHPrice() (decimal.Decimal, error) {
 		close(cexioResultCh)
 	}()
 
+	// Start the 6th goroutine to fetch Ethereum price from kucoin
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		ethereumPrice, err := pulitzer.GetKuCoinETHUSDTPrice()
+		if err != nil {
+			log.Errorf("Error fetching Ethereum price from kucoin:", err)
+			return
+		}
+		kucoinResultCh <- ethereumPrice
+		close(kucoinResultCh)
+	}()
+
 	// Wait for all goroutines to finish
 	wg.Wait()
 
@@ -148,11 +162,12 @@ func getETHPrice() (decimal.Decimal, error) {
 	bitfinexPrice, bitfinexOk := <-bitfinexResultCh
 	coinbasePrice, coinbaseOk := <-coinbaseResultCh
 	cexioPrice, cexioOk := <-cexioResultCh
+	kucoinPrice, kucoinOk := <-kucoinResultCh
 
 	var prices []decimal.Decimal
 
 	if binanceOk {
-		log.Infof("Ethereum Price from Binance: $%s USD\n", binancePrice.StringFixed(2))
+		log.Infof("Ethereum Price from Binance: $%s USD", binancePrice.StringFixed(2))
 		prices = append(prices, binancePrice)
 	} else {
 		err := errors.New("failed to get Ethereum Price from Binance")
@@ -160,7 +175,7 @@ func getETHPrice() (decimal.Decimal, error) {
 	}
 
 	if krakenOk {
-		log.Infof("Ethereum Price from Kraken: $%s USD\n", krakenPrice.StringFixed(2))
+		log.Infof("Ethereum Price from Kraken: $%s USD", krakenPrice.StringFixed(2))
 		prices = append(prices, krakenPrice)
 	} else {
 		err := errors.New("failed to get Ethereum Price from Kraken")
@@ -168,7 +183,7 @@ func getETHPrice() (decimal.Decimal, error) {
 	}
 
 	if bitfinexOk {
-		log.Infof("Ethereum Price from bitfinex: $%s USD\n", bitfinexPrice.StringFixed(2))
+		log.Infof("Ethereum Price from bitfinex: $%s USD", bitfinexPrice.StringFixed(2))
 		prices = append(prices, bitfinexPrice)
 	} else {
 		err := errors.New("failed to get Ethereum Price from bitfinex")
@@ -176,7 +191,7 @@ func getETHPrice() (decimal.Decimal, error) {
 	}
 
 	if coinbaseOk {
-		log.Infof("Ethereum Price from coinbase: $%s USD\n", coinbasePrice.StringFixed(2))
+		log.Infof("Ethereum Price from coinbase: $%s USD", coinbasePrice.StringFixed(2))
 		prices = append(prices, coinbasePrice)
 	} else {
 		err := errors.New("failed to get Ethereum Price from coinbase")
@@ -184,10 +199,18 @@ func getETHPrice() (decimal.Decimal, error) {
 	}
 
 	if cexioOk {
-		log.Infof("Ethereum Price from cexio: $%s USD\n", cexioPrice.StringFixed(2))
+		log.Infof("Ethereum Price from cexio: $%s USD", cexioPrice.StringFixed(2))
 		prices = append(prices, cexioPrice)
 	} else {
 		err := errors.New("failed to get Ethereum Price from cexio")
+		log.Error(err)
+	}
+
+	if kucoinOk {
+		log.Infof("Ethereum Price from kucoin: $%s USD", kucoinPrice.StringFixed(2))
+		prices = append(prices, kucoinPrice)
+	} else {
+		err := errors.New("failed to get Ethereum Price from kucoin")
 		log.Error(err)
 	}
 
@@ -202,7 +225,7 @@ func getETHPrice() (decimal.Decimal, error) {
 		log.Error(err)
 		return decimal.Zero, err
 	} else {
-		log.Infof("average price: $%s\n", av.StringFixed(2))
+		log.Infof("average price: $%s", av.StringFixed(2))
 	}
 	return av, nil
 }
