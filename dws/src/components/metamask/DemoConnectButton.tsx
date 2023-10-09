@@ -1,8 +1,9 @@
 "use client";
 
 import { useSDK } from "@metamask/sdk-react";
-import { ReactElement, useContext, useState } from "react";
-import { ClientAFC } from "../ClientRoot";
+import { ReactElement, useMemo, useState } from "react";
+import TextButton from "../common/TextButton";
+import DonateForm from "./DonateForm";
 
 const DemoConnectButton = (): ReactElement => {
   const { sdk, connected, chainId } = useSDK();
@@ -25,24 +26,24 @@ const DemoConnectButton = (): ReactElement => {
     }
   };
 
+  const userConnected: boolean = useMemo(
+    () => account != null && connected,
+    [account, connected]
+  );
+
   return (
-    <div className="w-screen h-screen flex flex-col items-center justify-center">
-      <button
-        type="button"
-        className="px-4 py-2 rounded-lg border-2 border-black text-xl"
-        onClick={handleWalletConnect}
-      >
-        Connect with wallet
-      </button>
-      <div className="mt-4 flex flex-col items-center">
-        {connected && (
-          <>
-            {chainId && `Connected chain: ${chainId}`}
-            <p></p>
-            {account && `Connected account: ${account}`}
-          </>
+    <div className="p-16">
+      <div className="flex items-center space-x-2">
+        <TextButton onClick={handleWalletConnect}>
+          Connect with wallet
+        </TextButton>
+        {userConnected && (
+          <div>
+            Connected with <b>{account}</b>
+          </div>
         )}
       </div>
+      {userConnected && <DonateForm />}
     </div>
   );
 };
