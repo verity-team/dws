@@ -19,11 +19,14 @@ build:
   		"-X main.rev=$(version) -X main.bts=$(timestamp)" cmd/delphi/main.go
 
 
-run_dws_db:
+run_db:
 	$(COMPOSE_CMD) -f $(DOCKER_COMPOSE_FOLDER)/db.yaml  up -d dws-db
 
-dws_db_prompt:
+prompt:
 	export PGPASSWORD=postgres && psql -U postgres -h localhost -p 27501 -d dwsdb
+
+destroy_db:
+	docker kill docker_dws-db_1 && docker rm docker_dws-db_1 && docker volume rm docker_dws_db_volume
 
 codegen:
 	oapi-codegen -config configs/models.cfg.yaml api/delphi.yaml
