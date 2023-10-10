@@ -30,7 +30,7 @@ CREATE TABLE donation (
     usd_amount NUMERIC(12,2),
     asset asset_enum NOT NULL,
     tokens BIGINT NOT NULL,
-    price NUMERIC(12,2) NOT NULL,
+    price NUMERIC(15,5) NOT NULL,
     tx_hash VARCHAR(66) NOT NULL UNIQUE,
     status donation_status_enum NOT NULL,
 
@@ -91,7 +91,7 @@ CREATE TABLE donation_stats (
     id BIGSERIAL PRIMARY KEY,
     total NUMERIC(12,2) NOT NULL,
     tokens BIGINT NOT NULL,
-    status donation_stats_status_enum NOT NULL,
+    status donation_stats_status_enum NOT NULL DEFAULT 'open',
 
     modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
     created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())
@@ -101,7 +101,7 @@ BEFORE UPDATE ON donation_stats
 FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
 
-INSERT INTO donation_stats(total, tokens, status) VALUES(0, 0, 'open');
+INSERT INTO donation_stats(total, tokens) VALUES(0, 0);
 
 --- user_stats ----------------------------------------------------
 CREATE TYPE user_stats_status_enum AS ENUM ('none', 'staking', 'unstaking');
@@ -156,6 +156,9 @@ BEGIN
     ) THEN
         -- Get the sum of total and tokens from all confirmed donation records for the specified address
         SELECT
+            -- in case of an ethereum donation we should be summing up the
+            -- `usd_amount`; in case of a stable coin donation the `usd_amount`
+            -- will be NULL.
             SUM(COALESCE(dtab.usd_amount, dtab.amount)),
             SUM(dtab.tokens)
         INTO

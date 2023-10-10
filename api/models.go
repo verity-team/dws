@@ -115,11 +115,11 @@ type Error struct {
 
 // Price defines model for price.
 type Price struct {
-	Asset PriceAsset `json:"asset"`
+	Asset PriceAsset `db:"asset" json:"asset"`
 
 	// Price asset price in USD
-	Price string    `json:"price"`
-	Ts    time.Time `json:"ts"`
+	Price string    `db:"price" json:"price"`
+	Ts    time.Time `db:"created_at" json:"ts"`
 }
 
 // PriceAsset defines model for Price.Asset.

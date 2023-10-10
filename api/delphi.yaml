@@ -265,16 +265,22 @@ components:
           enum: [eth, truth]
           example: "eth"
           maxLength: 8
+          x-oapi-codegen-extra-tags:
+            db: asset
         price:
           description: asset price in USD
           type: string
           example: "1633.89"
           maxLength: 16
+          x-oapi-codegen-extra-tags:
+            db: price
         ts:
           type: string
           format: date-time
           example: "2023-10-05T11:56:10+00:00"
           maxLength: 32
+          x-oapi-codegen-extra-tags:
+            db: created_at
     donation_stats:
       required:
       - total

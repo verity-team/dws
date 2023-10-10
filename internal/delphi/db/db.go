@@ -3,7 +3,6 @@ package db
 import (
 	"fmt"
 	"strconv"
-	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/gommon/log"
@@ -32,13 +31,7 @@ func AddAffiliateCD(db *sqlx.DB, afc api.AffiliateRequest) error {
 }
 
 func GetDonationData(db *sqlx.DB) (*api.DonationData, error) {
-	type price struct {
-		Asset string          `db:"asset"`
-		Price decimal.Decimal `db:"price"`
-		TS    time.Time       `db:"created_at"`
-	}
-
-	// etereum price
+	// ethereum price
 	q1 := `
 		SELECT asset, price, created_at FROM price
 		WHERE
@@ -47,7 +40,7 @@ func GetDonationData(db *sqlx.DB) (*api.DonationData, error) {
 		ORDER BY id DESC
 		LIMIT 1
 		`
-	var ethp price
+	var ethp api.Price
 	err := db.Get(&ethp, q1)
 	if err != nil {
 		err = fmt.Errorf("failed to fetch an ETH price that is newer than 5 minutes, %v", err)
@@ -62,7 +55,7 @@ func GetDonationData(db *sqlx.DB) (*api.DonationData, error) {
 		ORDER BY created_at DESC
 		LIMIT 1
 		`
-	var truthp price
+	var truthp api.Price
 	err = db.Get(&truthp, q2)
 	if err != nil {
 		err = fmt.Errorf("failed to fetch the TRUTH price, %v", err)
@@ -91,19 +84,8 @@ func GetDonationData(db *sqlx.DB) (*api.DonationData, error) {
 	}
 
 	var result api.DonationData
-	p := api.Price{
-		Asset: api.PriceAssetEth,
-		Price: ethp.Price.StringFixed(2),
-		Ts:    ethp.TS,
-	}
-	log.Info(truthp)
-	result.Prices = append(result.Prices, p)
-	p = api.Price{
-		Asset: api.PriceAssetTruth,
-		Price: truthp.Price.StringFixed(3),
-		Ts:    truthp.TS,
-	}
-	result.Prices = append(result.Prices, p)
+	result.Prices = append(result.Prices, ethp)
+	result.Prices = append(result.Prices, truthp)
 
 	result.Stats = api.DonationStats{
 		Total:  ds.Total.StringFixed(2),
