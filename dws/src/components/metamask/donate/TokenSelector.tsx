@@ -18,12 +18,13 @@ const TokenSelector = ({
         <div key={token} className="py-1">
           <input
             type="radio"
+            id={token}
             name="token"
             value={token}
             checked={selectedToken === token}
             onChange={() => onTokenChange(token)}
           />
-          <label>{token}</label>
+          <label htmlFor={token}>{token}</label>
         </div>
       ))}
     </>
