@@ -4,6 +4,7 @@ import { Undefinable } from "@/utils/types";
 import { toWei } from "web3-utils";
 import { AvailableToken } from "./Donate";
 import TextError from "@/components/common/TextError";
+import { exchangeToReward } from "@/utils/metamask/donate";
 
 export interface DonateFormData {
   amount: number;
@@ -27,23 +28,18 @@ const DonateForm = ({
     getValues,
   } = useForm<DonateFormData>();
 
-  // TODO: Connect this with price API later
-  // TODO: Add BN.js for all calculation to avoid floating point errors
   const handleSwapTokenToReward = useCallback(() => {
     const [amount] = getValues(["amount"]);
 
-    const rewardTokenPrice = process.env
-      .NEXT_PUBLIC_REWARD_PRICE as Undefinable<number>;
-    if (!rewardTokenPrice) {
-      // Abort operation if cannot get reward price
-      alert("Cannot get the reward price at the moment!");
-      return;
-    }
-
+    // TODO: Use API to get token price
     const tokenPrice = selectedToken === "ETH" ? 1600 : 1;
-    const reward = Math.ceil((amount * tokenPrice) / rewardTokenPrice);
 
-    setRewardToken(isNaN(reward) ? 0 : reward);
+    try {
+      const reward = exchangeToReward(amount, tokenPrice);
+      setRewardToken(reward);
+    } catch (err: any) {
+      alert(err.message);
+    }
   }, [getValues, selectedToken]);
 
   useEffect(() => {
@@ -51,39 +47,7 @@ const DonateForm = ({
   }, [handleSwapTokenToReward]);
 
   // If doing math, use toWei() + BN.js to avoid floating issues
-  const handleDonate = async (data: DonateFormData) => {
-    const ethereum = window.ethereum;
-    if (ethereum == null) {
-      alert("Ethereum object not available in window. Check your Metamask");
-      return;
-    }
-
-    const receiveWallet = process.env.NEXT_PUBLIC_DONATE_PUBKEY;
-    if (receiveWallet == null) {
-      alert("Receive wallet not set. Unable to donate");
-      return;
-    }
-
-    try {
-      const txHash = await ethereum.request({
-        method: "eth_sendTransaction",
-        params: [
-          {
-            from: account,
-            to: receiveWallet,
-            value: toWei(data.amount, "ether"),
-            // gasLimit: '0x5028', // Customizable by the user during MetaMask confirmation.
-            // maxPriorityFeePerGas: '0x3b9aca00', // Customizable by the user during MetaMask confirmation.
-            // maxFeePerGas: '0x2540be400', // Customizable by the user during MetaMask confirmation.
-          },
-        ],
-      });
-
-      alert(`Successfully transfered. TxHash: ${txHash}`);
-    } catch (err: any) {
-      console.log(err.message);
-    }
-  };
+  const handleDonate = async (data: DonateFormData) => {};
 
   // TODO: Change fallback value if needed
   const minDonateAmount: number = useMemo(() => {

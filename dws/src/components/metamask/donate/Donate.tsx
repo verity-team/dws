@@ -1,8 +1,7 @@
 import { ReactElement, useCallback, useState } from "react";
 import TokenSelector from "./TokenSelector";
 import DonateForm from "./DonateForm";
-
-export type AvailableToken = "ETH" | "USDT";
+import { AvailableToken } from "@/utils/token";
 
 interface DonateProps {
   account: string;
