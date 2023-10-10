@@ -16,6 +16,7 @@ The dws backend consists of a `postgres` database and 3 services
 The backend services are written in `go` -- you will thus need go on your development system. For testing purposes the `postgres` database can be run in a docker container i.e. you will need docker as well.
 
 Once you have these in place you can simply run
+1. `go mod tidy` to fetch the dependencies
 1. `make` to build the services
 1. `make run_db` to run a fresh database in a docker container
 1. `bin/pulitzer` in a separate terminal
