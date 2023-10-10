@@ -1,5 +1,5 @@
 import { ReactElement, useCallback, useEffect, useMemo, useState } from "react";
-import { Validate, ValidateResult, useForm } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { Undefinable } from "@/utils/types";
 import { toWei } from "web3-utils";
 import { AvailableToken } from "./Donate";
