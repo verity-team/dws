@@ -132,7 +132,9 @@ func getETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 		price, ok := <-channels[k]
 		if ok {
 			log.Infof("ethereum price from %s: $%s", k, price.StringFixed(2))
-			prices = append(prices, price)
+			if price.IsPositive() {
+				prices = append(prices, price)
+			}
 		} else {
 			err := errors.New(fmt.Sprintf("failed to get ethereum price from %s", k))
 			log.Error(err)
