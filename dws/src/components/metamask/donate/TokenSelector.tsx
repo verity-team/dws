@@ -1,12 +1,12 @@
+import { AvailableToken } from "@/utils/token";
 import { ReactElement, memo } from "react";
-import { AvailableToken } from "./Donate";
 
 interface TokenSelectorProps {
   selectedToken: AvailableToken;
   onTokenChange: (token: AvailableToken) => void;
 }
 
-const avaiableTokens: Array<AvailableToken> = ["ETH", "USDT"];
+const avaiableTokens: Array<AvailableToken> = ["ETH", "USDT", "LINK"];
 
 const TokenSelector = ({
   selectedToken,
@@ -18,12 +18,13 @@ const TokenSelector = ({
         <div key={token} className="py-1">
           <input
             type="radio"
+            id={token}
             name="token"
             value={token}
             checked={selectedToken === token}
             onChange={() => onTokenChange(token)}
           />
-          <label>{token}</label>
+          <label htmlFor={token}>{token}</label>
         </div>
       ))}
     </>
