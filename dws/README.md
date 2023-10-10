@@ -14,10 +14,17 @@ yarn set version classic
 - Copy `.env.example` and rename the copy to `.env` or `.env.local`
 
 - About environment variables
-  - NEXT_PUBLIC_DONATE_PUBKEY: A wallet address that will receive donations
-  - NEXT_PUBLIC_REWARD_PRICE: Fixed price for reward coin (People will receive reward coins for making donations)
-  - NEXT_PUBLIC_MIN_ETH: Minimum value for ETH token donations
-  - NEXT_PUBLIC_MIN_USDT: Minimum value for USDT token donations (WIP)
+
+  - Public environment variables, use on the client side
+
+    - `NEXT_PUBLIC_DONATE_PUBKEY`: A wallet address that will receive donations
+    - `NEXT_PUBLIC_REWARD_PRICE`: Fixed price for reward coin (People will receive reward coins for making donations)
+    - `NEXT_PUBLIC_MIN_ETH`: Minimum value for ETH token donations
+    - `NEXT_PUBLIC_MIN_USDT`: Minimum value for USDT token donations (WIP)
+
+  - Private environment variables, use on the backend side
+    - `API_URL`: Specify real backend APIs host
+    - `API_TIMEOUT`: Specify API request default timeout (in ms)
 
 ## Getting Started
 
