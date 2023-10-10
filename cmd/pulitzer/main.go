@@ -36,7 +36,10 @@ func main() {
 	defer db.Close()
 
 	s := gocron.NewScheduler(time.UTC)
-	s.Every("1m").Do(getETHPrice, db)
+	_, err = s.Every("1m").Do(getETHPrice, db)
+	if err != nil {
+		log.Fatal(err)
+	}
 	s.StartBlocking()
 }
 
@@ -100,8 +103,7 @@ func getETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 	}
 
 	// channels the go routines will use to send back the price
-	var channels map[string]chan decimal.Decimal
-	channels = make(map[string]chan decimal.Decimal, len(sources))
+	channels := make(map[string]chan decimal.Decimal, len(sources))
 
 	// start one go routine per price source
 	for k := range sources {
@@ -115,7 +117,7 @@ func getETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 
 			price, err := f()
 			if err != nil {
-				log.Errorf("error fetching ethereum price from %s:", source, err)
+				log.Errorf("error fetching ethereum price from %s, %v", source, err)
 				return
 			}
 			ch <- price
@@ -136,7 +138,7 @@ func getETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 				prices = append(prices, price)
 			}
 		} else {
-			err := errors.New(fmt.Sprintf("failed to get ethereum price from %s", k))
+			err := fmt.Errorf("failed to get ethereum price from %s", k)
 			log.Error(err)
 		}
 	}

@@ -3,13 +3,15 @@ package pulitzer
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"time"
 
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
 )
+
+const MaxWaitInSeconds = 5
 
 // Struct to unmarshal the JSON response
 type TickerData struct {
@@ -21,8 +23,7 @@ func GetWeightedAvgPriceFromBinance() (decimal.Decimal, error) {
 	// Define the Binance API URL
 	binanceAPIURL := "https://api.binance.com/api/v3/ticker?symbol=ETHUSDT"
 
-	// Create a context with a 3-second timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), MaxWaitInSeconds*time.Second)
 	defer cancel()
 
 	// Create an HTTP client with the context
@@ -42,7 +43,7 @@ func GetWeightedAvgPriceFromBinance() (decimal.Decimal, error) {
 	defer response.Body.Close()
 
 	// Read the response body
-	responseBody, err := ioutil.ReadAll(response.Body)
+	responseBody, err := io.ReadAll(response.Body)
 	if err != nil {
 		return decimal.Zero, err
 	}
@@ -55,11 +56,8 @@ func GetWeightedAvgPriceFromBinance() (decimal.Decimal, error) {
 		return decimal.Zero, err
 	}
 
-	// Extract the weightedAvgPrice from the struct
-	weightedAvgPriceString := tickerData.WeightedAvgPrice
-
 	// Parse the weightedAvgPriceString as a decimal
-	weightedAvgPrice, err := decimal.NewFromString(weightedAvgPriceString)
+	weightedAvgPrice, err := decimal.NewFromString(tickerData.WeightedAvgPrice)
 	if err != nil {
 		return decimal.Zero, err
 	}

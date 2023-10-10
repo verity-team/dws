@@ -28,7 +28,7 @@ type Data struct {
 func GetKuCoinETHUSDTPrice() (decimal.Decimal, error) {
 	// Create an HTTP client with a custom timeout
 	client := &http.Client{
-		Timeout: 3 * time.Second,
+		Timeout: MaxWaitInSeconds * time.Second,
 	}
 
 	// Make an HTTP GET request to the KuCoin API

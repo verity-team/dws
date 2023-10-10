@@ -20,7 +20,7 @@ type CoinbaseResponse struct {
 func GetCoinbaseETHPrice() (decimal.Decimal, error) {
 	// Create an HTTP client with a custom timeout
 	client := &http.Client{
-		Timeout: 3 * time.Second,
+		Timeout: MaxWaitInSeconds * time.Second,
 	}
 
 	// Make an HTTP GET request to the Coinbase API

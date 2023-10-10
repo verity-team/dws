@@ -3,7 +3,7 @@ package pulitzer
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"time"
 
@@ -22,8 +22,7 @@ func GetKrakenETHPrice() (decimal.Decimal, error) {
 	// Define the Kraken API URL
 	krakenAPIURL := "https://api.kraken.com/0/public/Ticker?pair=ETHUSD"
 
-	// Create a context with a 3-second timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), MaxWaitInSeconds*time.Second)
 	defer cancel()
 
 	// Create an HTTP client with the context
@@ -43,7 +42,7 @@ func GetKrakenETHPrice() (decimal.Decimal, error) {
 	defer response.Body.Close()
 
 	// Read the response body
-	responseBody, err := ioutil.ReadAll(response.Body)
+	responseBody, err := io.ReadAll(response.Body)
 	if err != nil {
 		return decimal.Zero, err
 	}

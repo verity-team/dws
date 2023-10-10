@@ -3,7 +3,7 @@ package pulitzer
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"time"
 
@@ -19,8 +19,7 @@ func GetBitfinexETHPrice() (decimal.Decimal, error) {
 	// Define the Bitfinex API URL
 	bitfinexAPIURL := "https://api.bitfinex.com/v1/pubticker/ETHUSD"
 
-	// Create a context with a 3-second timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), MaxWaitInSeconds*time.Second)
 	defer cancel()
 
 	// Create an HTTP client with the context
@@ -40,7 +39,7 @@ func GetBitfinexETHPrice() (decimal.Decimal, error) {
 	defer response.Body.Close()
 
 	// Read the response body
-	responseBody, err := ioutil.ReadAll(response.Body)
+	responseBody, err := io.ReadAll(response.Body)
 	if err != nil {
 		return decimal.Zero, err
 	}
