@@ -52,5 +52,18 @@ func (s *DelphiServer) DonationData(ctx echo.Context) error {
 }
 
 func (s *DelphiServer) UserData(ctx echo.Context, address string) error {
-	return nil
+	dd, err := db.GetUserDonationData(s.db, address)
+	if err != nil {
+		return err
+	}
+	us, err := db.GetUserStats(s.db, address)
+	if err != nil {
+		return err
+	}
+	var result api.UserData = api.UserData{
+		Donations: dd,
+		Stats:     *us,
+	}
+
+	return ctx.JSON(http.StatusOK, result)
 }

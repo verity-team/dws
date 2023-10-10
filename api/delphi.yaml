@@ -201,43 +201,59 @@ components:
           type: string
           example: "1.23"
           maxLength: 16
+          x-oapi-codegen-extra-tags:
+            db: amount
         usd_amount:
           description: optional USD amount, omitted in case of USD stable coins
           type: string
           example: "2009.82"
           maxLength: 16
+          x-oapi-codegen-extra-tags:
+            db: usd_amount
         asset:
           description: asset donated
           type: string
           enum: [eth, usdt, usdc]
           example: "eth"
           maxLength: 8
+          x-oapi-codegen-extra-tags:
+            db: asset
         tokens:
           description: amount of tokens corresponding to the donated amount
           type: string
           example: "980000"
           maxLength: 16
+          x-oapi-codegen-extra-tags:
+            db: tokens
         price:
           description: token price at the time of donation
           type: string
           example: "0.002"
           maxLength: 16
+          x-oapi-codegen-extra-tags:
+            db: price
         tx_hash:
           description: transaction hash for the donation in question
           type: string
           example: "0x558c8b86f75b0149ddca028a44a302eebe47c032e8ca8834f07aa6f1c5ae3fac"
           maxLength: 66
+          x-oapi-codegen-extra-tags:
+            db: tx_hash
         status:
           description: ethereum blockchain status of the donation
           type: string
           enum: [unconfirmed, confirmed, failed]
           example: "unconfirmed"
           maxLength: 16
+          x-oapi-codegen-extra-tags:
+            db: status
         ts:
           type: string
           format: date-time
           example: "2023-10-06T12:52:10+00:00"
           maxLength: 32
+          x-oapi-codegen-extra-tags:
+            db: modified_at
     price:
       required:
       - asset
@@ -287,32 +303,44 @@ components:
           type: string
           example: "31415"
           maxLength: 16
+          x-oapi-codegen-extra-tags:
+            db: us_total
         tokens:
           description: number of tokens the user is eligible to claim
           type: string
           example: "9880000"
           maxLength: 16
+          x-oapi-codegen-extra-tags:
+            db: us_tokens
         staked:
           description: number of tokens the user staked; must be <= `tokens`
           type: string
           example: "979999"
           maxLength: 16
+          x-oapi-codegen-extra-tags:
+            db: us_staked
         reward:
           description: staking rewards the user is eligible to claim
           type: string
           example: "979"
           maxLength: 16
+          x-oapi-codegen-extra-tags:
+            db: us_reward
         status:
           type: string
           enum: [none, staking, unstaking]
           example: "staking"
           maxLength: 16
+          x-oapi-codegen-extra-tags:
+            db: us_status
         ts:
           description: date/time at which the staking status was last modified
           type: string
           format: date-time
           example: "2023-10-05T09:23:10+00:00"
           maxLength: 32
+          x-oapi-codegen-extra-tags:
+            db: us_modified_at
     affiliate_request:
       required:
       - code

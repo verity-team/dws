@@ -53,26 +53,26 @@ type AffiliateRequest struct {
 // Donation defines model for donation.
 type Donation struct {
 	// Amount amount donated
-	Amount string `json:"amount"`
+	Amount string `db:"amount" json:"amount"`
 
 	// Asset asset donated
-	Asset DonationAsset `json:"asset"`
+	Asset DonationAsset `db:"asset" json:"asset"`
 
 	// Price token price at the time of donation
-	Price string `json:"price"`
+	Price string `db:"price" json:"price"`
 
 	// Status ethereum blockchain status of the donation
-	Status DonationStatus `json:"status"`
+	Status DonationStatus `db:"status" json:"status"`
 
 	// Tokens amount of tokens corresponding to the donated amount
-	Tokens string    `json:"tokens"`
-	Ts     time.Time `json:"ts"`
+	Tokens string    `db:"tokens" json:"tokens"`
+	Ts     time.Time `db:"modified_at" json:"ts"`
 
 	// TxHash transaction hash for the donation in question
-	TxHash string `json:"tx_hash"`
+	TxHash string `db:"tx_hash" json:"tx_hash"`
 
 	// UsdAmount optional USD amount, omitted in case of USD stable coins
-	UsdAmount *string `json:"usd_amount,omitempty"`
+	UsdAmount *string `db:"usd_amount" json:"usd_amount,omitempty"`
 }
 
 // DonationAsset asset donated
@@ -135,20 +135,20 @@ type UserData struct {
 // UserStats defines model for user_stats.
 type UserStats struct {
 	// Reward staking rewards the user is eligible to claim
-	Reward string `json:"reward"`
+	Reward string `db:"us_reward" json:"reward"`
 
 	// Staked number of tokens the user staked; must be <= `tokens`
-	Staked string          `json:"staked"`
-	Status UserStatsStatus `json:"status"`
+	Staked string          `db:"us_staked" json:"staked"`
+	Status UserStatsStatus `db:"us_status" json:"status"`
 
 	// Tokens number of tokens the user is eligible to claim
-	Tokens string `json:"tokens"`
+	Tokens string `db:"us_tokens" json:"tokens"`
 
 	// Total total funds donated by this address in USD
-	Total string `json:"total"`
+	Total string `db:"us_total" json:"total"`
 
 	// Ts date/time at which the staking status was last modified
-	Ts *time.Time `json:"ts,omitempty"`
+	Ts *time.Time `db:"us_modified_at" json:"ts,omitempty"`
 }
 
 // UserStatsStatus defines model for UserStats.Status.

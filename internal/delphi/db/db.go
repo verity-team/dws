@@ -113,3 +113,41 @@ func GetDonationData(db *sqlx.DB) (*api.DonationData, error) {
 	result.Status = api.DonationDataStatus(ds.Status)
 	return &result, nil
 }
+
+func GetUserDonationData(db *sqlx.DB, address string) ([]api.Donation, error) {
+	// fetch donations made by this user/address
+	q1 := `
+		SELECT
+			amount, usd_amount, asset, tokens, price, tx_hash, status, modified_at
+		FROM donation
+		WHERE address=$1
+		ORDER BY id
+		`
+	var result []api.Donation
+	err := db.Select(&result, q1, address)
+	if err != nil {
+		err = fmt.Errorf("failed to fetch donation records for %s, %v", address, err)
+		log.Error(err)
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func GetUserStats(db *sqlx.DB, address string) (*api.UserStats, error) {
+	// fetch donations made by this user/address
+	q1 := `
+		SELECT
+			us_total, us_tokens, us_staked, us_reward, us_staked, us_modified_at
+		FROM update_user_stats($1)
+		`
+	var result api.UserStats
+	err := db.Get(&result, q1, address)
+	if err != nil {
+		err = fmt.Errorf("failed to fetch user stats for %s, %v", address, err)
+		log.Error(err)
+		return nil, err
+	}
+
+	return &result, nil
+}
