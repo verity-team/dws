@@ -1,10 +1,8 @@
 import { ReactElement, useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { Undefinable } from "@/utils/types";
-import { toWei } from "web3-utils";
-import { AvailableToken } from "./Donate";
 import TextError from "@/components/common/TextError";
-import { exchangeToReward } from "@/utils/metamask/donate";
+import { donate, exchangeToReward } from "@/utils/metamask/donate";
+import { AvailableToken } from "@/utils/token";
 
 export interface DonateFormData {
   amount: number;
@@ -47,7 +45,16 @@ const DonateForm = ({
   }, [handleSwapTokenToReward]);
 
   // If doing math, use toWei() + BN.js to avoid floating issues
-  const handleDonate = async (data: DonateFormData) => {};
+  const handleDonate = async (data: DonateFormData) => {
+    const txHash = await donate(account, data.amount, selectedToken);
+    if (txHash == null) {
+      alert("Failed to donate token.");
+      return;
+    }
+
+    alert("Transaction sent");
+    return txHash;
+  };
 
   // TODO: Change fallback value if needed
   const minDonateAmount: number = useMemo(() => {

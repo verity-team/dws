@@ -1,13 +1,26 @@
 import { toWei } from "web3-utils";
 import { Maybe, Nullable } from "../types";
-import { AvailableToken } from "../token";
+import { AvailableToken, TokenInfo, multipleOrderOf10 } from "../token";
 import { encodeFunctionCall } from "web3-eth-abi";
+import { BN } from "bn.js";
+import Decimal from "decimal.js";
 
-const contractAddrMap = new Map<AvailableToken, string>([
-  ["LINK", "0x779877A7B0D9E8603169DdbD7836e478b4624789"],
+const contractAddrMap = new Map<AvailableToken, TokenInfo>([
+  [
+    "LINK",
+    {
+      symbol: "LINK",
+      contractAddress: "0x779877A7B0D9E8603169DdbD7836e478b4624789",
+      decimals: 18,
+    },
+  ],
 ]);
 
-const getContractData = (receiver: string, amount: number): string => {
+const getContractData = (
+  receiver: string,
+  amount: number,
+  decimals: number
+): string => {
   const TRANSFER_FUNCTION_ABI = {
     constant: false,
     inputs: [
@@ -20,7 +33,12 @@ const getContractData = (receiver: string, amount: number): string => {
     stateMutability: "nonpayable",
     type: "function",
   };
-  return encodeFunctionCall(TRANSFER_FUNCTION_ABI, [receiver, amount]);
+
+  const contractAmount = multipleOrderOf10(new BN(amount), decimals);
+  return encodeFunctionCall(TRANSFER_FUNCTION_ABI, [
+    receiver,
+    contractAmount.toString(),
+  ]);
 };
 
 export const donate = async (
@@ -93,8 +111,8 @@ export const donateERC = async (
     return null;
   }
 
-  const sendTo = contractAddrMap.get(token);
-  if (sendTo == null) {
+  const tokenInfo = contractAddrMap.get(token);
+  if (tokenInfo == null) {
     console.warn("Unknown ERC-20 contract address");
     return null;
   }
@@ -104,8 +122,8 @@ export const donateERC = async (
     params: [
       {
         from,
-        to: sendTo,
-        data: getContractData(receiveWallet, amount),
+        to: tokenInfo.contractAddress,
+        data: getContractData(receiveWallet, amount, tokenInfo.decimals),
         // gasLimit: '0x5028', // Customizable by the user during MetaMask confirmation.
         // maxPriorityFeePerGas: '0x3b9aca00', // Customizable by the user during MetaMask confirmation.
         // maxFeePerGas: '0x2540be400', // Customizable by the user during MetaMask confirmation.
@@ -124,5 +142,6 @@ export const exchangeToReward = (
     throw new Error("Reward price is NaN");
   }
 
-  return Math.ceil((amount * tokenPrice) / rewardTokenPrice);
+  const reward = Math.ceil((amount * tokenPrice) / rewardTokenPrice);
+  return isNaN(reward) ? 0 : reward;
 };

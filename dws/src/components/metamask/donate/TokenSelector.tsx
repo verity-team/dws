@@ -1,12 +1,12 @@
+import { AvailableToken } from "@/utils/token";
 import { ReactElement, memo } from "react";
-import { AvailableToken } from "./Donate";
 
 interface TokenSelectorProps {
   selectedToken: AvailableToken;
   onTokenChange: (token: AvailableToken) => void;
 }
 
-const avaiableTokens: Array<AvailableToken> = ["ETH", "USDT"];
+const avaiableTokens: Array<AvailableToken> = ["ETH", "USDT", "LINK"];
 
 const TokenSelector = ({
   selectedToken,
