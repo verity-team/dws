@@ -21,11 +21,11 @@ const (
 	Unconfirmed DonationStatus = "unconfirmed"
 )
 
-// Defines values for DonationStatsStatus.
+// Defines values for DonationDataStatus.
 const (
-	Closed DonationStatsStatus = "closed"
-	Open   DonationStatsStatus = "open"
-	Paused DonationStatsStatus = "paused"
+	Closed DonationDataStatus = "closed"
+	Open   DonationDataStatus = "open"
+	Paused DonationDataStatus = "paused"
 )
 
 // Defines values for PriceAsset.
@@ -84,23 +84,25 @@ type DonationStatus string
 // DonationData defines model for donation_data.
 type DonationData struct {
 	// Prices an array of prices
-	Prices []Price       `json:"prices"`
-	Stats  DonationStats `json:"stats"`
+	Prices []Price `json:"prices"`
+
+	// ReceivingAddress receiving address for donations
+	ReceivingAddress string             `json:"receiving_address"`
+	Stats            DonationStats      `json:"stats"`
+	Status           DonationDataStatus `json:"status"`
 }
+
+// DonationDataStatus defines model for DonationData.Status.
+type DonationDataStatus string
 
 // DonationStats defines model for donation_stats.
 type DonationStats struct {
-	Status DonationStatsStatus `json:"status"`
-
 	// Tokens number of tokens claimable by donors
 	Tokens string `json:"tokens"`
 
 	// Total total funds raised in USD
 	Total string `json:"total"`
 }
-
-// DonationStatsStatus defines model for DonationStats.Status.
-type DonationStatsStatus string
 
 // Error defines model for error.
 type Error struct {

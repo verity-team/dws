@@ -154,6 +154,8 @@ components:
       required:
       - prices
       - stats
+      - receiving_address
+      - status
       properties:
         prices:
           type: array
@@ -162,6 +164,16 @@ components:
             $ref: '#/components/schemas/price'
         stats:
           $ref: '#/components/schemas/donation_stats'
+        receiving_address:
+          type: string
+          maxLength: 42
+          description: receiving address for donations
+          example: "0xDEd1Fe6B3f61c8F1d874bb86F086D10FFc3F0154"
+        status:
+          type: string
+          enum: [open, paused, closed]
+          example: "open"
+          maxLength: 8
     user_data:
       required:
       - donations
@@ -251,7 +263,6 @@ components:
       required:
       - total
       - tokens
-      - status
       properties:
         total:
           description: total funds raised in USD
@@ -263,11 +274,6 @@ components:
           type: string
           example: "979999"
           maxLength: 16
-        status:
-          type: string
-          enum: [open, paused, closed]
-          example: "open"
-          maxLength: 8
     user_stats:
       required:
       - total

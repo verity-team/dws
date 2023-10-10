@@ -43,7 +43,7 @@ func GetDonationData(db *sqlx.DB) (*api.DonationData, error) {
 		SELECT asset, price, created_at FROM price
 		WHERE
 			asset='eth'
-			AND created_at > NOW() - INTERVAL '5 minutes'
+			AND created_at > NOW() - INTERVAL '3 minutes'
 		ORDER BY id DESC
 		LIMIT 1
 		`
@@ -106,13 +106,10 @@ func GetDonationData(db *sqlx.DB) (*api.DonationData, error) {
 	result.Prices = append(result.Prices, p)
 
 	result.Stats = api.DonationStats{
-		Status: api.DonationStatsStatus(ds.Status),
 		Total:  ds.Total.StringFixed(2),
 		Tokens: strconv.Itoa(ds.Tokens),
 	}
-	// if we failed to fetch an ETH price, the status should be set to "paused"
-	if ethp.Price.IsZero() {
-		result.Stats.Status = api.Paused
-	}
+
+	result.Status = api.DonationDataStatus(ds.Status)
 	return &result, nil
 }

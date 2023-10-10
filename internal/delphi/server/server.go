@@ -1,7 +1,9 @@
 package server
 
 import (
+	"errors"
 	"net/http"
+	"os"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
@@ -34,6 +36,17 @@ func (s *DelphiServer) DonationData(ctx echo.Context) error {
 	dd, err := db.GetDonationData(s.db)
 	if err != nil {
 		return err
+	}
+	ra, present := os.LookupEnv("DWS_DONATION_ADDRESS")
+	if !present {
+		err = errors.New("DWS_DONATION_ADDRESS environment variable not set")
+		log.Error(err)
+		return err
+	}
+	dd.ReceivingAddress = ra
+	// if we failed to fetch an ETH price, the status should be set to "paused"
+	if dd.Prices[0].Price == "0.00" {
+		dd.Status = api.Paused
 	}
 	return ctx.JSON(http.StatusOK, *dd)
 }
