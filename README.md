@@ -6,6 +6,23 @@ We want to build a 1-page web site similar to https://wallstmemes.com/ -- the do
 
 The backend used by the donation web site frontend is called `delphi` and it will expose a [REST API](https://app.swaggerhub.com/apis/MUHAREM_1/delphi/) to the frontend.
 
+## how to run the dws backend
+
+The dws backend consists of a `postgres` database and 3 services
+- `pulitzer`: pulls the ETH price from 6 exchanges and inserts an average price into the database every minute
+- `buck`: monitors the ethereum blockchain for donations and inserts donation transactions into the database
+- `delphi`: [REST API](https://app.swaggerhub.com/apis/MUHAREM_1/delphi/) server -- only serves data from the database really
+
+The backend services are written in `go` -- you will thus need go on your development system. For testing purposes the `postgres` database can be run in a docker container i.e. you will need docker as well.
+
+Once you have these in place you can simply run
+1. `make` to build the services
+1. `make run_db` to run a fresh database in a docker container
+1. `bin/pulitzer` in a separate terminal
+1. `bin/delphi` in a separate terminal
+
+Please note `buck` is still being worked on.
+
 ## requirements & rules
 1. all amounts are passed as strings and should be decoded to a `decimal` type to preserve precision
 1. users may be sent to our web site via a link that contains an affiliate code e.g.
