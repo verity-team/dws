@@ -5,7 +5,7 @@ import { ReactElement, useState } from "react";
 import TextButton from "../common/TextButton";
 import Donate from "./donate/Donate";
 
-const DemoConnectButton = (): ReactElement => {
+const DemoConnect = (): ReactElement => {
   const { sdk } = useSDK();
 
   const [account, setAccount] = useState<string>();
@@ -43,4 +43,4 @@ const DemoConnectButton = (): ReactElement => {
   );
 };
 
-export default DemoConnectButton;
+export default DemoConnect;

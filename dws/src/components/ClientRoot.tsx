@@ -21,7 +21,7 @@ const ClientRoot = ({
       logging: {
         developerMode: true,
       },
-      checkInstallationImmediately: true,
+      checkInstallationImmediately: false,
       dappMetadata: {
         // TODO: Change these later
         name: "DWS",
