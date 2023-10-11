@@ -10,6 +10,16 @@ export interface DonationData {
   status: "open" | "paused" | "closed";
 }
 
+export interface UserDonationData {
+  donations: Donation[];
+  stats: UserStats;
+}
+
+export interface AffiliateDonationInfo {
+  code: string;
+  tx_hash: string;
+}
+
 interface TokenInfo {
   asset: string;
   price: string;
@@ -19,11 +29,6 @@ interface TokenInfo {
 interface DonationStats {
   total: string;
   tokens: string;
-}
-
-export interface UserDonationData {
-  donations: Donation[];
-  stats: UserStats;
 }
 
 interface Donation {

@@ -7,7 +7,7 @@ export async function GET(request: Request): Promise<Response> {
   return serverResponse;
 }
 
-async function getDonationData(): Promise<Response> {
+async function getDonationData(): Promise<NextResponse> {
   const response = await sendBaseRequest("donation/data/", HttpMethod.GET);
 
   // Something is wrong with API setup
@@ -15,7 +15,7 @@ async function getDonationData(): Promise<Response> {
     return getDefaultErrResponse();
   }
 
-  // Avoid parsing errors
+  // Should exist a response body whether the request fail or not
   let responseBody = null;
   try {
     responseBody = await response.json();
@@ -23,21 +23,19 @@ async function getDonationData(): Promise<Response> {
     return getDefaultErrResponse();
   }
 
-  console.log(responseBody);
-
   // Redirect response to frontend with their respective statusCode
   if (!response.ok) {
-    return Response.json(responseBody ?? {}, {
+    return NextResponse.json<FailedResponse>(responseBody ?? {}, {
       status: response.status,
     });
   }
 
-  return Response.json(responseBody ?? {}, { status: 200 });
+  return NextResponse.json<DonationData>(responseBody ?? {}, { status: 200 });
 }
 
-function getDefaultErrResponse(): Response {
-  return Response.json(
-    { code: "unknown", message: "Failed to fetch donation data" },
+function getDefaultErrResponse(): NextResponse {
+  return NextResponse.json<FailedResponse>(
+    { code: "500", message: "Failed to fetch donation data" },
     { status: 500 }
   );
 }
