@@ -56,6 +56,9 @@ func (s *DelphiServer) UserData(ctx echo.Context, address string) error {
 	if err != nil {
 		return err
 	}
+	if dd == nil {
+		return ctx.String(http.StatusNotFound, "no such address")
+	}
 	us, err := db.GetUserStats(s.db, address)
 	if err != nil {
 		return err
