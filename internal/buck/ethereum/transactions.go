@@ -86,6 +86,12 @@ func GetTransactions(apiURL string, blockNumber string, contracts []string) ([]T
 }
 
 func ParseInputData(input string) (string, uint64, error) {
+	// example: "0xa9059cbb000000000000000000000000865a1f30b979e4bf3ab30562daee05f917ec0527000000000000000000000000000000000000000000000000de0b6b3a76400000"
+
+	if len(input) != 138 {
+		return "", 0, fmt.Errorf("input has invalid length")
+	}
+
 	// Remove "0x" prefix if present
 	input = strings.TrimPrefix(input, "0x")
 

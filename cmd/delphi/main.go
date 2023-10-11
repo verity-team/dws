@@ -29,6 +29,12 @@ func main() {
 	version = fmt.Sprintf("%s::%s", bts, rev)
 	log.Info("version = ", version)
 
+	// make sure this environment variable is set
+	_, present := os.LookupEnv("DWS_DONATION_ADDRESS")
+	if !present {
+		log.Fatal("DWS_DONATION_ADDRESS variable not set")
+	}
+
 	port := flag.String("port", "8080", "Port for test HTTP server")
 	flag.Parse()
 
