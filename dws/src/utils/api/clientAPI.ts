@@ -10,6 +10,7 @@ import {
   TokenPrice,
 } from "./types";
 import { useMemo } from "react";
+import { getExponentialWaitTime } from "../utils";
 
 interface CustomError {
   info: FailedResponse;
@@ -62,11 +63,14 @@ export const useDonationData = () => {
           return;
         }
 
-        if (retryCount >= 5) {
+        if (retryCount >= 10) {
           return;
         }
 
-        setTimeout(() => revalidate({ retryCount }), 3000);
+        setTimeout(
+          () => revalidate({ retryCount }),
+          getExponentialWaitTime(1000, retryCount)
+        );
       },
     }
   );

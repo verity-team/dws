@@ -8,8 +8,6 @@ export async function GET(
   { params }: { params: { address: string } }
 ): Promise<Response> {
   const walletAddr = params.address;
-  console.log(walletAddr);
-
   if (!isAddress(walletAddr)) {
     return getBadRequestResponse("Invalid wallet address");
   }

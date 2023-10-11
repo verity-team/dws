@@ -1,4 +1,5 @@
 import { HttpMethod, serverBaseRequest } from "@/utils/api/baseAPI";
+import { NextResponse } from "next/server";
 
 export const revalidate = 60; // seconds
 
@@ -14,14 +15,14 @@ export async function GET(request: Request) {
   let responseBody = {};
   try {
     responseBody = await response.json();
-    return Response.json(responseBody, { status: response.status });
+    return NextResponse.json(responseBody, { status: response.status });
   } catch {
     return getDefaultErrResponse();
   }
 }
 
-function getDefaultErrResponse(): Response {
-  return Response.json(
+function getDefaultErrResponse(): NextResponse {
+  return NextResponse.json(
     { code: "500", message: "Failed to fetch donation data" },
     { status: 500 }
   );
