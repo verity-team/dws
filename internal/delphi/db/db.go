@@ -3,6 +3,7 @@ package db
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/gommon/log"
@@ -107,7 +108,7 @@ func GetUserDonationData(db *sqlx.DB, address string) ([]api.Donation, error) {
 		`
 	var result []api.Donation
 	err := db.Select(&result, q1, address)
-	if err != nil {
+	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
 		err = fmt.Errorf("failed to fetch donation records for %s, %v", address, err)
 		log.Error(err)
 		return nil, err
@@ -125,7 +126,7 @@ func GetUserStats(db *sqlx.DB, address string) (*api.UserStats, error) {
 		`
 	var result api.UserStats
 	err := db.Get(&result, q1, address)
-	if err != nil {
+	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
 		err = fmt.Errorf("failed to fetch user stats for %s, %v", address, err)
 		log.Error(err)
 		return nil, err
