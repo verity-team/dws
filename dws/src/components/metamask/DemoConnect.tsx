@@ -27,7 +27,7 @@ const DemoConnect = (): ReactElement => {
   };
 
   return (
-    <div className="p-16">
+    <div className="m-16">
       <div className="flex items-center space-x-2">
         <TextButton onClick={handleWalletConnect}>
           Connect with wallet

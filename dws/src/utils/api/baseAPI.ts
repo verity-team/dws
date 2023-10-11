@@ -1,4 +1,4 @@
-import { Nullable } from "../types";
+import { Maybe, Nullable } from "../types";
 
 export enum HttpMethod {
   GET = "GET",
@@ -10,15 +10,6 @@ export interface RequestConfig {
   timeout: number;
 }
 
-export const getDefaultHeaders = () => {
-  const headers = new Headers();
-
-  headers.append("Content-Type", "application/json");
-  headers.append("Accept", "application/json");
-
-  return headers;
-};
-
 export const baseRequest = async (
   url: string,
   method: HttpMethod,
@@ -26,9 +17,6 @@ export const baseRequest = async (
   body?: any
 ): Promise<Nullable<Response>> => {
   const { host, timeout } = config;
-
-  // Generate request headers
-  const headers = getDefaultHeaders();
 
   // Use signal to avoid running the request for too long
   // Docs for canceling fetch API request
@@ -38,7 +26,6 @@ export const baseRequest = async (
 
   const requestConfig = {
     method,
-    headers,
     body: body == null ? null : JSON.stringify(body),
     signal: controller.signal,
   };
@@ -88,7 +75,7 @@ export const clientBaseRequest = async (
   url: string,
   method: HttpMethod,
   body?: any
-): Promise<Nullable<Response>> => {
+): Promise<Maybe<any>> => {
   // Read configurations
 
   // Endpoint should be the same with current host

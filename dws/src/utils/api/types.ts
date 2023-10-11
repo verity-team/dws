@@ -4,10 +4,10 @@ export interface FailedResponse {
 }
 
 export interface DonationData {
-  prices: TokenInfo[];
+  prices: TokenPrice[];
   stats: DonationStats;
   receiving_address: string;
-  status: "open" | "paused" | "closed";
+  status: CampaignStatus;
 }
 
 export interface UserDonationData {
@@ -20,16 +20,20 @@ export interface AffiliateDonationInfo {
   tx_hash: string;
 }
 
-interface TokenInfo {
+export interface TokenPrice {
   asset: string;
   price: string;
   ts: string;
 }
 
-interface DonationStats {
+// total: total fund raised in USD
+// tokens: number tokens claimable by donors
+export interface DonationStats {
   total: string;
   tokens: string;
 }
+
+export type CampaignStatus = "open" | "paused" | "closed";
 
 interface Donation {
   amount: string;
@@ -38,15 +42,19 @@ interface Donation {
   token: string;
   price: string;
   tx_hash: string;
-  status: "unconfirmed" | "confirmed" | "failed";
+  status: UserDonationStatus;
   ts: string;
 }
 
-interface UserStats {
+export interface UserStats {
   total: string;
   tokens: string;
   staked: string;
   reward: string;
-  status: "none" | "staking" | "unstaking";
+  status: UserRewardStatus;
   ts: string;
 }
+
+export type UserDonationStatus = "unconfirmed" | "confirmed" | "failed";
+
+export type UserRewardStatus = "none" | "staking" | "unstaking";
