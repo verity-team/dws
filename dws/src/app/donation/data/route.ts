@@ -1,6 +1,13 @@
-import { HttpMethod, sendBaseRequest } from "@/utils/api/baseAPI";
+import { HttpMethod, serverBaseRequest } from "@/utils/api/baseAPI";
 import { DonationData, FailedResponse } from "@/utils/api/types";
 import { NextResponse } from "next/server";
+
+/**
+ * Cache donation stats for 30 seconds
+ * This will ensure consistent data for frontend
+ * while avoiding redundant requests coming to backend servers
+ */
+export const revalidate = 30; // seconds
 
 export async function GET(request: Request): Promise<Response> {
   const serverResponse = await getDonationData();
@@ -8,7 +15,7 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 async function getDonationData(): Promise<NextResponse> {
-  const response = await sendBaseRequest("donation/data/", HttpMethod.GET);
+  const response = await serverBaseRequest("/donation/data/", HttpMethod.GET);
 
   // Something is wrong with API setup
   if (response == null) {

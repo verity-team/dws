@@ -1,4 +1,4 @@
-import { HttpMethod, sendBaseRequest } from "@/utils/api/baseAPI";
+import { HttpMethod, serverBaseRequest } from "@/utils/api/baseAPI";
 import { AffiliateDonationInfo, FailedResponse } from "@/utils/api/types";
 import { Nullable } from "@/utils/types";
 import { NextResponse } from "next/server";
@@ -30,8 +30,8 @@ export async function POST(request: Request): Promise<Response> {
 async function requestAffiliateDonation(
   donationInfo: AffiliateDonationInfo
 ): Promise<NextResponse> {
-  const response = await sendBaseRequest(
-    "donation/affiliate",
+  const response = await serverBaseRequest(
+    "/donation/affiliate",
     HttpMethod.POST,
     donationInfo
   );

@@ -1,4 +1,4 @@
-import { HttpMethod, sendBaseRequest } from "@/utils/api/baseAPI";
+import { HttpMethod, serverBaseRequest } from "@/utils/api/baseAPI";
 import { FailedResponse, UserDonationData } from "@/utils/api/types";
 import { NextResponse } from "next/server";
 import { isAddress } from "web3-validator";
@@ -19,8 +19,8 @@ export async function GET(
 
 // TODO: Need more testing
 async function getUserDonation(walletAddr: string): Promise<NextResponse> {
-  const response = await sendBaseRequest(
-    `user/data/${walletAddr}`,
+  const response = await serverBaseRequest(
+    `/user/data/${walletAddr}`,
     HttpMethod.GET
   );
   if (response == null) {
