@@ -1,4 +1,6 @@
-enum HttpMethod {
+import { Nullable } from "../types";
+
+export enum HttpMethod {
   GET = "GET",
   POST = "POST",
 }
@@ -21,11 +23,11 @@ const getDefaultHeaders = () => {
  *
  * @returns Promise<any> (should be object, whether the request is a success or a fail)
  */
-const sendBaseRequest = async (
+export const sendBaseRequest = async (
   url: string,
   method: HttpMethod,
   body?: any
-): Promise<any> => {
+): Promise<Nullable<Response>> => {
   // Read configurations
 
   // Endpoint should be the same with current host
@@ -56,6 +58,12 @@ const sendBaseRequest = async (
     body: body == null ? null : JSON.stringify(body),
     signal: controller.signal,
   };
+
+  console.log(
+    `Requesting to ${apiHost}${url} with config ${JSON.stringify(
+      requestConfig
+    )}`
+  );
 
   const response = await fetch(`${apiHost}${url}`, requestConfig);
   clearTimeout(timerId);

@@ -1,3 +1,3 @@
-export default function POST(request: Request): Response {
-  return Response.json({ message: "Requesting to donation/affiliate" });
+export async function POST(): Promise<Response> {
+  return Response.json({ message: "Hello World" });
 }
