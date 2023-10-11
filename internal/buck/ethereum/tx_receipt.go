@@ -3,6 +3,7 @@ package ethereum
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 )
@@ -44,7 +45,7 @@ type Log struct {
 
 func GetTransactionReceipt(url string, txHash string) (*TxReceipt, error) {
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: MaxWaitInSeconds * time.Second,
 	}
 
 	requestData := map[string]interface{}{
@@ -71,6 +72,10 @@ func GetTransactionReceipt(url string, txHash string) (*TxReceipt, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("request failed with status: %s", resp.Status)
+	}
 
 	var response TxReceiptBody
 	err = json.NewDecoder(resp.Body).Decode(&response)

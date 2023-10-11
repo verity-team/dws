@@ -2,6 +2,7 @@ package pulitzer
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -26,7 +27,6 @@ type Data struct {
 }
 
 func GetKuCoinETHUSDTPrice() (decimal.Decimal, error) {
-	// Create an HTTP client with a custom timeout
 	client := &http.Client{
 		Timeout: MaxWaitInSeconds * time.Second,
 	}
@@ -37,6 +37,10 @@ func GetKuCoinETHUSDTPrice() (decimal.Decimal, error) {
 		return decimal.Zero, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return decimal.Zero, fmt.Errorf("kucoin request failed with status: %s", resp.Status)
+	}
 
 	// Parse the JSON response
 	var kuCoinResponse KuCoinResponse

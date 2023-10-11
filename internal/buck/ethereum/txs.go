@@ -45,7 +45,7 @@ func GetTransactions(apiURL string, blockNumber string, contracts []string) ([]T
 	}
 
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: MaxWaitInSeconds * time.Second,
 	}
 
 	resp, err := client.Post(apiURL, "application/json", bytes.NewBuffer(requestBytes))
@@ -53,6 +53,10 @@ func GetTransactions(apiURL string, blockNumber string, contracts []string) ([]T
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("request failed with status: %s", resp.Status)
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -97,7 +101,7 @@ func ParseInputData(input string) (string, uint64, error) {
 
 	// Ensure the input starts with "0xa9059cbb"
 	if !strings.HasPrefix(input, "a9059cbb") {
-		return "", 0, fmt.Errorf("Input does not start with the expected function signature")
+		return "", 0, fmt.Errorf("input does not start with the expected function signature")
 	}
 
 	// Extract the receiving address (next 32 bytes) and strip leading zeroes
@@ -110,7 +114,7 @@ func ParseInputData(input string) (string, uint64, error) {
 	amountHex := input[72:]
 	amount, err := strconv.ParseUint(amountHex, 16, 64)
 	if err != nil {
-		return "", 0, fmt.Errorf("Failed to convert amount to uint64")
+		return "", 0, fmt.Errorf("failed to convert amount to uint64")
 	}
 
 	return "0x" + receivingAddress, amount, nil

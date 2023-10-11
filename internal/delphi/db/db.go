@@ -24,7 +24,7 @@ func AddAffiliateCD(db *sqlx.DB, afc api.AffiliateRequest) error {
 	}
 	_, err := db.NamedExec(q, qd)
 	if err != nil {
-		log.Errorf("Failed to insert affiliate donation data, %v", err)
+		log.Errorf("failed to insert affiliate donation data, %v", err)
 		return err
 	}
 

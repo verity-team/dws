@@ -1,8 +1,8 @@
 package pulitzer
 
 import (
-	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -16,17 +16,12 @@ type BitfinexTickerResponse struct {
 }
 
 func GetBitfinexETHPrice() (decimal.Decimal, error) {
-	// Define the Bitfinex API URL
+	client := &http.Client{
+		Timeout: MaxWaitInSeconds * time.Second,
+	}
+
 	bitfinexAPIURL := "https://api.bitfinex.com/v1/pubticker/ETHUSD"
-
-	ctx, cancel := context.WithTimeout(context.Background(), MaxWaitInSeconds*time.Second)
-	defer cancel()
-
-	// Create an HTTP client with the context
-	client := &http.Client{}
-
-	// Create an HTTP request with the context
-	req, err := http.NewRequestWithContext(ctx, "GET", bitfinexAPIURL, nil)
+	req, err := http.NewRequest("GET", bitfinexAPIURL, nil)
 	if err != nil {
 		return decimal.Zero, err
 	}
@@ -37,6 +32,10 @@ func GetBitfinexETHPrice() (decimal.Decimal, error) {
 		return decimal.Zero, err
 	}
 	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return decimal.Zero, fmt.Errorf("bitfinex request failed with status: %s", response.Status)
+	}
 
 	// Read the response body
 	responseBody, err := io.ReadAll(response.Body)

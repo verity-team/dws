@@ -1,8 +1,8 @@
 package pulitzer
 
 import (
-	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -19,17 +19,12 @@ type KrakenTickerResponse struct {
 }
 
 func GetKrakenETHPrice() (decimal.Decimal, error) {
-	// Define the Kraken API URL
+	client := &http.Client{
+		Timeout: MaxWaitInSeconds * time.Second,
+	}
+
 	krakenAPIURL := "https://api.kraken.com/0/public/Ticker?pair=ETHUSD"
-
-	ctx, cancel := context.WithTimeout(context.Background(), MaxWaitInSeconds*time.Second)
-	defer cancel()
-
-	// Create an HTTP client with the context
-	client := &http.Client{}
-
-	// Create an HTTP request with the context
-	req, err := http.NewRequestWithContext(ctx, "GET", krakenAPIURL, nil)
+	req, err := http.NewRequest("GET", krakenAPIURL, nil)
 	if err != nil {
 		return decimal.Zero, err
 	}
@@ -40,6 +35,10 @@ func GetKrakenETHPrice() (decimal.Decimal, error) {
 		return decimal.Zero, err
 	}
 	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return decimal.Zero, fmt.Errorf("kraken request failed with status: %s", response.Status)
+	}
 
 	// Read the response body
 	responseBody, err := io.ReadAll(response.Body)

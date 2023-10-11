@@ -1,8 +1,8 @@
 package pulitzer
 
 import (
-	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -20,17 +20,12 @@ type TickerData struct {
 }
 
 func GetWeightedAvgPriceFromBinance() (decimal.Decimal, error) {
-	// Define the Binance API URL
+	client := &http.Client{
+		Timeout: MaxWaitInSeconds * time.Second,
+	}
+
 	binanceAPIURL := "https://api.binance.com/api/v3/ticker?symbol=ETHUSDT"
-
-	ctx, cancel := context.WithTimeout(context.Background(), MaxWaitInSeconds*time.Second)
-	defer cancel()
-
-	// Create an HTTP client with the context
-	client := &http.Client{}
-
-	// Create an HTTP request with the context
-	req, err := http.NewRequestWithContext(ctx, "GET", binanceAPIURL, nil)
+	req, err := http.NewRequest("GET", binanceAPIURL, nil)
 	if err != nil {
 		return decimal.Zero, err
 	}
@@ -41,6 +36,10 @@ func GetWeightedAvgPriceFromBinance() (decimal.Decimal, error) {
 		return decimal.Zero, err
 	}
 	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return decimal.Zero, fmt.Errorf("binance request failed with status: %s", response.Status)
+	}
 
 	// Read the response body
 	responseBody, err := io.ReadAll(response.Body)

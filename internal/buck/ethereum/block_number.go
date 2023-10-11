@@ -2,7 +2,6 @@ package ethereum
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,12 +9,13 @@ import (
 	"time"
 )
 
-func GetBlockNumber(apiURL string) (uint64, error) {
-	// Create a context with a timeout of 5 seconds
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+const MaxWaitInSeconds = 5
 
-	// Define the request data
+func GetBlockNumber(apiURL string) (uint64, error) {
+	client := &http.Client{
+		Timeout: MaxWaitInSeconds * time.Second,
+	}
+
 	requestData := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"method":  "eth_blockNumber",
@@ -27,26 +27,21 @@ func GetBlockNumber(apiURL string) (uint64, error) {
 		return 0, err
 	}
 
-	// Create an HTTP POST request with the context
-	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(requestBody))
+	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(requestBody))
 	if err != nil {
 		return 0, err
 	}
 
-	// Set the request headers
 	req.Header.Set("Content-Type", "application/json")
 
-	// Perform the HTTP request
-	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		return 0, err
 	}
 	defer resp.Body.Close()
 
-	// Check the response status code
-	if resp.Status != "200 OK" {
-		return 0, fmt.Errorf("Request failed with status: %s", resp.Status)
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("request failed with status: %s", resp.Status)
 	}
 
 	// Parse the JSON response
