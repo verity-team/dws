@@ -9,12 +9,14 @@ const DonationStat = () => {
   return (
     <div className="mt-4">
       <div className="text-xl">Market prices</div>
-      <div className="my-2 flex space-x-12">
+      <div className="flex space-x-12">
         {tokenPrices.map((tokenPrice) => (
           <div key={tokenPrice.asset} className="my-2">
             <div>Asset: {tokenPrice.asset.toUpperCase()}</div>
             <div>Price: ${tokenPrice.price}</div>
-            <div>At: {new Date(tokenPrice.ts).toLocaleString("en-US")}</div>
+            <div>
+              Updated at: {new Date(tokenPrice.ts).toLocaleString("en-GB")}
+            </div>
           </div>
         ))}
       </div>

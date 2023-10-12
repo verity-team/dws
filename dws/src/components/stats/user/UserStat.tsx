@@ -21,22 +21,27 @@ const UserStat = ({ account }: UserStatProps): ReactElement<UserStatProps> => {
   return (
     <div className="mt-4">
       <div className="text-xl">Donations</div>
-      <div className="flex space-x-12">
-        <div className="mt-2 space-y-2">
-          {userDonationData.donations.map(({ asset, amount, token }) => (
-            <div key={asset}>
-              <div>Asset: {asset.toUpperCase()}</div>
-              <div>Amount: {amount}</div>
-              <div>Reward: {token}</div>
-            </div>
-          ))}
+      <div className="flex space-x-12 mt-3">
+        <div>
+          {userDonationData.donations.map(
+            ({ asset, amount, tokens, tx_hash, status, ts }) => (
+              <div key={tx_hash} className="mb-4">
+                <div>
+                  Donated: {amount} {asset.toUpperCase()}
+                </div>
+                <div>Donated at: {new Date(ts).toLocaleString("en-GB")}</div>
+                <div>Reward: {tokens}</div>
+                <div>Status: {status.toUpperCase()}</div>
+              </div>
+            )
+          )}
         </div>
-        <div className="my-4">
+        <div>
           <div>Total donated: ${total}</div>
           <div>Total reward: {tokens} GMS</div>
           <div>Staking: {staked} GMS</div>
           <div>Staking reward: {reward} GMS</div>
-          <div>Account status: {status.toUpperCase()}</div>
+          <div>Account status: {status}</div>
         </div>
       </div>
     </div>

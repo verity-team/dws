@@ -39,7 +39,7 @@ interface Donation {
   amount: string;
   usd_amount: string;
   asset: string;
-  token: string;
+  tokens: string;
   price: string;
   tx_hash: string;
   status: UserDonationStatus;

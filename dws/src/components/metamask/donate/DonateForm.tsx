@@ -54,6 +54,7 @@ const DonateForm = ({
       return;
     }
 
+    // TODO: Change this to Toast for better UX
     alert("Transaction sent");
 
     // Revalidate user donations

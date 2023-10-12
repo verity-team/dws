@@ -31,8 +31,8 @@ const DemoConnect = (): ReactElement => {
   return (
     <div className="m-16">
       <div className="flex items-center space-x-2">
-        <TextButton onClick={handleWalletConnect}>
-          Connect with wallet
+        <TextButton onClick={handleWalletConnect} disabled={account != null}>
+          Connect
         </TextButton>
         {account && (
           <div>
@@ -42,7 +42,9 @@ const DemoConnect = (): ReactElement => {
       </div>
       <div className="my-2">{account && <Donate account={account} />}</div>
       <div className="flex space-x-12">
-        {account && <UserStat account={account} />}
+        {account && (
+          <UserStat account={"0x379738c60f658601Be79e267e79cC38cEA07c8f2"} />
+        )}
         <DonationStat />
       </div>
     </div>
