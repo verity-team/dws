@@ -3,6 +3,8 @@ import { useForm } from "react-hook-form";
 import TextError from "@/components/common/TextError";
 import { donate, exchangeToReward } from "@/utils/metamask/donate";
 import { AvailableToken } from "@/utils/token";
+import { mutate } from "swr";
+import { getUserDonationDataKey } from "@/utils/api/clientAPI";
 
 export interface DonateFormData {
   amount: number;
@@ -52,7 +54,12 @@ const DonateForm = ({
       return;
     }
 
+    // TODO: Change this to Toast for better UX
     alert("Transaction sent");
+
+    // Revalidate user donations
+    await mutate(getUserDonationDataKey(account));
+
     return txHash;
   };
 
@@ -81,7 +88,9 @@ const DonateForm = ({
     <form onSubmit={handleSubmit(handleDonate)}>
       <div>
         <div className="flex flex-col mt-2">
-          <label htmlFor="donate-amount">Amount*</label>
+          <label className="my-1" htmlFor="donate-amount">
+            Amount*
+          </label>
           <div>
             <input
               className="w-1/5 px-4 py-2 rounded-lg border focus:border-2"
@@ -117,7 +126,10 @@ const DonateForm = ({
           </div>
         )}
       </div>
-      <button type="submit" className="px-4 py-2 rounded-lg border-2 mt-2">
+      <button
+        type="submit"
+        className="px-4 py-2 rounded-lg border-2 mt-2 border-green-600 hover:bg-green-600 hover:text-white"
+      >
         Donate
       </button>
     </form>

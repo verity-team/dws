@@ -4,6 +4,8 @@ import { useSDK } from "@metamask/sdk-react";
 import { ReactElement, useState } from "react";
 import TextButton from "../common/TextButton";
 import Donate from "./donate/Donate";
+import UserStat from "../stats/user/UserStat";
+import DonationStat from "../stats/donation/DonationStat";
 
 const DemoConnect = (): ReactElement => {
   const { sdk } = useSDK();
@@ -27,10 +29,10 @@ const DemoConnect = (): ReactElement => {
   };
 
   return (
-    <div className="p-16">
+    <div className="m-16">
       <div className="flex items-center space-x-2">
-        <TextButton onClick={handleWalletConnect}>
-          Connect with wallet
+        <TextButton onClick={handleWalletConnect} disabled={account != null}>
+          Connect
         </TextButton>
         {account && (
           <div>
@@ -38,7 +40,11 @@ const DemoConnect = (): ReactElement => {
           </div>
         )}
       </div>
-      {account && <Donate account={account} />}
+      <div className="my-2">{account && <Donate account={account} />}</div>
+      <div className="flex space-x-12">
+        {account && <UserStat account={account} />}
+        <DonationStat />
+      </div>
     </div>
   );
 };
