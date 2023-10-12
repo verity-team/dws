@@ -7,7 +7,8 @@ const DonationStat = () => {
     useDonationData();
 
   return (
-    <div className="m-16">
+    <div className="mt-4">
+      <div className="text-xl">Market prices</div>
       <div className="my-2 flex space-x-12">
         {tokenPrices.map((tokenPrice) => (
           <div key={tokenPrice.asset} className="my-2">

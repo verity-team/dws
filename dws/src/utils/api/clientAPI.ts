@@ -133,9 +133,13 @@ export const useDonationData = () => {
   };
 };
 
+// For data revalidation when sending new donations
+export const getUserDonationDataKey = (account: string) =>
+  `/api/donation/user/${account}`;
+
 export const useUserDonationData = (account: string) => {
   const { data, error, isLoading } = useSWR<UserDonationData, CustomError>(
-    `/donation/user/${account}`,
+    getUserDonationDataKey(account),
     fetcher,
     {
       revalidateOnFocus: false,

@@ -8,7 +8,6 @@ export default function Home() {
       <div>Welcome to DWS. Testing...</div>
       <ClientRoot>
         <DemoConnect />
-        <DonationStat />
       </ClientRoot>
     </>
   );
