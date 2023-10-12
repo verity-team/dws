@@ -42,9 +42,7 @@ const DemoConnect = (): ReactElement => {
       </div>
       <div className="my-2">{account && <Donate account={account} />}</div>
       <div className="flex space-x-12">
-        {account && (
-          <UserStat account={"0x379738c60f658601Be79e267e79cC38cEA07c8f2"} />
-        )}
+        {account && <UserStat account={account} />}
         <DonationStat />
       </div>
     </div>

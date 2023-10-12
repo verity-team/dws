@@ -7,9 +7,7 @@ interface UserStatProps {
 
 const UserStat = ({ account }: UserStatProps): ReactElement<UserStatProps> => {
   // TODO: Replace this with account from props
-  const { data: userDonationData, error } = useUserDonationData(
-    "0x379738c60f658601Be79e267e79cC38cEA07c8f2"
-  );
+  const { data: userDonationData, error } = useUserDonationData(account);
 
   if (userDonationData == null || error != null) {
     console.log(error?.info);
