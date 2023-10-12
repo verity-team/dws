@@ -23,7 +23,7 @@ const DonationStat = () => {
       <div>Receving address: {receivingWallet}</div>
       <div className="my-2">
         <div>People have donated ${donationStat.total}</div>
-        <div>Remaining reward: {donationStat.tokens} GMS</div>
+        <div>Token sold: {donationStat.tokens}</div>
       </div>
       <div className="my-2">Status: {status.toUpperCase()}</div>
     </div>

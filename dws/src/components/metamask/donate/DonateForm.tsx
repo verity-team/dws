@@ -105,7 +105,7 @@ const DonateForm = ({
               })}
             />
             <span className="px-2">
-              {selectedToken} for {rewardToken} GMS Token
+              {selectedToken} for {rewardToken} token(s)
             </span>
           </div>
         </div>
