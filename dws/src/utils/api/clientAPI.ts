@@ -1,18 +1,21 @@
 "use client";
 
-import useSWR from "swr";
+import useSWR, { Revalidator, RevalidatorOptions } from "swr";
 import { HttpMethod, clientBaseRequest } from "./baseAPI";
 import {
+  AffiliateDonationInfo,
   CampaignStatus,
   DonationData,
   DonationStats,
   FailedResponse,
   TokenPrice,
+  UserDonationData,
 } from "./types";
 import { useMemo } from "react";
 import { getExponentialWaitTime } from "../utils";
+import { Nullable } from "../types";
 
-interface CustomError {
+interface CustomError extends Error {
   info: FailedResponse;
   status: number;
 }
@@ -49,29 +52,39 @@ const fetcher = async (url: string) => {
   }
 };
 
+const handleErrorRetry = (
+  err: CustomError,
+  key: string,
+  config: any,
+  revalidate: Revalidator,
+  { retryCount }: { retryCount: number }
+) => {
+  // Avoid retrying bad request or not found request
+  if (err.status === 400 || err.status === 404) {
+    return;
+  }
+
+  // Give up after 10 tries
+  if (retryCount >= 10) {
+    return;
+  }
+
+  setTimeout(
+    () => revalidate({ retryCount }),
+    getExponentialWaitTime(1000, retryCount)
+  );
+};
+
 export const useDonationData = () => {
   // Exponential backoff
-  const { data, error, isLoading } = useSWR<any, CustomError>(
+  const { data, error, isLoading } = useSWR<DonationData, CustomError>(
     "/api/donation/data",
     fetcher,
     {
       // Refresh once per minute
       refreshInterval: 60000,
       revalidateOnFocus: false,
-      onErrorRetry: (err, key, config, revalidate, { retryCount }) => {
-        if (error?.status === 404) {
-          return;
-        }
-
-        if (retryCount >= 10) {
-          return;
-        }
-
-        setTimeout(
-          () => revalidate({ retryCount }),
-          getExponentialWaitTime(1000, retryCount)
-        );
-      },
+      onErrorRetry: handleErrorRetry,
     }
   );
 
@@ -80,7 +93,7 @@ export const useDonationData = () => {
       return [];
     }
 
-    return (data as DonationData).prices;
+    return data.prices;
   }, [data]);
 
   const donationStat: DonationStats = useMemo(() => {
@@ -91,15 +104,14 @@ export const useDonationData = () => {
       };
     }
 
-    return (data as DonationData).stats;
+    return data.stats;
   }, [data]);
 
   const receivingWallet: string = useMemo(() => {
     if (data == null) {
       return "Unavailable";
     }
-
-    return (data as DonationData).receiving_address;
+    return data.receiving_address;
   }, [data]);
 
   // Temporarily paused if cannot connect to server, or cannot get latest data
@@ -108,7 +120,7 @@ export const useDonationData = () => {
       return "paused";
     }
 
-    return (data as DonationData).status;
+    return data.status;
   }, [data]);
 
   return {
@@ -119,4 +131,54 @@ export const useDonationData = () => {
     error,
     isLoading,
   };
+};
+
+export const useUserDonationData = (account: string) => {
+  const { data, error, isLoading } = useSWR<UserDonationData, CustomError>(
+    `/donation/user/${account}`,
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      onErrorRetry: handleErrorRetry,
+    }
+  );
+
+  return { data, error, isLoading };
+};
+
+// Return null if success, error info if fail
+export const storeAffiliateDonation = async (
+  affiliateCode: string,
+  txHash: string
+): Promise<Nullable<FailedResponse>> => {
+  const donationInfo: AffiliateDonationInfo = {
+    code: affiliateCode,
+    tx_hash: txHash,
+  };
+  const response = await clientBaseRequest(
+    "/donation/affiliate",
+    HttpMethod.POST,
+    donationInfo
+  );
+
+  if (response == null) {
+    return {
+      code: "unknown",
+      message: "Unknown error occured when sending confirm request",
+    };
+  }
+
+  if (response.ok) {
+    return null;
+  }
+
+  try {
+    const errorMessage = await response.json();
+    return errorMessage;
+  } catch {
+    return {
+      code: "unknown",
+      message: "Failed request but empty response error message",
+    };
+  }
 };

@@ -87,7 +87,7 @@ export const clientBaseRequest = async (
   url: string,
   method: HttpMethod,
   body?: any
-): Promise<Maybe<any>> => {
+): Promise<Nullable<Response>> => {
   // Read configurations
 
   // Endpoint should be the same with current host

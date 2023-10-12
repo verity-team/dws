@@ -4,6 +4,7 @@ import { useSDK } from "@metamask/sdk-react";
 import { ReactElement, useState } from "react";
 import TextButton from "../common/TextButton";
 import Donate from "./donate/Donate";
+import UserStat from "../stats/user/UserStat";
 
 const DemoConnect = (): ReactElement => {
   const { sdk } = useSDK();
@@ -39,6 +40,7 @@ const DemoConnect = (): ReactElement => {
         )}
       </div>
       {account && <Donate account={account} />}
+      {account && <UserStat account={account} />}
     </div>
   );
 };
