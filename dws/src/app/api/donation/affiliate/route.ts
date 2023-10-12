@@ -3,6 +3,8 @@ import { AffiliateDonationInfo, FailedResponse } from "@/utils/api/types";
 import { Nullable } from "@/utils/types";
 import { NextResponse } from "next/server";
 
+export const runtime = "edge";
+
 export async function POST(request: Request): Promise<Response> {
   let requestBody: Nullable<AffiliateDonationInfo> = null;
   try {

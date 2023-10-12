@@ -3,6 +3,8 @@ import { FailedResponse, UserDonationData } from "@/utils/api/types";
 import { NextResponse } from "next/server";
 import { isAddress } from "web3-validator";
 
+export const runtime = "edge";
+
 export async function GET(
   request: Request,
   { params }: { params: { address: string } }
