@@ -28,7 +28,7 @@ const UserStat = ({ account }: UserStatProps): ReactElement<UserStatProps> => {
                   Donated: {amount} {asset.toUpperCase()}
                 </div>
                 <div>Donated at: {new Date(ts).toLocaleString("en-GB")}</div>
-                <div>Reward: {tokens}</div>
+                <div>For: {tokens} token(s)</div>
                 <div>Status: {status.toUpperCase()}</div>
               </div>
             )
@@ -36,9 +36,9 @@ const UserStat = ({ account }: UserStatProps): ReactElement<UserStatProps> => {
         </div>
         <div>
           <div>Total donated: ${total}</div>
-          <div>Total reward: {tokens} GMS</div>
-          <div>Staking: {staked} GMS</div>
-          <div>Staking reward: {reward} GMS</div>
+          <div>Token purchased: {tokens}</div>
+          <div>Staking: {staked} token(s)</div>
+          <div>Staking reward: {reward} token(s)</div>
           <div>Account status: {status}</div>
         </div>
       </div>
