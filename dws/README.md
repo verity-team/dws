@@ -21,6 +21,8 @@ yarn set version classic
     - `NEXT_PUBLIC_REWARD_PRICE`: Fixed price for reward coin (People will receive reward coins for making donations)
     - `NEXT_PUBLIC_MIN_ETH`: Minimum value for ETH token donations
     - `NEXT_PUBLIC_MIN_USDT`: Minimum value for USDT token donations (WIP)
+    - `NEXT_PUBLIC_API_TIMEOUT`: Maximum waiting time for a response (before the request get cancelled)
+    - `NEXT_PUBLIC_LAUNCH_TIME`: Timestamp of launch date in milliseconds
 
   - Private environment variables, use on the backend side
     - `API_URL`: Specify real backend APIs host
