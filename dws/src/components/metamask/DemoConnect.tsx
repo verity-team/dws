@@ -6,7 +6,12 @@ import TextButton from "../common/TextButton";
 import Donate from "./donate/Donate";
 import UserStat from "../stats/user/UserStat";
 import DonationStat from "../stats/donation/DonationStat";
-import LaunchTimer from "../stats/LaunchTimer";
+import dynamic from "next/dynamic";
+
+const LaunchTimer = dynamic(() => import("../stats/LaunchTimer"), {
+  loading: () => <div>Loading...</div>,
+  ssr: false,
+});
 
 const DemoConnect = (): ReactElement => {
   const { sdk } = useSDK();

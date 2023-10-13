@@ -1,6 +1,17 @@
 import BN from "bn.js";
 
-export type AvailableToken = "ETH" | "USDT" | "LINK";
+export type AvailableToken = "ETH" | "USDT" | "LINK" | "TRUTH";
+
+export const avaiableTokens: Array<AvailableToken> = [
+  "ETH",
+  "USDT",
+  "LINK",
+  "TRUTH",
+];
+
+export const stableCoinPrice: Record<string, number> = {
+  USDT: 1,
+};
 
 export interface TokenInfo {
   symbol: string;

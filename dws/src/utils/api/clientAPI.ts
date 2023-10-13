@@ -14,6 +14,7 @@ import {
 import { useMemo } from "react";
 import { getExponentialWaitTime } from "../utils";
 import { Nullable } from "../types";
+import useSWRImmutable from "swr/immutable";
 
 interface CustomError extends Error {
   info: FailedResponse;
@@ -65,7 +66,7 @@ const handleErrorRetry = (
   }
 
   // Give up after 10 tries
-  if (retryCount >= 10) {
+  if (retryCount >= 5) {
     return;
   }
 
@@ -77,13 +78,12 @@ const handleErrorRetry = (
 
 export const useDonationData = () => {
   // Exponential backoff
-  const { data, error, isLoading } = useSWR<DonationData, CustomError>(
+  const { data, error, isLoading } = useSWRImmutable<DonationData, CustomError>(
     "/api/donation/data",
     fetcher,
     {
       // Refresh once per minute
       refreshInterval: 60000,
-      revalidateOnFocus: false,
       onErrorRetry: handleErrorRetry,
     }
   );
