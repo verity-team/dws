@@ -6,6 +6,12 @@ import TextButton from "../common/TextButton";
 import Donate from "./donate/Donate";
 import UserStat from "../stats/user/UserStat";
 import DonationStat from "../stats/donation/DonationStat";
+import dynamic from "next/dynamic";
+
+const LaunchTimer = dynamic(() => import("../stats/LaunchTimer"), {
+  loading: () => <div>Loading...</div>,
+  ssr: false,
+});
 
 const DemoConnect = (): ReactElement => {
   const { sdk } = useSDK();
@@ -30,6 +36,9 @@ const DemoConnect = (): ReactElement => {
 
   return (
     <div className="m-16">
+      <div className="my-4">
+        <LaunchTimer />
+      </div>
       <div className="flex items-center space-x-2">
         <TextButton onClick={handleWalletConnect} disabled={account != null}>
           Connect
