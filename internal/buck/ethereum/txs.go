@@ -119,7 +119,29 @@ func GetTransactions(ctxt buck.Context, blockNumber uint64) ([]Transaction, erro
 	}
 
 	log.Infof("block %d: %d *filtered* transactions", blockNumber, len(result))
+
+	err = markFailedTxs(ctxt, result)
+	if err != nil {
+		return nil, err
+	}
+
 	return result, nil
+}
+
+func markFailedTxs(ctxt buck.Context, txs []Transaction) error {
+	// check whether any of the _filtered_ transactions have failed
+	for _, tx := range txs {
+		rcpt, err := GetTransactionReceipt(ctxt.ETHRPCURL, tx.Hash)
+		if err != nil {
+			err = fmt.Errorf("failed to get tx receipt for %s, %v", tx.Hash, err)
+			log.Error(err)
+			return err
+		}
+		if rcpt.Status != "0x1" {
+			tx.Status = string(api.Failed)
+		}
+	}
+	return nil
 }
 
 func parseInputData(input string) (string, decimal.Decimal, error) {

@@ -22,8 +22,8 @@ type TxReceipt struct {
 	EffectiveGasPrice string `json:"effectiveGasPrice"`
 	From              string `json:"from"`
 	GasUsed           string `json:"gasUsed"`
-	Logs              []Log  `json:"logs"`
-	LogsBloom         string `json:"logsBloom"`
+	Logs              []Log  `json:"-"`
+	LogsBloom         string `json:"-"`
 	Status            string `json:"status"`
 	To                string `json:"to"`
 	TransactionHash   string `json:"transactionHash"`

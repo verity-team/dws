@@ -7,6 +7,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
+	"github.com/verity-team/dws/api"
 	"github.com/verity-team/dws/internal/buck"
 	"github.com/verity-team/dws/internal/buck/ethereum"
 	"github.com/verity-team/dws/internal/common"
@@ -177,6 +178,10 @@ func updateDonationData(dtx *sqlx.Tx, ctxt buck.Context, txs []ethereum.Transact
 	newTotal = total
 	newTokens = tokens
 	for _, tx := range txs {
+		if tx.Status == string(api.Failed) {
+			// skip failed transactions
+			continue
+		}
 		newTokens.Add(tx.Tokens)
 		if tx.Asset == "eth" {
 			newTotal.Add(tx.USDAmount)
@@ -190,9 +195,11 @@ func updateDonationData(dtx *sqlx.Tx, ctxt buck.Context, txs []ethereum.Transact
 			newTotal.Add(amount)
 		}
 	}
-	err = updateDonationStats(dtx, newTotal, newTokens)
-	if err != nil {
-		return decimal.Zero, decimal.Zero, nil
+	if newTotal.GreaterThan(total) || newTokens.GreaterThan(tokens) {
+		err = updateDonationStats(dtx, newTotal, newTokens)
+		if err != nil {
+			return decimal.Zero, decimal.Zero, nil
+		}
 	}
 	return tokens, newTokens, nil
 }
