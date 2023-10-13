@@ -48,7 +48,6 @@ const DonateForm = ({
       const reward = exchangeToReward(amount, selectedTokenPrice);
       setRewardToken(reward);
     } catch (err: any) {
-      alert(err.message);
       setRewardToken("N/A");
     }
   }, [getValues, selectedToken, tokenPrices]);
