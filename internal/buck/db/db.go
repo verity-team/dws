@@ -282,7 +282,7 @@ func getTokenPrice(ctxt buck.Context) (decimal.Decimal, error) {
 	q1 := `
 		SELECT price
 		FROM price
-		WHERE 
+		WHERE
 			 asset='truth'
 			 AND (
 				  created_at <= NOW() - INTERVAL '2 minutes'
