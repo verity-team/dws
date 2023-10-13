@@ -96,6 +96,32 @@ func PersistTxs(ctxt buck.Context, bn uint64, txs []ethereum.Transaction) error 
 		}
 	}
 
+	err = updateDonationData(dtx, ctxt, txs)
+	if err != nil {
+		return err
+	}
+	err = updateLastBlock(dtx, "eth", bn)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func updateLastBlock(dtx *sqlx.Tx, chain string, sbn uint64) error {
+	// fetch donations made by this user/address
+	q1 := `
+		INSERT INTO last_block(chain, last_block) VALUES($1, $2)
+		ON CONFLICT (chain)
+		DO UPDATE SET last_block = $2
+		`
+	_, err := dtx.Exec(q1, chain, sbn)
+	if err != nil {
+		err = fmt.Errorf("failed to update last block for %s, %v", chain, err)
+		log.Error(err)
+		return err
+	}
+
 	return nil
 }
 
@@ -158,8 +184,8 @@ func updateDonationData(dtx *sqlx.Tx, ctxt buck.Context, txs []ethereum.Transact
 	if err != nil {
 		return err
 	}
-	doUpdatePrice, newPrice := newTokenPrice(ctxt, tokens, newTokens)
-	if doUpdatePrice {
+	weShouldUpdate, newPrice := doWeNeedToUpdatePrice(ctxt, tokens, newTokens)
+	if weShouldUpdate {
 		err = updateTokenPrice(dtx, newPrice)
 		if err != nil {
 			return err
@@ -207,12 +233,12 @@ func updateTokenPrice(dtx *sqlx.Tx, newTokenPrice decimal.Decimal) error {
 	return nil
 }
 
-func newTokenPrice(ctxt buck.Context, tokens, newTokens decimal.Decimal) (bool, decimal.Decimal) {
+func doWeNeedToUpdatePrice(ctxt buck.Context, tokens, newTokens decimal.Decimal) (bool, decimal.Decimal) {
 	// did we enter a new price range? do we need to update the price?
 	currentP := priceBucket(ctxt, tokens)
 	newP := priceBucket(ctxt, tokens)
 
-	return !currentP.Equal(newP), newP
+	return newP.GreaterThan(currentP), newP
 }
 
 func priceBucket(ctxt buck.Context, tokens decimal.Decimal) decimal.Decimal {
