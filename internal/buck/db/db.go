@@ -76,9 +76,9 @@ func PersistTxs(ctxt buck.Context, bn uint64, txs []ethereum.Transaction) error 
 	// roll back otherwise
 	defer func() {
 		if err != nil {
-			dtx.Rollback()
+			dtx.Rollback() // nolint:errcheck
 		} else {
-			dtx.Commit()
+			dtx.Commit() // nolint:errcheck
 		}
 	}()
 
@@ -96,14 +96,24 @@ func PersistTxs(ctxt buck.Context, bn uint64, txs []ethereum.Transaction) error 
 		}
 	}
 
-	err = updateDonationData(dtx, ctxt, txs)
+	tokens, newTokens, err := updateDonationData(dtx, ctxt, txs)
 	if err != nil {
 		return err
+	}
+	log.Infof("tokens issued - before: %d, now %d", tokens.IntPart(), newTokens.IntPart())
+	weShouldUpdate, newPrice := doWeNeedToUpdatePrice(ctxt, tokens, newTokens)
+	if weShouldUpdate {
+		err = updateTokenPrice(dtx, newPrice)
+		if err != nil {
+			return err
+		}
+		log.Infof("switched to new token price %s", newPrice.StringFixed(5))
 	}
 	err = updateLastBlock(dtx, "eth", bn)
 	if err != nil {
 		return err
 	}
+	log.Infof("updated last block to %d", bn)
 
 	return nil
 }
@@ -155,13 +165,13 @@ func persistTx(dtx *sqlx.Tx, tx ethereum.Transaction) error {
 	return nil
 }
 
-func updateDonationData(dtx *sqlx.Tx, ctxt buck.Context, txs []ethereum.Transaction) error {
+func updateDonationData(dtx *sqlx.Tx, ctxt buck.Context, txs []ethereum.Transaction) (decimal.Decimal, decimal.Decimal, error) {
 	if len(txs) == 0 {
-		return nil
+		return decimal.Zero, decimal.Zero, nil
 	}
 	total, tokens, err := common.GetDonationStats(ctxt.DB)
 	if err != nil {
-		return err
+		return decimal.Zero, decimal.Zero, nil
 	}
 	var newTotal, newTokens decimal.Decimal
 	newTotal = total
@@ -182,16 +192,9 @@ func updateDonationData(dtx *sqlx.Tx, ctxt buck.Context, txs []ethereum.Transact
 	}
 	err = updateDonationStats(dtx, newTotal, newTokens)
 	if err != nil {
-		return err
+		return decimal.Zero, decimal.Zero, nil
 	}
-	weShouldUpdate, newPrice := doWeNeedToUpdatePrice(ctxt, tokens, newTokens)
-	if weShouldUpdate {
-		err = updateTokenPrice(dtx, newPrice)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return tokens, newTokens, nil
 }
 
 func updateDonationStats(dtx *sqlx.Tx, newTotal, newTokens decimal.Decimal) error {

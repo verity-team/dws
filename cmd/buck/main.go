@@ -100,7 +100,7 @@ func monitorETH(ctxt buck.Context) error {
 	}
 
 	if lbn <= 0 {
-		// no valied value in the database?
+		// no valid value in the database?
 		// process the current block
 		lbn = bn
 	}
@@ -111,7 +111,11 @@ func monitorETH(ctxt buck.Context) error {
 			log.Error(err)
 			return err
 		}
-		db.PersistTxs(ctxt, i, txs)
+		err = db.PersistTxs(ctxt, i, txs)
+		if err != nil {
+			log.Error(err)
+			return err
+		}
 	}
 	return nil
 }
