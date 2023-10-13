@@ -44,7 +44,7 @@ func GetDonationData(db *sqlx.DB) (*api.DonationData, error) {
 	var ethp api.Price
 	err := db.Get(&ethp, q1)
 	if err != nil {
-		err = fmt.Errorf("failed to fetch an ETH price that is newer than 5 minutes, %v", err)
+		err = fmt.Errorf("failed to fetch an ETH price that is newer than 3 minutes, %v", err)
 		log.Error(err)
 	}
 

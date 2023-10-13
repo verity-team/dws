@@ -98,10 +98,10 @@ type DonationDataStatus string
 // DonationStats defines model for donation_stats.
 type DonationStats struct {
 	// Tokens number of tokens claimable by donors
-	Tokens string `json:"tokens"`
+	Tokens string `db:"tokens" json:"tokens"`
 
 	// Total total funds raised in USD
-	Total string `json:"total"`
+	Total string `db:"total" json:"total"`
 }
 
 // Error defines model for error.

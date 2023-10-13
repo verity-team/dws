@@ -10,7 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/exp/slices"
+	"github.com/shopspring/decimal"
+	log "github.com/sirupsen/logrus"
+	"github.com/verity-team/dws/api"
+	"github.com/verity-team/dws/internal/buck"
 )
 
 type EthGetBlockByNumberRequest struct {
@@ -21,17 +24,22 @@ type EthGetBlockByNumberRequest struct {
 }
 
 type Transaction struct {
-	Hash  string `json:"hash"`
-	From  string `json:"from"`
-	To    string `json:"to"`
-	Value string `json:"value"`
-	Gas   string `json:"gas"`
-	Nonce string `json:"nonce"`
-	Input string `json:"input"`
-	Type  string `json:"type"`
+	Hash      string          `db:"tx_hash" json:"hash"`
+	From      string          `db:"address" json:"from"`
+	To        string          `db:"-" json:"to"`
+	Value     string          `db:"amount" json:"value"`
+	Gas       string          `db:"-" json:"gas"`
+	Nonce     string          `db:"-" json:"nonce"`
+	Input     string          `db:"-" json:"input"`
+	Type      string          `db:"-" json:"type"`
+	Status    string          `db:"status"`
+	Asset     string          `db:"asset"`
+	Price     string          `db:"price"`
+	Tokens    decimal.Decimal `db:"tokens"`
+	USDAmount decimal.Decimal `db:"usd_amount"`
 }
 
-func GetTransactions(apiURL string, blockNumber string, contracts []string) ([]Transaction, error) {
+func GetTransactions(ctxt buck.Context, blockNumber uint64) ([]Transaction, error) {
 	request := EthGetBlockByNumberRequest{
 		JsonRPC: "2.0",
 		Method:  "eth_getBlockByNumber",
@@ -48,7 +56,7 @@ func GetTransactions(apiURL string, blockNumber string, contracts []string) ([]T
 		Timeout: MaxWaitInSeconds * time.Second,
 	}
 
-	resp, err := client.Post(apiURL, "application/json", bytes.NewBuffer(requestBytes))
+	resp, err := client.Post(ctxt.ETHRPCURL, "application/json", bytes.NewBuffer(requestBytes))
 	if err != nil {
 		return nil, err
 	}
@@ -63,37 +71,60 @@ func GetTransactions(apiURL string, blockNumber string, contracts []string) ([]T
 		return nil, err
 	}
 
-	var result struct {
+	var jsonResult struct {
 		Transactions []Transaction `json:"transactions"`
 	}
 
-	err = json.Unmarshal(body, &result)
+	err = json.Unmarshal(body, &jsonResult)
 	if err != nil {
 		return nil, err
 	}
 
-	// Filter transactions based on the input condition
-	filteredTransactions := make([]Transaction, 0)
-	for _, tx := range result.Transactions {
+	result := make([]Transaction, 0)
+	for _, tx := range jsonResult.Transactions {
 		if tx.Input == "0x0" {
-			filteredTransactions = append(filteredTransactions, tx)
+			// plain ETH tx -- only return txs that send ETH to the receiving
+			// address
+			if strings.ToLower(tx.To) == ctxt.ReceivingAddr {
+				tx.Status = string(api.Unconfirmed)
+				tx.Asset = "eth"
+				result = append(result, tx)
+				continue
+			}
 		}
+		// ERC-20 transfer?
 		if strings.HasPrefix(tx.Input, "0xa9059cbb") {
-			// check that this is either usdt or usdc
-			if slices.Contains(contracts, strings.ToLower(tx.To)) {
-				filteredTransactions = append(filteredTransactions, tx)
+			// check that this is a stable coin tx
+			erc20, ok := ctxt.StableCoins[strings.ToLower(tx.To)]
+			if ok {
+				// yes, actual receiver and amount are encoded in the input string
+				receiver, amount, err := parseInputData(tx.Input)
+				if err != nil {
+					log.Error(err)
+					continue
+					// TODO: log these failed/malformed stable coin transfers to the
+					// database -- they need to be processed by a human
+				}
+				// is this a stable coin tx to the receiving address?
+				if strings.ToLower(receiver) == ctxt.ReceivingAddr {
+					tx.Status = string(api.Unconfirmed)
+					tx.To = ctxt.ReceivingAddr
+					tx.Value = amount.Shift(erc20.Scale).StringFixed(erc20.Scale)
+					tx.Asset = erc20.Asset
+					result = append(result, tx)
+				}
 			}
 		}
 	}
 
-	return filteredTransactions, nil
+	return result, nil
 }
 
-func ParseInputData(input string) (string, uint64, error) {
+func parseInputData(input string) (string, decimal.Decimal, error) {
 	// example: "0xa9059cbb000000000000000000000000865a1f30b979e4bf3ab30562daee05f917ec0527000000000000000000000000000000000000000000000000de0b6b3a76400000"
 
 	if len(input) != 138 {
-		return "", 0, fmt.Errorf("input has invalid length")
+		return "", decimal.Zero, fmt.Errorf("input has invalid length")
 	}
 
 	// Remove "0x" prefix if present
@@ -101,7 +132,7 @@ func ParseInputData(input string) (string, uint64, error) {
 
 	// Ensure the input starts with "0xa9059cbb"
 	if !strings.HasPrefix(input, "a9059cbb") {
-		return "", 0, fmt.Errorf("input does not start with the expected function signature")
+		return "", decimal.Zero, fmt.Errorf("input does not start with the expected function signature")
 	}
 
 	// Extract the receiving address (next 32 bytes) and strip leading zeroes
@@ -114,8 +145,8 @@ func ParseInputData(input string) (string, uint64, error) {
 	amountHex := input[72:]
 	amount, err := strconv.ParseUint(amountHex, 16, 64)
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to convert amount to uint64")
+		return "", decimal.Zero, fmt.Errorf("failed to convert amount to uint64")
 	}
 
-	return "0x" + receivingAddress, amount, nil
+	return "0x" + receivingAddress, decimal.NewFromInt(int64(amount)), nil
 }

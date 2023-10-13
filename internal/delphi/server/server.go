@@ -75,6 +75,7 @@ func (s *DelphiServer) DonationData(ctx echo.Context) error {
 		Asset: "truth",
 		Ts:    time.Now().UTC(),
 	})
+	// find the appropriate token price based on volume sold
 	for _, sp := range sps {
 		if sold < sp.Limit {
 			dd.Prices[1].Price = sp.Price

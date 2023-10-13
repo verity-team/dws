@@ -26,7 +26,7 @@ func main() {
 	if err != nil {
 		log.Warn("Error loading .env file")
 	}
-	version = fmt.Sprintf("%s::%s", bts, rev)
+	version = fmt.Sprintf("delphi::%s::%s", bts, rev)
 	log.Info("version = ", version)
 
 	// make sure these environment variables are set
