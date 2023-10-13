@@ -66,6 +66,11 @@ func main() {
 
 	ctxt.DB = dbh
 
+	log.Infof("receiving address: %v", ctxt.ReceivingAddr)
+	log.Infof("ETH rpc url: %v", ctxt.ETHRPCURL)
+	log.Infof("erc-20 data: %v", ctxt.StableCoins)
+	log.Infof("sale params: %v", ctxt.SaleParams)
+
 	sbn := flag.Int("sbn", 0, "start processing with this block number")
 	flag.Parse()
 
@@ -86,13 +91,14 @@ func main() {
 }
 
 func monitorETH(ctxt buck.Context) error {
+	// most recent ETH block published
 	bn, err := ethereum.GetBlockNumber(ctxt.ETHRPCURL)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
 
-	// last block number processed
+	// number of last block that was processed
 	lbn, err := db.GetLastBlock(ctxt.DB, "eth")
 	if err != nil {
 		log.Error(err)
@@ -110,6 +116,10 @@ func monitorETH(ctxt buck.Context) error {
 		if err != nil {
 			log.Error(err)
 			return err
+		}
+		log.Infof("block %d: %d Transactions", i, len(txs))
+		if len(txs) == 0 {
+			continue
 		}
 		err = db.PersistTxs(ctxt, i, txs)
 		if err != nil {

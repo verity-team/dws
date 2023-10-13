@@ -79,6 +79,7 @@ func GetTransactions(ctxt buck.Context, blockNumber uint64) ([]Transaction, erro
 	if err != nil {
 		return nil, err
 	}
+	log.Infof("block %d: %d transactions in total", blockNumber, len(jsonResult.Transactions))
 
 	result := make([]Transaction, 0)
 	for _, tx := range jsonResult.Transactions {
@@ -117,6 +118,7 @@ func GetTransactions(ctxt buck.Context, blockNumber uint64) ([]Transaction, erro
 		}
 	}
 
+	log.Infof("block %d: %d *filtered* transactions", blockNumber, len(result))
 	return result, nil
 }
 
