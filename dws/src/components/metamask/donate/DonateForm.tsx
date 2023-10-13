@@ -2,7 +2,9 @@ import { ReactElement, useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import TextError from "@/components/common/TextError";
 import { donate, exchangeToReward } from "@/utils/metamask/donate";
-import { AvailableToken } from "@/utils/token";
+import { AvailableToken, stableCoinPrice } from "@/utils/token";
+import { mutate } from "swr";
+import { getUserDonationDataKey, useDonationData } from "@/utils/api/clientAPI";
 
 export interface DonateFormData {
   amount: number;
@@ -17,7 +19,7 @@ const DonateForm = ({
   selectedToken,
   account,
 }: DonateFormProps): ReactElement<DonateFormData> => {
-  const [rewardToken, setRewardToken] = useState<number>(0);
+  const [rewardToken, setRewardToken] = useState<number | "N/A">(0);
 
   const {
     register,
@@ -26,19 +28,29 @@ const DonateForm = ({
     getValues,
   } = useForm<DonateFormData>();
 
+  const { tokenPrices } = useDonationData();
+
   const handleSwapTokenToReward = useCallback(() => {
     const [amount] = getValues(["amount"]);
 
     // TODO: Use API to get token price
-    const tokenPrice = selectedToken === "ETH" ? 1600 : 1;
+    let selectedTokenPrice = Number(
+      tokenPrices.find((price) => price.asset.toUpperCase() === selectedToken)
+        ?.price
+    );
+
+    // Try to get price for stable coin if API prices failed
+    if (isNaN(selectedTokenPrice)) {
+      selectedTokenPrice = Number(stableCoinPrice[selectedToken]);
+    }
 
     try {
-      const reward = exchangeToReward(amount, tokenPrice);
+      const reward = exchangeToReward(amount, selectedTokenPrice);
       setRewardToken(reward);
     } catch (err: any) {
-      alert(err.message);
+      setRewardToken("N/A");
     }
-  }, [getValues, selectedToken]);
+  }, [getValues, selectedToken, tokenPrices]);
 
   useEffect(() => {
     handleSwapTokenToReward();
@@ -52,7 +64,12 @@ const DonateForm = ({
       return;
     }
 
+    // TODO: Change this to Toast for better UX
     alert("Transaction sent");
+
+    // Revalidate user donations
+    await mutate(getUserDonationDataKey(account));
+
     return txHash;
   };
 
@@ -81,7 +98,9 @@ const DonateForm = ({
     <form onSubmit={handleSubmit(handleDonate)}>
       <div>
         <div className="flex flex-col mt-2">
-          <label htmlFor="donate-amount">Amount*</label>
+          <label className="my-1" htmlFor="donate-amount">
+            Amount*
+          </label>
           <div>
             <input
               className="w-1/5 px-4 py-2 rounded-lg border focus:border-2"
@@ -96,7 +115,7 @@ const DonateForm = ({
               })}
             />
             <span className="px-2">
-              {selectedToken} for {rewardToken} GMS Token
+              {selectedToken} for {rewardToken} token(s)
             </span>
           </div>
         </div>
@@ -117,7 +136,10 @@ const DonateForm = ({
           </div>
         )}
       </div>
-      <button type="submit" className="px-4 py-2 rounded-lg border-2 mt-2">
+      <button
+        type="submit"
+        className="px-4 py-2 rounded-lg border-2 mt-2 border-green-600 hover:bg-green-600 hover:text-white"
+      >
         Donate
       </button>
     </form>

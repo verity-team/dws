@@ -138,7 +138,7 @@ export const exchangeToReward = (
   tokenPrice: number
 ): number => {
   const rewardTokenPrice = Number(process.env.NEXT_PUBLIC_REWARD_PRICE);
-  if (rewardTokenPrice == null) {
+  if (isNaN(tokenPrice)) {
     throw new Error("Reward price is NaN");
   }
 
