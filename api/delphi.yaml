@@ -291,11 +291,15 @@ components:
           type: string
           example: "1980000"
           maxLength: 16
+          x-oapi-codegen-extra-tags:
+            db: total
         tokens:
           description: number of tokens claimable by donors
           type: string
           example: "979999"
           maxLength: 16
+          x-oapi-codegen-extra-tags:
+            db: tokens
     user_stats:
       required:
       - total

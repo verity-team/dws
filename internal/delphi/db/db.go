@@ -44,8 +44,24 @@ func GetDonationData(db *sqlx.DB) (*api.DonationData, error) {
 	var ethp api.Price
 	err := db.Get(&ethp, q1)
 	if err != nil {
-		err = fmt.Errorf("failed to fetch an ETH price that is newer than 5 minutes, %v", err)
+		err = fmt.Errorf("failed to fetch an ETH price that is newer than 3 minutes, %v", err)
 		log.Error(err)
+	}
+
+	// truth token price
+	q2 := `
+		SELECT asset, price, created_at FROM price
+		WHERE
+			asset='truth'
+		ORDER BY created_at DESC
+		LIMIT 1
+		`
+	var truthp api.Price
+	err = db.Get(&truthp, q2)
+	if err != nil {
+		err = fmt.Errorf("failed to fetch the TRUTH price, %v", err)
+		log.Error(err)
+		return nil, err
 	}
 
 	type dstats struct {
@@ -70,6 +86,7 @@ func GetDonationData(db *sqlx.DB) (*api.DonationData, error) {
 
 	var result api.DonationData
 	result.Prices = append(result.Prices, ethp)
+	result.Prices = append(result.Prices, truthp)
 
 	result.Stats = api.DonationStats{
 		Total:  ds.Total.StringFixed(2),

@@ -11,10 +11,14 @@ DOCKER_COMPOSE_FOLDER=deployments/docker
 all: build
 
 clean:
+	rm -f $(BIN_DIR)/buck
 	rm -f $(BIN_DIR)/delphi
 	rm -f $(BIN_DIR)/pulitzer
 
 build:
+	rm -f $(BIN_DIR)/buck
+	go build -o $(BIN_DIR)/buck -v -ldflags \
+		"-X main.rev=$(version) -X main.bts=$(timestamp)" cmd/buck/main.go
 	rm -f $(BIN_DIR)/delphi
 	go build -o $(BIN_DIR)/delphi -v -ldflags \
 		"-X main.rev=$(version) -X main.bts=$(timestamp)" cmd/delphi/main.go

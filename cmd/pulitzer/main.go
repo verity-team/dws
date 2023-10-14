@@ -25,7 +25,7 @@ func main() {
 	if err != nil {
 		log.Warn("Error loading .env file")
 	}
-	version = fmt.Sprintf("%s::%s", bts, rev)
+	version = fmt.Sprintf("pulitzer::%s::%s", bts, rev)
 	log.Info("version = ", version)
 
 	dsn := getDSN()

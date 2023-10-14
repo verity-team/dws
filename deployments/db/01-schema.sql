@@ -33,6 +33,7 @@ CREATE TABLE donation (
     price NUMERIC(15,5) NOT NULL,
     tx_hash VARCHAR(66) NOT NULL UNIQUE,
     status donation_status_enum NOT NULL,
+    block_number BIGINT NOT NULL DEFAULT 0,
 
     modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
     created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())
@@ -44,12 +45,12 @@ EXECUTE PROCEDURE trigger_update_modified_at();
 
 CREATE INDEX ON donation (address);
 
-INSERT INTO donation(address, amount, usd_amount, asset, tokens, price, tx_hash, status) VALUES('0xb938F65DfE303EdF96A511F1e7E3190f69036860', 0.9, 1430.289, 'eth', 715145, 0.002, '0x240abc1e911aba167d1215f8a6b7e8583645a28b1855d0b7d15c70dc7aa9f6cf', 'unconfirmed');
+INSERT INTO donation(address, amount, usd_amount, asset, tokens, price, tx_hash, status) VALUES('0xb938F65DfE303EdF96A511F1e7E3190f69036860', 0.9, 1430.289, 'eth', 715145, 0.001, '0x240abc1e911aba167d1215f8a6b7e8583645a28b1855d0b7d15c70dc7aa9f6cf', 'unconfirmed');
 INSERT INTO donation(address, amount, asset, tokens, price, tx_hash, status) VALUES('0xb938F65DfE303EdF96A511F1e7E3190f69036860', 2999, 'usdt', 1499500, 0.002, '0x40bb9bf9753521917c745d8553e9b4b6a6b8a8615c24ad2049508f3c385d83e4', 'confirmed');
 INSERT INTO donation(address, amount, asset, tokens, price, tx_hash, status) VALUES('0xb938F65DfE303EdF96A511F1e7E3190f69036860', 2999, 'usdt', 1499500, 0.002, '0xaec43e48ce0af0d8d81462722b406619af4586dcac43bae33be4d0ad4ac848b2', 'confirmed');
-INSERT INTO donation(address, amount, asset, tokens, price, tx_hash, status) VALUES('0x379738c60f658601Be79e267e79cC38cEA07c8f2', 999, 'usdt', 499500, 0.002, '0xc4de0d133dd7f67852d377f3553702bcffc188a3c4a35068acf6d74887bf78dd', 'confirmed');
+INSERT INTO donation(address, amount, asset, tokens, price, tx_hash, status) VALUES('0x379738c60f658601Be79e267e79cC38cEA07c8f2', 999, 'usdt', 499500, 0.001, '0xc4de0d133dd7f67852d377f3553702bcffc188a3c4a35068acf6d74887bf78dd', 'confirmed');
 INSERT INTO donation(address, amount, asset, tokens, price, tx_hash, status) VALUES('0x379738c60f658601Be79e267e79cC38cEA07c8f2', 98765432, 'usdc', 49382716000, 0.002, '0x1ff542cbadf3a5f918f2af81b76995089bdef5671bc9c166ecc60e91ceb2e81a', 'failed');
-INSERT INTO donation(address, amount, usd_amount, asset, tokens, price, tx_hash, status) VALUES('0x379738c60f658601Be79e267e79cC38cEA07c8f2', 1.8, 2845.368, 'eth', 1429479, 0.002, '0x2636d1d9b9519d8be9520f9b0f342c73405d9512ecd5af643bfc98f69f40e444', 'unconfirmed');
+INSERT INTO donation(address, amount, usd_amount, asset, tokens, price, tx_hash, status) VALUES('0x379738c60f658601Be79e267e79cC38cEA07c8f2', 1.8, 2845.368, 'eth', 1429479, 0.001, '0x2636d1d9b9519d8be9520f9b0f342c73405d9512ecd5af643bfc98f69f40e444', 'unconfirmed');
 INSERT INTO donation(address, amount, usd_amount, asset, tokens, price, tx_hash, status) VALUES('0x379738c60f658601Be79e267e79cC38cEA07c8f2', 1.8, 2845.368, 'eth', 1429479, 0.002, '0x447b793e048cc61824083005cf28d58ca38635adb0c3e76af63c565cae8877ee', 'confirmed');
 
 
@@ -64,13 +65,13 @@ CREATE TABLE price (
 );
 CREATE INDEX ON price (created_at);
 
-INSERT INTO price(asset, price) VALUES('truth', 0.002);
+INSERT INTO price(asset, price) VALUES('truth', 0.001);
 
 --- last_block ----------------------------------------------------
 DROP TABLE IF EXISTS last_block;
 CREATE TABLE last_block (
     id BIGSERIAL PRIMARY KEY,
-    chain VARCHAR(16) NOT NULL,
+    chain VARCHAR(16) NOT NULL UNIQUE,
     last_block BIGINT NOT NULL,
 
     modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
