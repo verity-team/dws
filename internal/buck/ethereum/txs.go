@@ -78,43 +78,10 @@ func GetTransactions(ctxt buck.Context, blockNumber uint64) ([]Transaction, erro
 	}
 	log.Infof("block %d: %d transactions in total", blockNumber, len(itxs))
 
-	result := make([]Transaction, 0)
-	for _, tx := range itxs {
-		tx.BlockNumber = blockNumber
-		tx.Status = string(api.Unconfirmed)
-		if tx.Input == "0x0" {
-			// plain ETH tx -- only return txs that send ETH to the receiving
-			// address
-			if strings.ToLower(tx.To) == ctxt.ReceivingAddr {
-				tx.Asset = "eth"
-				result = append(result, tx)
-				continue
-			}
-		}
-		// ERC-20 transfer?
-		if strings.HasPrefix(tx.Input, "0xa9059cbb") {
-			// check that this is a stable coin tx
-			erc20, ok := ctxt.StableCoins[strings.ToLower(tx.To)]
-			if ok {
-				// yes, actual receiver and amount are encoded in the input string
-				receiver, amount, err := parseInputData(tx.Input)
-				if err != nil {
-					log.Error(err)
-					continue
-					// TODO: log these failed/malformed stable coin transfers to the
-					// database -- they need to be processed by a human
-				}
-				// is this a stable coin tx to the receiving address?
-				if strings.ToLower(receiver) == ctxt.ReceivingAddr {
-					tx.To = ctxt.ReceivingAddr
-					tx.Value = amount.Shift(erc20.Scale).StringFixed(erc20.Scale)
-					tx.Asset = erc20.Asset
-					result = append(result, tx)
-				}
-			}
-		}
+	result, err := filterTransactions(ctxt, blockNumber, itxs)
+	if err != nil {
+		return nil, err
 	}
-
 	log.Infof("block %d: %d *filtered* transactions", blockNumber, len(result))
 
 	err = markFailedTxs(ctxt, result)
@@ -155,7 +122,7 @@ func filterTransactions(ctxt buck.Context, blockNumber uint64, itxs []Transactio
 				// is this a stable coin tx to the receiving address?
 				if strings.ToLower(receiver) == ctxt.ReceivingAddr {
 					tx.To = ctxt.ReceivingAddr
-					tx.Value = amount.Shift(erc20.Scale).StringFixed(erc20.Scale)
+					tx.Value = amount.Shift(-erc20.Scale).StringFixed(6)
 					tx.Asset = erc20.Asset
 					result = append(result, tx)
 				}

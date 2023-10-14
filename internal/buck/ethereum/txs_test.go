@@ -8,6 +8,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
+	"github.com/verity-team/dws/internal/buck"
 )
 
 func TestParseInputData(t *testing.T) {
@@ -105,6 +106,29 @@ func (suite *TxsSuite) TestInputData() {
 	to := "0xDEd1Fe6B3f61c8F1d874bb86F086D10FFc3F0154"
 	assert.Equal(suite.T(), strings.ToLower(recipient), strings.ToLower(to))
 	assert.Equal(suite.T(), decimal.NewFromInt(1210000000000000000), amount)
+}
+
+func (suite *TxsSuite) TestERC20Tx() {
+	itxs, err := parseTransactions(suite.body)
+	assert.Nil(suite.T(), err)
+	to := "0xDEd1Fe6B3f61c8F1d874bb86F086D10FFc3F0154"
+	contract := strings.ToLower("0x779877A7B0D9E8603169DdbD7836e478b4624789")
+	hash := "0xf270a01e1ffa619b5262df30dc93d5ea1cf4bff773d6494460a1755abae43989"
+	ctxt := buck.Context{
+		ReceivingAddr: strings.ToLower(to),
+		StableCoins: map[string]buck.ERC20{
+			contract: {
+				Asset:   "link",
+				Address: contract,
+				Scale:   18,
+			},
+		},
+	}
+	txs, err := filterTransactions(ctxt, 4470811, itxs)
+	assert.Nil(suite.T(), err)
+	assert.Equal(suite.T(), 1, len(txs))
+	assert.Equal(suite.T(), hash, txs[0].Hash)
+	assert.Equal(suite.T(), "1.210000", txs[0].Value)
 }
 
 // In order for 'go test' to run this suite, we need to create
