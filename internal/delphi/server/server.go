@@ -12,11 +12,6 @@ import (
 	"github.com/verity-team/dws/internal/delphi/db"
 )
 
-type stage struct {
-	Limit int
-	Price string
-}
-
 type DelphiServer struct {
 	db *sqlx.DB
 }
