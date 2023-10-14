@@ -14,7 +14,6 @@ import (
 )
 
 func GetLastBlock(dbh *sqlx.DB, chain string) (uint64, error) {
-	// fetch donations made by this user/address
 	q1 := `
 		SELECT
 			last_block
@@ -33,7 +32,6 @@ func GetLastBlock(dbh *sqlx.DB, chain string) (uint64, error) {
 }
 
 func SetLastBlock(dbh *sqlx.DB, chain string, sbn uint64) error {
-	// fetch donations made by this user/address
 	q1 := `
 		INSERT INTO last_block(chain, last_block) VALUES($1, $2)
 		ON CONFLICT (chain)
@@ -120,7 +118,6 @@ func PersistTxs(ctxt buck.Context, bn uint64, txs []ethereum.Transaction) error 
 }
 
 func updateLastBlock(dtx *sqlx.Tx, chain string, sbn uint64) error {
-	// fetch donations made by this user/address
 	q1 := `
 		INSERT INTO last_block(chain, last_block) VALUES($1, $2)
 		ON CONFLICT (chain)
@@ -139,17 +136,19 @@ func updateLastBlock(dtx *sqlx.Tx, chain string, sbn uint64) error {
 func persistTx(dtx *sqlx.Tx, tx ethereum.Transaction) error {
 	ethQ := `
 		INSERT INTO donation(
-			address, amount, usd_amount, asset, tokens, price, tx_hash, status)
+			address, amount, usd_amount, asset, tokens, price, tx_hash, status,
+			block_number)
 		VALUES(
 			:address, :amount, :usd_amount, :asset, :tokens, :price, :tx_hash,
-			:status)
+			:status, :block_number)
 		ON CONFLICT (tx_hash) DO NOTHING
 		`
 	usdxQ := `
 		INSERT INTO donation(
-			address, amount, asset, tokens, price, tx_hash, status)
+			address, amount, asset, tokens, price, tx_hash, status, block_number)
 		VALUES(
-			:address, :amount, :asset, :tokens, :price, :tx_hash, :status)
+			:address, :amount, :asset, :tokens, :price, :tx_hash, :status,
+			:block_number)
 		ON CONFLICT (tx_hash) DO NOTHING
 		`
 	var q string = ethQ
@@ -205,7 +204,6 @@ func updateDonationData(dtx *sqlx.Tx, ctxt buck.Context, txs []ethereum.Transact
 }
 
 func updateDonationStats(dtx *sqlx.Tx, newTotal, newTokens decimal.Decimal) error {
-	// fetch donations made by this user/address
 	q1 := `
 		UPDATE donation_stats
 			SET total = $1, tokens = $2

@@ -33,6 +33,7 @@ CREATE TABLE donation (
     price NUMERIC(15,5) NOT NULL,
     tx_hash VARCHAR(66) NOT NULL UNIQUE,
     status donation_status_enum NOT NULL,
+    block_number BIGINT NOT NULL DEFAULT 0,
 
     modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
     created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())

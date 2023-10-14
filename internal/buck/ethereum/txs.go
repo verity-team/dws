@@ -24,19 +24,20 @@ type EthGetBlockByNumberRequest struct {
 }
 
 type Transaction struct {
-	Hash      string          `db:"tx_hash" json:"hash"`
-	From      string          `db:"address" json:"from"`
-	To        string          `db:"-" json:"to"`
-	Value     string          `db:"amount" json:"value"`
-	Gas       string          `db:"-" json:"gas"`
-	Nonce     string          `db:"-" json:"nonce"`
-	Input     string          `db:"-" json:"input"`
-	Type      string          `db:"-" json:"type"`
-	Status    string          `db:"status"`
-	Asset     string          `db:"asset"`
-	Price     string          `db:"price"`
-	Tokens    decimal.Decimal `db:"tokens"`
-	USDAmount decimal.Decimal `db:"usd_amount"`
+	Hash        string          `db:"tx_hash" json:"hash"`
+	From        string          `db:"address" json:"from"`
+	To          string          `db:"-" json:"to"`
+	Value       string          `db:"amount" json:"value"`
+	Gas         string          `db:"-" json:"gas"`
+	Nonce       string          `db:"-" json:"nonce"`
+	Input       string          `db:"-" json:"input"`
+	Type        string          `db:"-" json:"type"`
+	Status      string          `db:"status"`
+	Asset       string          `db:"asset"`
+	Price       string          `db:"price"`
+	Tokens      decimal.Decimal `db:"tokens"`
+	USDAmount   decimal.Decimal `db:"usd_amount"`
+	BlockNumber uint64          `db:"block_number"`
 }
 
 func GetTransactions(ctxt buck.Context, blockNumber uint64) ([]Transaction, error) {
@@ -83,11 +84,12 @@ func GetTransactions(ctxt buck.Context, blockNumber uint64) ([]Transaction, erro
 
 	result := make([]Transaction, 0)
 	for _, tx := range jsonResult.Transactions {
+		tx.BlockNumber = blockNumber
+		tx.Status = string(api.Unconfirmed)
 		if tx.Input == "0x0" {
 			// plain ETH tx -- only return txs that send ETH to the receiving
 			// address
 			if strings.ToLower(tx.To) == ctxt.ReceivingAddr {
-				tx.Status = string(api.Unconfirmed)
 				tx.Asset = "eth"
 				result = append(result, tx)
 				continue
@@ -108,7 +110,6 @@ func GetTransactions(ctxt buck.Context, blockNumber uint64) ([]Transaction, erro
 				}
 				// is this a stable coin tx to the receiving address?
 				if strings.ToLower(receiver) == ctxt.ReceivingAddr {
-					tx.Status = string(api.Unconfirmed)
 					tx.To = ctxt.ReceivingAddr
 					tx.Value = amount.Shift(erc20.Scale).StringFixed(erc20.Scale)
 					tx.Asset = erc20.Asset
