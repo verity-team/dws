@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
@@ -79,22 +80,26 @@ func (suite *TxsSuite) SetupTest() {
 }
 
 func (suite *TxsSuite) TestLatestBlockSuccess() {
-	txs, err := parseTransactions(suite.body)
+	block, err := parseBlock(suite.body)
+	hash := "0xf1199f7db7e1029fb8ea5479033ab4a221457e51fa482b4195d380fb83f89425"
 	assert.Nil(suite.T(), err)
-	assert.Equal(suite.T(), 200, len(txs))
+	assert.Equal(suite.T(), 200, len(block.Transactions))
+	assert.Equal(suite.T(), hash, block.Hash)
+	assert.Equal(suite.T(), uint64(4470811), block.Number)
+	assert.Equal(suite.T(), "2023-10-11T16:04:00Z", block.Timestamp.Format(time.RFC3339))
 }
 
 func (suite *TxsSuite) TestLinkTxSuccess() {
-	txs, err := parseTransactions(suite.body)
+	block, err := parseBlock(suite.body)
 	assert.Nil(suite.T(), err)
 	input := "0xa9059cbb000000000000000000000000ded1fe6b3f61c8f1d874bb86f086d10ffc3f015400000000000000000000000000000000000000000000000010cac896d2390000"
 	from := "0x379738c60f658601Be79e267e79cC38cEA07c8f2"
 	to := "0x779877A7B0D9E8603169DdbD7836e478b4624789"
 	txHash := "0xf270a01e1ffa619b5262df30dc93d5ea1cf4bff773d6494460a1755abae43989"
-	assert.Equal(suite.T(), input, txs[77].Input)
-	assert.Equal(suite.T(), strings.ToLower(from), strings.ToLower(txs[77].From))
-	assert.Equal(suite.T(), strings.ToLower(to), strings.ToLower(txs[77].To))
-	assert.Equal(suite.T(), strings.ToLower(txHash), strings.ToLower(txs[77].Hash))
+	assert.Equal(suite.T(), input, block.Transactions[77].Input)
+	assert.Equal(suite.T(), strings.ToLower(from), strings.ToLower(block.Transactions[77].From))
+	assert.Equal(suite.T(), strings.ToLower(to), strings.ToLower(block.Transactions[77].To))
+	assert.Equal(suite.T(), strings.ToLower(txHash), strings.ToLower(block.Transactions[77].Hash))
 }
 
 func (suite *TxsSuite) TestInputData() {
@@ -107,7 +112,7 @@ func (suite *TxsSuite) TestInputData() {
 }
 
 func (suite *TxsSuite) TestERC20Tx() {
-	itxs, err := parseTransactions(suite.body)
+	block, err := parseBlock(suite.body)
 	assert.Nil(suite.T(), err)
 	to := "0xDEd1Fe6B3f61c8F1d874bb86F086D10FFc3F0154"
 	contract := strings.ToLower("0x779877A7B0D9E8603169DdbD7836e478b4624789")
@@ -122,15 +127,16 @@ func (suite *TxsSuite) TestERC20Tx() {
 			},
 		},
 	}
-	txs, err := filterTransactions(ctxt, 4470811, itxs)
+	txs, err := filterTransactions(ctxt, *block)
 	assert.Nil(suite.T(), err)
 	assert.Equal(suite.T(), 1, len(txs))
 	assert.Equal(suite.T(), hash, txs[0].Hash)
+	assert.Equal(suite.T(), block.Hash, txs[0].BlockHash)
 	assert.Equal(suite.T(), "1.210000", txs[0].Value)
 }
 
 func (suite *TxsSuite) TestETHTx() {
-	itxs, err := parseTransactions(suite.body)
+	block, err := parseBlock(suite.body)
 	assert.Nil(suite.T(), err)
 	to := "0x11aa6eeac7eae3c55b6fb9a4099adb5e420187ac"
 	hash := "0x7f899903ddd10f184ee0074f5ecba96a4ba905882706a40c856d9e165ba90851"
@@ -145,10 +151,11 @@ func (suite *TxsSuite) TestETHTx() {
 			},
 		},
 	}
-	txs, err := filterTransactions(ctxt, 4470811, itxs)
+	txs, err := filterTransactions(ctxt, *block)
 	assert.Nil(suite.T(), err)
 	assert.Equal(suite.T(), 1, len(txs))
 	assert.Equal(suite.T(), hash, txs[0].Hash)
+	assert.Equal(suite.T(), block.Hash, txs[0].BlockHash)
 	assert.Equal(suite.T(), "0.10000000", txs[0].Value)
 }
 
