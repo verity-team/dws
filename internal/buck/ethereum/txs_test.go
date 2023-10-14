@@ -70,8 +70,6 @@ type TxsSuite struct {
 	path string
 }
 
-// Make sure that VariableThatShouldStartAtFive is set to five
-// before each test
 func (suite *TxsSuite) SetupTest() {
 	var err error
 	suite.body, err = os.ReadFile(suite.path)
@@ -154,8 +152,6 @@ func (suite *TxsSuite) TestETHTx() {
 	assert.Equal(suite.T(), "0.10000000", txs[0].Value)
 }
 
-// In order for 'go test' to run this suite, we need to create
-// a normal test function and pass our suite to suite.Run
 func TestTxsSuite(t *testing.T) {
 	s := new(TxsSuite)
 	s.path = "testdata/eth_blockNumber.json"
