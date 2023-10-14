@@ -23,6 +23,13 @@ type EthGetBlockByNumberRequest struct {
 	ID      int           `json:"id"`
 }
 
+type Block struct {
+	Hash         string        `db:"tx_hash" json:"hash"`
+	Number       uint64        `db:"number" json:"-"`
+	Timestamp    time.Time     `db:"timestamp" json:"-"`
+	Transactions []Transaction `db:"transaction" json:"transactions"`
+}
+
 type Transaction struct {
 	Hash        string          `db:"tx_hash" json:"hash"`
 	From        string          `db:"address" json:"from"`
@@ -38,6 +45,7 @@ type Transaction struct {
 	Tokens      decimal.Decimal `db:"tokens" json:"-"`
 	USDAmount   decimal.Decimal `db:"usd_amount" json:"-"`
 	BlockNumber uint64          `db:"block_number" json:"-"`
+	BlockHash   string          `db:"block_hash" json:"blockhash"`
 }
 
 func GetTransactions(ctxt buck.Context, blockNumber uint64) ([]Transaction, error) {
@@ -72,13 +80,13 @@ func GetTransactions(ctxt buck.Context, blockNumber uint64) ([]Transaction, erro
 		return nil, err
 	}
 
-	itxs, err := parseTransactions(body)
+	block, err := parseBlock(body)
 	if err != nil {
 		return nil, err
 	}
-	log.Infof("block %d: %d transactions in total", blockNumber, len(itxs))
+	log.Infof("block %d: %d transactions in total", blockNumber, len(block.Transactions))
 
-	result, err := filterTransactions(ctxt, blockNumber, itxs)
+	result, err := filterTransactions(ctxt, *block)
 	if err != nil {
 		return nil, err
 	}
@@ -92,10 +100,10 @@ func GetTransactions(ctxt buck.Context, blockNumber uint64) ([]Transaction, erro
 	return result, nil
 }
 
-func filterTransactions(ctxt buck.Context, blockNumber uint64, itxs []Transaction) ([]Transaction, error) {
+func filterTransactions(ctxt buck.Context, b Block) ([]Transaction, error) {
 	result := make([]Transaction, 0)
-	for _, tx := range itxs {
-		tx.BlockNumber = blockNumber
+	for _, tx := range b.Transactions {
+		tx.BlockNumber = b.Number
 		tx.Status = string(api.Unconfirmed)
 		if tx.Input == "0x" {
 			// plain ETH tx -- only return txs that send ETH to the receiving
@@ -140,12 +148,15 @@ func filterTransactions(ctxt buck.Context, blockNumber uint64, itxs []Transactio
 	return result, nil
 }
 
-func parseTransactions(body []byte) ([]Transaction, error) {
+func parseBlock(body []byte) (*Block, error) {
+	type pblock struct {
+		Block
+		HexSeconds string `json:"timestamp"`
+		HexNumber  string `json:"number"`
+	}
 	log.Infof("body length: %d", len(body))
 	type Response struct {
-		Result struct {
-			Transactions []Transaction `json:"transactions"`
-		} `json:"result"`
+		Block pblock `json:"result"`
 	}
 
 	var resp Response
@@ -153,8 +164,23 @@ func parseTransactions(body []byte) ([]Transaction, error) {
 	if err != nil {
 		return nil, err
 	}
+	seconds, err := common.HexStringToDecimal(resp.Block.HexSeconds)
+	if err != nil {
+		return nil, err
+	}
+	number, err := common.HexStringToDecimal(resp.Block.HexNumber)
+	if err != nil {
+		return nil, err
+	}
+	ts := time.Unix(seconds.IntPart(), 0)
+	result := Block{
+		Hash:         resp.Block.Hash,
+		Number:       uint64(number.IntPart()),
+		Transactions: resp.Block.Transactions,
+		Timestamp:    ts.UTC(),
+	}
 
-	return resp.Result.Transactions, nil
+	return &result, nil
 }
 
 func markFailedTxs(ctxt buck.Context, txs []Transaction) error {
