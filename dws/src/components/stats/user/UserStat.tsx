@@ -11,7 +11,7 @@ const UserStat = ({ account }: UserStatProps): ReactElement<UserStatProps> => {
 
   if (userDonationData == null || error != null) {
     console.log(error?.info);
-    return <div>User data not available</div>;
+    return <div className="mt-4 text-xl">User data not available</div>;
   }
 
   const { total, tokens, staked, reward, status } = userDonationData.stats;
