@@ -138,7 +138,7 @@ func markFailedTxs(ctxt buck.Context, txs []Transaction) error {
 			log.Error(err)
 			return err
 		}
-		if rcpt.Status != "0x1" {
+		if strings.ToLower(rcpt.Status) != "0x1" {
 			tx.Status = string(api.Failed)
 		}
 	}
