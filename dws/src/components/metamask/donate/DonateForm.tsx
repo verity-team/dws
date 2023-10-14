@@ -140,7 +140,7 @@ const DonateForm = ({
       </div>
       <button
         type="submit"
-        className="px-4 py-2 rounded-lg border-2 mt-2 border-green-600 hover:bg-green-600 hover:text-white"
+        className="px-4 py-2 rounded-lg border-2 mt-2 border-gray-700 disabled:border-gray-500 disabled:text-gray-500 disabled:cursor-not-allowed"
         disabled={campaignStatus !== "open"}
       >
         Donate
