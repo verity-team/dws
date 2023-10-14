@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 )
@@ -22,25 +23,11 @@ type TxReceipt struct {
 	EffectiveGasPrice string `json:"effectiveGasPrice"`
 	From              string `json:"from"`
 	GasUsed           string `json:"gasUsed"`
-	Logs              []Log  `json:"-"`
-	LogsBloom         string `json:"-"`
 	Status            string `json:"status"`
 	To                string `json:"to"`
 	TransactionHash   string `json:"transactionHash"`
 	TransactionIndex  string `json:"transactionIndex"`
 	Type              string `json:"type"`
-}
-
-type Log struct {
-	Address          string   `json:"address"`
-	BlockHash        string   `json:"blockHash"`
-	BlockNumber      string   `json:"blockNumber"`
-	Data             string   `json:"data"`
-	LogIndex         string   `json:"logIndex"`
-	Removed          bool     `json:"removed"`
-	Topics           []string `json:"topics"`
-	TransactionHash  string   `json:"transactionHash"`
-	TransactionIndex string   `json:"transactionIndex"`
 }
 
 func GetTransactionReceipt(url string, txHash string) (*TxReceipt, error) {
@@ -77,11 +64,23 @@ func GetTransactionReceipt(url string, txHash string) (*TxReceipt, error) {
 		return nil, fmt.Errorf("request failed with status: %s", resp.Status)
 	}
 
-	var response TxReceiptBody
-	err = json.NewDecoder(resp.Body).Decode(&response)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	result, err := parseTxReceipt(body)
 	if err != nil {
 		return nil, err
 	}
 
-	return &response.Result, nil
+	return result, nil
+}
+
+func parseTxReceipt(body []byte) (*TxReceipt, error) {
+	var resp TxReceiptBody
+	err := json.Unmarshal(body, &resp)
+	if err != nil {
+		return nil, err
+	}
+	return &resp.Result, nil
 }
