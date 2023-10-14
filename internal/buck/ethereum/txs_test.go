@@ -131,6 +131,29 @@ func (suite *TxsSuite) TestERC20Tx() {
 	assert.Equal(suite.T(), "1.210000", txs[0].Value)
 }
 
+func (suite *TxsSuite) TestETHTx() {
+	itxs, err := parseTransactions(suite.body)
+	assert.Nil(suite.T(), err)
+	to := "0x11aa6eeac7eae3c55b6fb9a4099adb5e420187ac"
+	hash := "0x7f899903ddd10f184ee0074f5ecba96a4ba905882706a40c856d9e165ba90851"
+	contract := strings.ToLower("0x779877A7B0D9E8603169DdbD7836e478b4624789")
+	ctxt := buck.Context{
+		ReceivingAddr: strings.ToLower(to),
+		StableCoins: map[string]buck.ERC20{
+			contract: {
+				Asset:   "link",
+				Address: contract,
+				Scale:   18,
+			},
+		},
+	}
+	txs, err := filterTransactions(ctxt, 4470811, itxs)
+	assert.Nil(suite.T(), err)
+	assert.Equal(suite.T(), 1, len(txs))
+	assert.Equal(suite.T(), hash, txs[0].Hash)
+	assert.Equal(suite.T(), "0.10000000", txs[0].Value)
+}
+
 // In order for 'go test' to run this suite, we need to create
 // a normal test function and pass our suite to suite.Run
 func TestTxsSuite(t *testing.T) {

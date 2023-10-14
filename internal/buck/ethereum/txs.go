@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/verity-team/dws/api"
 	"github.com/verity-team/dws/internal/buck"
+	"github.com/verity-team/dws/internal/common"
 )
 
 type EthGetBlockByNumberRequest struct {
@@ -97,11 +97,19 @@ func filterTransactions(ctxt buck.Context, blockNumber uint64, itxs []Transactio
 	for _, tx := range itxs {
 		tx.BlockNumber = blockNumber
 		tx.Status = string(api.Unconfirmed)
-		if tx.Input == "0x0" {
+		if tx.Input == "0x" {
 			// plain ETH tx -- only return txs that send ETH to the receiving
 			// address
 			if strings.ToLower(tx.To) == ctxt.ReceivingAddr {
 				tx.Asset = "eth"
+				amount, err := common.HexStringToDecimal(tx.Value)
+				if err != nil {
+					log.Error(err)
+					continue
+					// TODO: log these failed/malformed stable coin transfers
+					// to the database -- they need to be processed by a human
+				}
+				tx.Value = amount.Shift(-18).StringFixed(8)
 				result = append(result, tx)
 				continue
 			}
@@ -116,8 +124,8 @@ func filterTransactions(ctxt buck.Context, blockNumber uint64, itxs []Transactio
 				if err != nil {
 					log.Error(err)
 					continue
-					// TODO: log these failed/malformed stable coin transfers to the
-					// database -- they need to be processed by a human
+					// TODO: log these failed/malformed stable coin transfers
+					// to the database -- they need to be processed by a human
 				}
 				// is this a stable coin tx to the receiving address?
 				if strings.ToLower(receiver) == ctxt.ReceivingAddr {
@@ -188,10 +196,10 @@ func parseInputData(input string) (string, decimal.Decimal, error) {
 
 	// Extract the amount (next 32 bytes) and convert it to a uint64
 	amountHex := input[72:]
-	amount, err := strconv.ParseUint(amountHex, 16, 64)
+	amount, err := common.HexStringToDecimal(amountHex)
 	if err != nil {
 		return "", decimal.Zero, fmt.Errorf("failed to convert amount to uint64")
 	}
 
-	return "0x" + receivingAddress, decimal.NewFromInt(int64(amount)), nil
+	return "0x" + receivingAddress, amount, nil
 }
