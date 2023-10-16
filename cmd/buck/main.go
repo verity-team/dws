@@ -13,9 +13,9 @@ import (
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
-	"github.com/verity-team/dws/internal/buck"
 	"github.com/verity-team/dws/internal/buck/db"
 	"github.com/verity-team/dws/internal/buck/ethereum"
+	"github.com/verity-team/dws/internal/common"
 )
 
 var (
@@ -50,7 +50,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	ctxt, err := buck.GetContext(erc20Json, saleParamJson)
+	ctxt, err := common.GetContext(erc20Json, saleParamJson)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func main() {
 	s.StartBlocking()
 }
 
-func monitorETH(ctxt buck.Context) error {
+func monitorETH(ctxt common.Context) error {
 	// most recent ETH block published
 	bn, err := ethereum.GetBlockNumber(ctxt.ETHRPCURL)
 	if err != nil {

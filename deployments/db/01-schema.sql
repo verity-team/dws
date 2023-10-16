@@ -155,6 +155,23 @@ BEFORE UPDATE ON failed_block
 FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
 
+--- failed_tx ----------------------------------------------------
+DROP TABLE IF EXISTS failed_tx;
+CREATE TABLE failed_tx (
+    id BIGSERIAL PRIMARY KEY,
+    block_number BIGINT NOT NULL,
+    block_hash VARCHAR(66) NOT,
+    block_time TIMESTAMP NOT NULL,
+    tx_hash VARCHAR(66) NOT UNIQUE,
+
+    modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
+    created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())
+);
+CREATE TRIGGER failed_tx_update_timestamp
+BEFORE UPDATE ON failed_tx
+FOR EACH ROW
+EXECUTE PROCEDURE trigger_update_modified_at();
+
 --- update_user_stats() ---------------------------------------------
 CREATE OR REPLACE FUNCTION update_user_stats(p_address VARCHAR(42))
 RETURNS TABLE (

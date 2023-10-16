@@ -8,8 +8,6 @@ import (
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
 	"github.com/verity-team/dws/api"
-	"github.com/verity-team/dws/internal/buck"
-	"github.com/verity-team/dws/internal/buck/ethereum"
 	"github.com/verity-team/dws/internal/common"
 )
 
@@ -47,7 +45,7 @@ func SetLastBlock(dbh *sqlx.DB, chain string, sbn uint64) error {
 	return nil
 }
 
-func PersistTxs(ctxt buck.Context, bn uint64, txs []ethereum.Transaction) error {
+func PersistTxs(ctxt common.Context, bn uint64, txs []common.Transaction) error {
 	if len(txs) == 0 {
 		return nil
 	}
@@ -133,7 +131,7 @@ func updateLastBlock(dtx *sqlx.Tx, chain string, sbn uint64) error {
 	return nil
 }
 
-func persistTx(dtx *sqlx.Tx, tx ethereum.Transaction) error {
+func persistTx(dtx *sqlx.Tx, tx common.Transaction) error {
 	ethQ := `
 		INSERT INTO donation(
 			address, amount, usd_amount, asset, tokens, price, tx_hash, status,
@@ -166,7 +164,7 @@ func persistTx(dtx *sqlx.Tx, tx ethereum.Transaction) error {
 	return nil
 }
 
-func updateDonationData(dtx *sqlx.Tx, ctxt buck.Context, txs []ethereum.Transaction) (decimal.Decimal, decimal.Decimal, error) {
+func updateDonationData(dtx *sqlx.Tx, ctxt common.Context, txs []common.Transaction) (decimal.Decimal, decimal.Decimal, error) {
 	if len(txs) == 0 {
 		return decimal.Zero, decimal.Zero, nil
 	}
@@ -242,7 +240,7 @@ func updateTokenPrice(dtx *sqlx.Tx, newTokenPrice decimal.Decimal) error {
 	return nil
 }
 
-func doWeNeedToUpdatePrice(ctxt buck.Context, tokens, newTokens decimal.Decimal) (bool, decimal.Decimal) {
+func doWeNeedToUpdatePrice(ctxt common.Context, tokens, newTokens decimal.Decimal) (bool, decimal.Decimal) {
 	// did we enter a new price range? do we need to update the price?
 	currentP := priceBucket(ctxt, tokens)
 	newP := priceBucket(ctxt, tokens)
@@ -250,7 +248,7 @@ func doWeNeedToUpdatePrice(ctxt buck.Context, tokens, newTokens decimal.Decimal)
 	return newP.GreaterThan(currentP), newP
 }
 
-func priceBucket(ctxt buck.Context, tokens decimal.Decimal) decimal.Decimal {
+func priceBucket(ctxt common.Context, tokens decimal.Decimal) decimal.Decimal {
 	// find the correct price given the number of tokens sold
 	for _, sp := range ctxt.SaleParams {
 		if tokens.LessThan(decimal.NewFromInt(int64(sp.Limit))) {
@@ -261,7 +259,7 @@ func priceBucket(ctxt buck.Context, tokens decimal.Decimal) decimal.Decimal {
 	return ctxt.SaleParams[len(ctxt.SaleParams)-1].Price
 }
 
-func calcTokens(tx ethereum.Transaction, tokenPrice, ethPrice decimal.Decimal) (decimal.Decimal, decimal.Decimal, error) {
+func calcTokens(tx common.Transaction, tokenPrice, ethPrice decimal.Decimal) (decimal.Decimal, decimal.Decimal, error) {
 	var amount decimal.Decimal
 	amount, err := decimal.NewFromString(tx.Value)
 	if err != nil {
@@ -280,7 +278,7 @@ func calcTokens(tx ethereum.Transaction, tokenPrice, ethPrice decimal.Decimal) (
 	return amount.Div(tokenPrice).Ceil(), decimal.Zero, nil
 }
 
-func getTokenPrice(ctxt buck.Context) (decimal.Decimal, error) {
+func getTokenPrice(ctxt common.Context) (decimal.Decimal, error) {
 	// select price as follows:
 	// - if there are multiple rows than return the most recent one
 	//   that is at least two minutes old
@@ -313,7 +311,7 @@ func getTokenPrice(ctxt buck.Context) (decimal.Decimal, error) {
 	return result, nil
 }
 
-func persistFailedBlock(dbh *sqlx.DB, b ethereum.Block) error {
+func PersistFailedBlock(dbh *sqlx.DB, b common.Block) error {
 	q := `
 		INSERT INTO failed_block(
 			block_number, block_hash, block_time)
@@ -324,6 +322,24 @@ func persistFailedBlock(dbh *sqlx.DB, b ethereum.Block) error {
 	_, err := dbh.NamedExec(q, b)
 	if err != nil {
 		err = fmt.Errorf("failed to insert failed block with number %d, %v", b.Number, err)
+		log.Error(err)
+		return err
+	}
+
+	return nil
+}
+
+func PersistFailedTx(dbh *sqlx.DB, b common.Block, tx common.Transaction) error {
+	q := `
+		INSERT INTO failed_tx(
+			block_number, block_hash, block_time, tx_hash)
+		VALUES(
+			$1, $2, $3, $4)
+		ON CONFLICT (tx_hash) DO NOTHING
+		`
+	_, err := dbh.Exec(q, b.Number, b.Hash, b.Timestamp, tx.Hash)
+	if err != nil {
+		err = fmt.Errorf("failed to insert failed tx '%s', %v", tx.Hash, err)
 		log.Error(err)
 		return err
 	}
