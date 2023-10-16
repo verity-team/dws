@@ -67,12 +67,14 @@ INSERT INTO price(asset, price) VALUES('truth', 0.001);
 DROP TABLE IF EXISTS last_block;
 CREATE TABLE last_block (
     id BIGSERIAL PRIMARY KEY,
-    chain VARCHAR(16) NOT NULL UNIQUE,
-    latest BIGINT NOT NULL,
-    finalized BIGINT NOT NULL,
+    chain VARCHAR(16) NOT NULL,
+    label VARCHAR(16) NOT NULL,
+    value BIGINT NOT NULL,
 
     modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
-    created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())
+    created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
+
+    UNIQUE(chain, label)
 );
 
 CREATE TRIGGER last_block_update_timestamp

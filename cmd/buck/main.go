@@ -75,7 +75,7 @@ func main() {
 	flag.Parse()
 
 	if *sbn > 0 {
-		err = db.SetLastBlock(dbh, "eth", "latest", uint64(*sbn))
+		err = db.SetLastBlock(dbh, "eth", db.Latest, uint64(*sbn))
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -99,7 +99,7 @@ func monitorETH(ctxt common.Context) error {
 	}
 
 	// number of last block that was processed
-	latest, _, err := db.GetLastBlock(ctxt.DB, "eth")
+	latest, err := db.GetLastBlock(ctxt.DB, "eth", db.Latest)
 	if err != nil {
 		log.Error(err)
 		return err

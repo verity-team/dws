@@ -7,46 +7,61 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
-	"github.com/verity-team/dws/api"
 	"github.com/verity-team/dws/internal/common"
 )
 
-func GetLastBlock(dbh *sqlx.DB, chain string) (uint64, uint64, error) {
-	q1 := `
-		SELECT
-			latest, finalized
-		FROM last_block
-		WHERE chain=$1
-		`
-	var result []uint64
-	err := dbh.Select(&result, q1, chain)
-	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
-		err = fmt.Errorf("failed to fetch last block for %s, %v", chain, err)
-		log.Error(err)
-		return 0, 0, err
-	}
+type Label int
 
-	return result[0], result[1], nil
+const (
+	Latest Label = iota
+	Finalized
+)
+
+func (l Label) String() string {
+	switch l {
+	case Latest:
+		return "latest"
+	case Finalized:
+		return "finalized"
+	}
+	return "invalid label"
 }
 
-func SetLastBlock(dbh *sqlx.DB, chain, label string, lbn uint64) error {
+func GetLastBlock(dbh *sqlx.DB, chain string, l Label) (uint64, error) {
+	var (
+		err    error
+		q      string
+		result uint64
+	)
+	q = `
+		SELECT
+			value
+		FROM last_block
+		WHERE chain=$1 AND label=$2
+		`
+	err = dbh.Select(&result, q, chain, l.String())
+	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
+		err = fmt.Errorf("failed to fetch last block for %s/%s, %v", chain, l.String(), err)
+		log.Error(err)
+		return 0, err
+	}
+
+	return result, nil
+}
+
+func SetLastBlock(dbh *sqlx.DB, chain string, l Label, lbn uint64) error {
 	var (
 		err error
 		q   string
 	)
-	if label != "latest" && label != "finalized" {
-		err = fmt.Errorf("invalid label ('%s'), must be one of: latest, finalized", label)
-		log.Error(err)
-		return err
-	}
-	q = fmt.Sprintf(`
-		INSERT INTO last_block(chain, %s) VALUES($1, $2)
-		ON CONFLICT (chain)
-		DO UPDATE SET %s = $2
-	`, label, label)
-	_, err = dbh.Exec(q, chain, lbn)
+	q = `
+		INSERT INTO last_block(chain, label, value) VALUES($1, $2, $3)
+		ON CONFLICT (chain, value)
+		DO UPDATE SET value = $3
+	`
+	_, err = dbh.Exec(q, chain, l.String(), lbn)
 	if err != nil {
-		err = fmt.Errorf("failed to set %s last block for %s, %v", label, chain, err)
+		err = fmt.Errorf("failed to set last block for %s/%s, %v", l.String(), chain, err)
 		log.Error(err)
 		return err
 	}
@@ -102,7 +117,7 @@ func PersistTxs(ctxt common.Context, bn uint64, txs []common.Transaction) error 
 		}
 	}
 
-	err = updateLastBlock(dtx, "eth", "latest", bn)
+	err = updateLastBlock(dtx, "eth", Latest, bn)
 	if err != nil {
 		return err
 	}
@@ -111,24 +126,19 @@ func PersistTxs(ctxt common.Context, bn uint64, txs []common.Transaction) error 
 	return nil
 }
 
-func updateLastBlock(dbt *sqlx.Tx, chain, label string, lbn uint64) error {
+func updateLastBlock(dbt *sqlx.Tx, chain string, l Label, lbn uint64) error {
 	var (
 		err error
 		q   string
 	)
-	if label != "latest" && label != "finalized" {
-		err = fmt.Errorf("invalid label ('%s'), must be one of: latest, finalized", label)
-		log.Error(err)
-		return err
-	}
-	q = fmt.Sprintf(`
-		INSERT INTO last_block(chain, %s) VALUES($1, $2)
-		ON CONFLICT (chain)
-		DO UPDATE SET %s = $2
-	`, label, label)
-	_, err = dbt.Exec(q, chain, lbn)
+	q = `
+		INSERT INTO last_block(chain, label, value) VALUES($1, $2, $3)
+		ON CONFLICT (chain, value)
+		DO UPDATE SET value = $3
+	`
+	_, err = dbt.Exec(q, chain, l.String(), lbn)
 	if err != nil {
-		err = fmt.Errorf("failed to set %s last block for %s, %v", label, chain, err)
+		err = fmt.Errorf("failed to set last block for %s/%s, %v", l.String(), chain, err)
 		log.Error(err)
 		return err
 	}
@@ -167,101 +177,6 @@ func persistTx(dtx *sqlx.Tx, tx common.Transaction) error {
 	}
 
 	return nil
-}
-
-func updateDonationData(dtx *sqlx.Tx, ctxt common.Context, txs []common.Transaction) (decimal.Decimal, decimal.Decimal, error) {
-	if len(txs) == 0 {
-		return decimal.Zero, decimal.Zero, nil
-	}
-	total, tokens, err := common.GetDonationStats(ctxt.DB)
-	if err != nil {
-		return decimal.Zero, decimal.Zero, nil
-	}
-	var newTotal, newTokens decimal.Decimal
-	newTotal = total
-	newTokens = tokens
-	for _, tx := range txs {
-		if tx.Status == string(api.Failed) {
-			// skip failed transactions
-			continue
-		}
-		newTokens.Add(tx.Tokens)
-		if tx.Asset == "eth" {
-			newTotal.Add(tx.USDAmount)
-		} else {
-			amount, err := decimal.NewFromString(tx.Value)
-			if err != nil {
-				err = fmt.Errorf("invalid amount for tx %s, %v", tx.Hash, err)
-				log.Error(err)
-				continue
-			}
-			newTotal.Add(amount)
-		}
-	}
-	if newTotal.GreaterThan(total) || newTokens.GreaterThan(tokens) {
-		err = updateDonationStats(dtx, newTotal, newTokens)
-		if err != nil {
-			return decimal.Zero, decimal.Zero, nil
-		}
-	}
-	return tokens, newTokens, nil
-}
-
-func updateDonationStats(dtx *sqlx.Tx, newTotal, newTokens decimal.Decimal) error {
-	q1 := `
-		UPDATE donation_stats
-			SET total = $1, tokens = $2
-		`
-	_, err := dtx.Exec(q1, newTotal, newTokens.IntPart())
-	if err != nil {
-		err = fmt.Errorf("failed to update donation stats %v", err)
-		log.Error(err)
-		return err
-	}
-
-	return nil
-}
-
-func updateTokenPrice(dtx *sqlx.Tx, newTokenPrice decimal.Decimal) error {
-	q1 := `
-		WITH check_existing AS (
-			 SELECT 1
-			 FROM price
-			 WHERE asset = 'truth' AND price = $1
-			 LIMIT 1
-		)
-		INSERT INTO price (asset, price)
-		SELECT 'truth', $1
-		WHERE NOT EXISTS (SELECT 1 FROM check_existing)
-		RETURNING *;
-		`
-	_, err := dtx.Exec(q1, newTokenPrice.StringFixed(5))
-	if err != nil {
-		err = fmt.Errorf("failed to update token price %v", err)
-		log.Error(err)
-		return err
-	}
-
-	return nil
-}
-
-func doWeNeedToUpdatePrice(ctxt common.Context, tokens, newTokens decimal.Decimal) (bool, decimal.Decimal) {
-	// did we enter a new price range? do we need to update the price?
-	currentP := priceBucket(ctxt, tokens)
-	newP := priceBucket(ctxt, tokens)
-
-	return newP.GreaterThan(currentP), newP
-}
-
-func priceBucket(ctxt common.Context, tokens decimal.Decimal) decimal.Decimal {
-	// find the correct price given the number of tokens sold
-	for _, sp := range ctxt.SaleParams {
-		if tokens.LessThan(decimal.NewFromInt(int64(sp.Limit))) {
-			return sp.Price
-		}
-	}
-	// we fell through the loop, return the max price
-	return ctxt.SaleParams[len(ctxt.SaleParams)-1].Price
 }
 
 func calcTokens(tx common.Transaction, tokenPrice, ethPrice decimal.Decimal) (decimal.Decimal, decimal.Decimal, error) {
