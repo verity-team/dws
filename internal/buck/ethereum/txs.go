@@ -24,10 +24,10 @@ type EthGetBlockByNumberRequest struct {
 }
 
 type Block struct {
-	Hash         string        `db:"tx_hash" json:"hash"`
-	Number       uint64        `db:"number" json:"-"`
-	Timestamp    time.Time     `db:"timestamp" json:"-"`
-	Transactions []Transaction `db:"transaction" json:"transactions"`
+	Hash         string        `db:"block_hash" json:"hash"`
+	Number       uint64        `db:"block_number" json:"-"`
+	Timestamp    time.Time     `db:"block_time" json:"-"`
+	Transactions []Transaction `db:"-" json:"transactions"`
 }
 
 type Transaction struct {
@@ -68,21 +68,29 @@ func GetTransactions(ctxt buck.Context, blockNumber uint64) ([]Transaction, erro
 
 	resp, err := client.Post(ctxt.ETHRPCURL, "application/json", bytes.NewBuffer(requestBytes))
 	if err != nil {
+		err := fmt.Errorf("failed to request block #%d, %v", blockNumber, err)
+		log.Error(err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("request failed with status: %s", resp.Status)
+		err := fmt.Errorf("failed to fetch block #%d, status code: %d, %v", blockNumber, resp.StatusCode, err)
+		log.Error(err)
+		return nil, err
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		err := fmt.Errorf("failed to read block #%d, %v", blockNumber, err)
+		log.Error(err)
 		return nil, err
 	}
 
 	block, err := parseBlock(body)
 	if err != nil {
+		err := fmt.Errorf("failed to parse block #%d, %v", blockNumber, err)
+		log.Error(err)
 		return nil, err
 	}
 	log.Infof("block %d: %d transactions in total", blockNumber, len(block.Transactions))
@@ -116,7 +124,7 @@ func filterTransactions(ctxt buck.Context, b Block) ([]Transaction, error) {
 			if err != nil {
 				log.Error(err)
 				continue
-				// TODO: log these failed/malformed stable coin transfers
+				// TODO: log these failed/malformed ETH transfers
 				// to the database -- they need to be processed by a human
 			}
 			tx.Value = amount.Shift(-18).StringFixed(8)

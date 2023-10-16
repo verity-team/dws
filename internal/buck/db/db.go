@@ -312,3 +312,21 @@ func getTokenPrice(ctxt buck.Context) (decimal.Decimal, error) {
 
 	return result, nil
 }
+
+func persistFailedBlock(dbh *sqlx.DB, b ethereum.Block) error {
+	q := `
+		INSERT INTO failed_block(
+			block_number, block_hash, block_time)
+		VALUES(
+			:block_number, :block_hash, :block_time)
+		ON CONFLICT (block_number) DO NOTHING
+		`
+	_, err := dbh.NamedExec(q, b)
+	if err != nil {
+		err = fmt.Errorf("failed to insert failed block with number %d, %v", b.Number, err)
+		log.Error(err)
+		return err
+	}
+
+	return nil
+}
