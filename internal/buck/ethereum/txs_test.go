@@ -9,7 +9,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-	"github.com/verity-team/dws/internal/buck"
+	"github.com/verity-team/dws/internal/common"
 )
 
 func TestParseInputData(t *testing.T) {
@@ -118,9 +118,9 @@ func (suite *TxsSuite) TestERC20Tx() {
 	to := "0xDEd1Fe6B3f61c8F1d874bb86F086D10FFc3F0154"
 	contract := strings.ToLower("0x779877A7B0D9E8603169DdbD7836e478b4624789")
 	hash := "0xf270a01e1ffa619b5262df30dc93d5ea1cf4bff773d6494460a1755abae43989"
-	ctxt := buck.Context{
+	ctxt := common.Context{
 		ReceivingAddr: strings.ToLower(to),
-		StableCoins: map[string]buck.ERC20{
+		StableCoins: map[string]common.ERC20{
 			contract: {
 				Asset:   "link",
 				Address: contract,
@@ -144,9 +144,9 @@ func (suite *TxsSuite) TestETHTx() {
 	to := "0x11aa6eeac7eae3c55b6fb9a4099adb5e420187ac"
 	hash := "0x7f899903ddd10f184ee0074f5ecba96a4ba905882706a40c856d9e165ba90851"
 	contract := strings.ToLower("0x779877A7B0D9E8603169DdbD7836e478b4624789")
-	ctxt := buck.Context{
+	ctxt := common.Context{
 		ReceivingAddr: strings.ToLower(to),
-		StableCoins: map[string]buck.ERC20{
+		StableCoins: map[string]common.ERC20{
 			contract: {
 				Asset:   "link",
 				Address: contract,

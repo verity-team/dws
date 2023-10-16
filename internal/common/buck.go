@@ -1,10 +1,11 @@
-package buck
+package common
 
 import (
 	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/shopspring/decimal"
@@ -28,6 +29,32 @@ type Context struct {
 	ReceivingAddr string
 	ETHRPCURL     string
 	DB            *sqlx.DB
+}
+
+type Block struct {
+	Hash         string        `db:"block_hash" json:"hash"`
+	Number       uint64        `db:"block_number" json:"-"`
+	Timestamp    time.Time     `db:"block_time" json:"-"`
+	Transactions []Transaction `db:"-" json:"transactions"`
+}
+
+type Transaction struct {
+	Hash        string          `db:"tx_hash" json:"hash"`
+	From        string          `db:"address" json:"from"`
+	To          string          `db:"-" json:"to"`
+	Value       string          `db:"amount" json:"value"`
+	Gas         string          `db:"-" json:"gas"`
+	Nonce       string          `db:"-" json:"nonce"`
+	Input       string          `db:"-" json:"input"`
+	Type        string          `db:"-" json:"type"`
+	Status      string          `db:"status" json:"-"`
+	Asset       string          `db:"asset" json:"-"`
+	Price       string          `db:"price" json:"-"`
+	Tokens      decimal.Decimal `db:"tokens" json:"-"`
+	USDAmount   decimal.Decimal `db:"usd_amount" json:"-"`
+	BlockNumber uint64          `db:"block_number" json:"-"`
+	BlockHash   string          `db:"block_hash" json:"blockhash"`
+	BlockTime   time.Time       `db:"block_time" json:"-"`
 }
 
 func GetContext(erc20Json, saleParamJson string) (*Context, error) {

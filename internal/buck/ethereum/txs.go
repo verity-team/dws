@@ -12,7 +12,7 @@ import (
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
 	"github.com/verity-team/dws/api"
-	"github.com/verity-team/dws/internal/buck"
+	"github.com/verity-team/dws/internal/buck/db"
 	"github.com/verity-team/dws/internal/common"
 )
 
@@ -23,33 +23,7 @@ type EthGetBlockByNumberRequest struct {
 	ID      int           `json:"id"`
 }
 
-type Block struct {
-	Hash         string        `db:"block_hash" json:"hash"`
-	Number       uint64        `db:"block_number" json:"-"`
-	Timestamp    time.Time     `db:"block_time" json:"-"`
-	Transactions []Transaction `db:"-" json:"transactions"`
-}
-
-type Transaction struct {
-	Hash        string          `db:"tx_hash" json:"hash"`
-	From        string          `db:"address" json:"from"`
-	To          string          `db:"-" json:"to"`
-	Value       string          `db:"amount" json:"value"`
-	Gas         string          `db:"-" json:"gas"`
-	Nonce       string          `db:"-" json:"nonce"`
-	Input       string          `db:"-" json:"input"`
-	Type        string          `db:"-" json:"type"`
-	Status      string          `db:"status" json:"-"`
-	Asset       string          `db:"asset" json:"-"`
-	Price       string          `db:"price" json:"-"`
-	Tokens      decimal.Decimal `db:"tokens" json:"-"`
-	USDAmount   decimal.Decimal `db:"usd_amount" json:"-"`
-	BlockNumber uint64          `db:"block_number" json:"-"`
-	BlockHash   string          `db:"block_hash" json:"blockhash"`
-	BlockTime   time.Time       `db:"block_time" json:"-"`
-}
-
-func GetTransactions(ctxt buck.Context, blockNumber uint64) ([]Transaction, error) {
+func GetTransactions(ctxt common.Context, blockNumber uint64) ([]common.Transaction, error) {
 	request := EthGetBlockByNumberRequest{
 		JsonRPC: "2.0",
 		Method:  "eth_getBlockByNumber",
@@ -109,8 +83,8 @@ func GetTransactions(ctxt buck.Context, blockNumber uint64) ([]Transaction, erro
 	return result, nil
 }
 
-func filterTransactions(ctxt buck.Context, b Block) ([]Transaction, error) {
-	result := make([]Transaction, 0)
+func filterTransactions(ctxt common.Context, b common.Block) ([]common.Transaction, error) {
+	result := make([]common.Transaction, 0)
 	for _, tx := range b.Transactions {
 		var txBelongsToUs bool
 		if tx.Input == "0x" {
@@ -122,10 +96,10 @@ func filterTransactions(ctxt buck.Context, b Block) ([]Transaction, error) {
 			tx.Asset = "eth"
 			amount, err := common.HexStringToDecimal(tx.Value)
 			if err != nil {
+				err = fmt.Errorf("failed to process ETH tx '%s'", tx.Hash)
 				log.Error(err)
+				db.PersistFailedTx(ctxt.DB, b, tx)
 				continue
-				// TODO: log these failed/malformed ETH transfers
-				// to the database -- they need to be processed by a human
 			}
 			tx.Value = amount.Shift(-18).StringFixed(8)
 			txBelongsToUs = true
@@ -138,10 +112,10 @@ func filterTransactions(ctxt buck.Context, b Block) ([]Transaction, error) {
 				// yes, actual receiver and amount are encoded in the input string
 				receiver, amount, err := parseInputData(tx.Input)
 				if err != nil {
+					err = fmt.Errorf("failed to process ERC-20 tx '%s'", tx.Hash)
 					log.Error(err)
+					db.PersistFailedTx(ctxt.DB, b, tx)
 					continue
-					// TODO: log these failed/malformed stable coin transfers
-					// to the database -- they need to be processed by a human
 				}
 				// is this a stable coin tx to the receiving address?
 				if strings.ToLower(receiver) != ctxt.ReceivingAddr {
@@ -163,9 +137,9 @@ func filterTransactions(ctxt buck.Context, b Block) ([]Transaction, error) {
 	return result, nil
 }
 
-func parseBlock(body []byte) (*Block, error) {
+func parseBlock(body []byte) (*common.Block, error) {
 	type pblock struct {
-		Block
+		common.Block
 		HexSeconds string `json:"timestamp"`
 		HexNumber  string `json:"number"`
 	}
@@ -187,7 +161,7 @@ func parseBlock(body []byte) (*Block, error) {
 		return nil, err
 	}
 	ts := time.Unix(seconds.IntPart(), 0)
-	result := Block{
+	result := common.Block{
 		Hash:         resp.Block.Hash,
 		Number:       uint64(number.IntPart()),
 		Transactions: resp.Block.Transactions,
@@ -196,7 +170,7 @@ func parseBlock(body []byte) (*Block, error) {
 	return &result, nil
 }
 
-func markFailedTxs(ctxt buck.Context, txs []Transaction) error {
+func markFailedTxs(ctxt common.Context, txs []common.Transaction) error {
 	// check whether any of the _filtered_ transactions have failed
 	for _, tx := range txs {
 		rcpt, err := GetTransactionReceipt(ctxt.ETHRPCURL, tx.Hash)
