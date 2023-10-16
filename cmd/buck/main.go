@@ -106,7 +106,7 @@ func monitorETH(ctxt common.Context) error {
 	}
 
 	if latest <= 0 {
-		// no valid value in the database?
+		// no valid latest block value in the database?
 		// process the current block
 		latest = bn
 	}
@@ -117,11 +117,18 @@ func monitorETH(ctxt common.Context) error {
 			log.Error(err)
 			return err
 		}
-		log.Infof("block %d: %d Transactions", i, len(txs))
+		log.Infof("block %d: %d filtered transactions", i, len(txs))
 		if len(txs) == 0 {
 			continue
 		}
-		err = db.PersistTxs(ctxt, i, txs)
+		// get ETH price at the time the block was published
+		ethPrice, err := common.GetETHPrice(ctxt.DB, txs[0].BlockTime)
+		if err != nil {
+			log.Error(err)
+			return err
+		}
+		log.Infof("eth price: %s", ethPrice)
+		err = db.PersistTxs(ctxt, i, ethPrice, txs)
 		if err != nil {
 			log.Error(err)
 			return err

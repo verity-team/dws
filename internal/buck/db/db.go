@@ -69,7 +69,7 @@ func SetLastBlock(dbh *sqlx.DB, chain string, l Label, lbn uint64) error {
 	return nil
 }
 
-func PersistTxs(ctxt common.Context, bn uint64, txs []common.Transaction) error {
+func PersistTxs(ctxt common.Context, bn uint64, ethPrice decimal.Decimal, txs []common.Transaction) error {
 	if len(txs) == 0 {
 		return nil
 	}
@@ -81,12 +81,6 @@ func PersistTxs(ctxt common.Context, bn uint64, txs []common.Transaction) error 
 		return err
 	}
 	log.Infof("token price: %s", tokenPrice)
-	// get ETH price
-	ethPrice, err := common.GetETHPrice(ctxt.DB)
-	if err != nil {
-		return err
-	}
-	log.Infof("eth price: %s", ethPrice)
 
 	// start transaction
 	dtx, err := ctxt.DB.Beginx()
@@ -121,7 +115,7 @@ func PersistTxs(ctxt common.Context, bn uint64, txs []common.Transaction) error 
 	if err != nil {
 		return err
 	}
-	log.Infof("updated latest block to %d", bn)
+	log.Infof("updated latest eth block to %d", bn)
 
 	return nil
 }
