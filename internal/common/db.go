@@ -37,8 +37,8 @@ func GetETHPrice(db *sqlx.DB, ts time.Time) (decimal.Decimal, error) {
 		SELECT price
 		FROM price
 			WHERE asset = 'eth'
-			  AND created_at >= $1::timestamp AT TIME ZONE 'UTC' - INTERVAL '2 minutes'
-			  AND created_at <= $1::timestamp AT TIME ZONE 'UTC' + INTERVAL '2 minutes'
+			  AND created_at >= $1::timestamp AT TIME ZONE 'UTC' - INTERVAL '1.5 minutes'
+			  AND created_at <= $1::timestamp AT TIME ZONE 'UTC' + INTERVAL '1.5 minutes'
 			ORDER BY ABS(EXTRACT(EPOCH FROM (created_at - $1::timestamp AT TIME ZONE 'UTC'))) ASC
 			LIMIT 1
 		`
