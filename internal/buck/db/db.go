@@ -34,8 +34,7 @@ func GetLastBlock(dbh *sqlx.DB, chain string, l Label) (uint64, error) {
 		result uint64
 	)
 	q = `
-		SELECT
-			value
+		SELECT value
 		FROM last_block
 		WHERE chain=$1 AND label=$2
 		`
@@ -56,8 +55,9 @@ func SetLastBlock(dbh *sqlx.DB, chain string, l Label, lbn uint64) error {
 	)
 	q = `
 		INSERT INTO last_block(chain, label, value) VALUES($1, $2, $3)
-		ON CONFLICT (chain, value)
+		ON CONFLICT (chain, label)
 		DO UPDATE SET value = $3
+		WHERE last_block.chain=$1 and last_block.label = $2
 	`
 	_, err = dbh.Exec(q, chain, l.String(), lbn)
 	if err != nil {
@@ -127,8 +127,9 @@ func updateLastBlock(dbt *sqlx.Tx, chain string, l Label, lbn uint64) error {
 	)
 	q = `
 		INSERT INTO last_block(chain, label, value) VALUES($1, $2, $3)
-		ON CONFLICT (chain, value)
+		ON CONFLICT (chain, label)
 		DO UPDATE SET value = $3
+		WHERE last_block.chain=$1 and last_block.label = $2
 	`
 	_, err = dbt.Exec(q, chain, l.String(), lbn)
 	if err != nil {

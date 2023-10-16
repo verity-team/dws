@@ -71,26 +71,37 @@ func main() {
 	log.Infof("erc-20 data: %v", ctxt.StableCoins)
 	log.Infof("sale params: %v", ctxt.SaleParams)
 
-	sbn := flag.Int("sbn", 0, "start processing with this block number")
+	lbn := flag.Int("set-latest", 0, "set latest ETH block number")
+	fbn := flag.Int("set-finalized", 0, "set last finalized ETH block number")
+	monitorLatest := flag.Bool("monitor-latest", false, "monitor latest ETH blocks")
 	flag.Parse()
 
-	if *sbn > 0 {
-		err = db.SetLastBlock(dbh, "eth", db.Latest, uint64(*sbn))
+	if *lbn > 0 {
+		err = db.SetLastBlock(dbh, "eth", db.Latest, uint64(*lbn))
+		if err != nil {
+			log.Fatal(err)
+		}
+		os.Exit(0)
+	}
+	if *fbn > 0 {
+		err = db.SetLastBlock(dbh, "eth", db.Finalized, uint64(*fbn))
 		if err != nil {
 			log.Fatal(err)
 		}
 		os.Exit(0)
 	}
 
-	s := gocron.NewScheduler(time.UTC)
-	_, err = s.Every("1m").Do(monitorETH, ctxt)
-	if err != nil {
-		log.Fatal(err)
+	if *monitorLatest {
+		s := gocron.NewScheduler(time.UTC)
+		_, err = s.Every("1m").Do(monitorLatestETH, ctxt)
+		if err != nil {
+			log.Fatal(err)
+		}
+		s.StartBlocking()
 	}
-	s.StartBlocking()
 }
 
-func monitorETH(ctxt common.Context) error {
+func monitorLatestETH(ctxt common.Context) error {
 	// most recent ETH block published
 	bn, err := ethereum.GetBlockNumber(ctxt.ETHRPCURL)
 	if err != nil {
