@@ -75,7 +75,7 @@ func main() {
 	flag.Parse()
 
 	if *sbn > 0 {
-		err = db.SetLastBlock(dbh, "eth", uint64(*sbn))
+		err = db.SetLastBlock(dbh, "eth", "latest", uint64(*sbn))
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -99,19 +99,19 @@ func monitorETH(ctxt common.Context) error {
 	}
 
 	// number of last block that was processed
-	lbn, err := db.GetLastBlock(ctxt.DB, "eth")
+	latest, _, err := db.GetLastBlock(ctxt.DB, "eth")
 	if err != nil {
 		log.Error(err)
 		return err
 	}
 
-	if lbn <= 0 {
+	if latest <= 0 {
 		// no valid value in the database?
 		// process the current block
-		lbn = bn
+		latest = bn
 	}
 
-	for i := lbn + 1; i <= bn; i++ {
+	for i := latest + 1; i <= bn; i++ {
 		txs, err := ethereum.GetTransactions(ctxt, i)
 		if err != nil {
 			log.Error(err)

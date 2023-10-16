@@ -68,7 +68,8 @@ DROP TABLE IF EXISTS last_block;
 CREATE TABLE last_block (
     id BIGSERIAL PRIMARY KEY,
     chain VARCHAR(16) NOT NULL UNIQUE,
-    last_block BIGINT NOT NULL,
+    latest BIGINT NOT NULL,
+    finalized BIGINT NOT NULL,
 
     modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
     created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())

@@ -11,33 +11,42 @@ import (
 	"github.com/verity-team/dws/internal/common"
 )
 
-func GetLastBlock(dbh *sqlx.DB, chain string) (uint64, error) {
+func GetLastBlock(dbh *sqlx.DB, chain string) (uint64, uint64, error) {
 	q1 := `
 		SELECT
-			last_block
+			latest, finalized
 		FROM last_block
 		WHERE chain=$1
 		`
-	var result uint64
+	var result []uint64
 	err := dbh.Select(&result, q1, chain)
 	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
 		err = fmt.Errorf("failed to fetch last block for %s, %v", chain, err)
 		log.Error(err)
-		return 0, err
+		return 0, 0, err
 	}
 
-	return result, nil
+	return result[0], result[1], nil
 }
 
-func SetLastBlock(dbh *sqlx.DB, chain string, sbn uint64) error {
-	q1 := `
-		INSERT INTO last_block(chain, last_block) VALUES($1, $2)
+func SetLastBlock(dbh *sqlx.DB, chain, label string, lbn uint64) error {
+	var (
+		err error
+		q   string
+	)
+	if label != "latest" && label != "finalized" {
+		err = fmt.Errorf("invalid label ('%s'), must be one of: latest, finalized", label)
+		log.Error(err)
+		return err
+	}
+	q = fmt.Sprintf(`
+		INSERT INTO last_block(chain, %s) VALUES($1, $2)
 		ON CONFLICT (chain)
-		DO UPDATE SET last_block = $2
-		`
-	_, err := dbh.Exec(q1, chain, sbn)
+		DO UPDATE SET %s = $2
+	`, label, label)
+	_, err = dbh.Exec(q, chain, lbn)
 	if err != nil {
-		err = fmt.Errorf("failed to set last block for %s, %v", chain, err)
+		err = fmt.Errorf("failed to set %s last block for %s, %v", label, chain, err)
 		log.Error(err)
 		return err
 	}
@@ -93,37 +102,33 @@ func PersistTxs(ctxt common.Context, bn uint64, txs []common.Transaction) error 
 		}
 	}
 
-	tokens, newTokens, err := updateDonationData(dtx, ctxt, txs)
+	err = updateLastBlock(dtx, "eth", "latest", bn)
 	if err != nil {
 		return err
 	}
-	log.Infof("tokens issued - before: %d, now %d", tokens.IntPart(), newTokens.IntPart())
-	weShouldUpdate, newPrice := doWeNeedToUpdatePrice(ctxt, tokens, newTokens)
-	if weShouldUpdate {
-		err = updateTokenPrice(dtx, newPrice)
-		if err != nil {
-			return err
-		}
-		log.Infof("switched to new token price %s", newPrice.StringFixed(5))
-	}
-	err = updateLastBlock(dtx, "eth", bn)
-	if err != nil {
-		return err
-	}
-	log.Infof("updated last block to %d", bn)
+	log.Infof("updated latest block to %d", bn)
 
 	return nil
 }
 
-func updateLastBlock(dtx *sqlx.Tx, chain string, sbn uint64) error {
-	q1 := `
-		INSERT INTO last_block(chain, last_block) VALUES($1, $2)
+func updateLastBlock(dbt *sqlx.Tx, chain, label string, lbn uint64) error {
+	var (
+		err error
+		q   string
+	)
+	if label != "latest" && label != "finalized" {
+		err = fmt.Errorf("invalid label ('%s'), must be one of: latest, finalized", label)
+		log.Error(err)
+		return err
+	}
+	q = fmt.Sprintf(`
+		INSERT INTO last_block(chain, %s) VALUES($1, $2)
 		ON CONFLICT (chain)
-		DO UPDATE SET last_block = $2
-		`
-	_, err := dtx.Exec(q1, chain, sbn)
+		DO UPDATE SET %s = $2
+	`, label, label)
+	_, err = dbt.Exec(q, chain, lbn)
 	if err != nil {
-		err = fmt.Errorf("failed to update last block for %s, %v", chain, err)
+		err = fmt.Errorf("failed to set %s last block for %s, %v", label, chain, err)
 		log.Error(err)
 		return err
 	}

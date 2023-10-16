@@ -98,7 +98,10 @@ func filterTransactions(ctxt common.Context, b common.Block) ([]common.Transacti
 			if err != nil {
 				err = fmt.Errorf("failed to process ETH tx '%s'", tx.Hash)
 				log.Error(err)
-				db.PersistFailedTx(ctxt.DB, b, tx)
+				err = db.PersistFailedTx(ctxt.DB, b, tx)
+				if err != nil {
+					log.Error(err)
+				}
 				continue
 			}
 			tx.Value = amount.Shift(-18).StringFixed(8)
@@ -114,7 +117,10 @@ func filterTransactions(ctxt common.Context, b common.Block) ([]common.Transacti
 				if err != nil {
 					err = fmt.Errorf("failed to process ERC-20 tx '%s'", tx.Hash)
 					log.Error(err)
-					db.PersistFailedTx(ctxt.DB, b, tx)
+					err = db.PersistFailedTx(ctxt.DB, b, tx)
+					if err != nil {
+						log.Error(err)
+					}
 					continue
 				}
 				// is this a stable coin tx to the receiving address?
