@@ -96,10 +96,11 @@ func (suite *TxsSuite) TestLinkTxSuccess() {
 	from := "0x379738c60f658601Be79e267e79cC38cEA07c8f2"
 	to := "0x779877A7B0D9E8603169DdbD7836e478b4624789"
 	txHash := "0xf270a01e1ffa619b5262df30dc93d5ea1cf4bff773d6494460a1755abae43989"
-	assert.Equal(suite.T(), input, block.Transactions[77].Input)
-	assert.Equal(suite.T(), strings.ToLower(from), strings.ToLower(block.Transactions[77].From))
-	assert.Equal(suite.T(), strings.ToLower(to), strings.ToLower(block.Transactions[77].To))
-	assert.Equal(suite.T(), strings.ToLower(txHash), strings.ToLower(block.Transactions[77].Hash))
+	tx := block.Transactions[77]
+	assert.Equal(suite.T(), input, tx.Input)
+	assert.Equal(suite.T(), strings.ToLower(from), strings.ToLower(tx.From))
+	assert.Equal(suite.T(), strings.ToLower(to), strings.ToLower(tx.To))
+	assert.Equal(suite.T(), strings.ToLower(txHash), strings.ToLower(tx.Hash))
 }
 
 func (suite *TxsSuite) TestInputData() {
@@ -132,7 +133,9 @@ func (suite *TxsSuite) TestERC20Tx() {
 	assert.Equal(suite.T(), 1, len(txs))
 	assert.Equal(suite.T(), hash, txs[0].Hash)
 	assert.Equal(suite.T(), block.Hash, txs[0].BlockHash)
+	assert.Equal(suite.T(), block.Number, txs[0].BlockNumber)
 	assert.Equal(suite.T(), "1.210000", txs[0].Value)
+	assert.Equal(suite.T(), "2023-10-11T16:04:00Z", txs[0].BlockTime.Format(time.RFC3339))
 }
 
 func (suite *TxsSuite) TestETHTx() {
@@ -156,7 +159,9 @@ func (suite *TxsSuite) TestETHTx() {
 	assert.Equal(suite.T(), 1, len(txs))
 	assert.Equal(suite.T(), hash, txs[0].Hash)
 	assert.Equal(suite.T(), block.Hash, txs[0].BlockHash)
+	assert.Equal(suite.T(), block.Number, txs[0].BlockNumber)
 	assert.Equal(suite.T(), "0.10000000", txs[0].Value)
+	assert.Equal(suite.T(), "2023-10-11T16:04:00Z", txs[0].BlockTime.Format(time.RFC3339))
 }
 
 func TestTxsSuite(t *testing.T) {
