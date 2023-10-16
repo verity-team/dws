@@ -45,7 +45,7 @@ func TestParseInputData(t *testing.T) {
 			input:          "0xa9059cbb000000000000000000000000865a1f30b979e4bf3ab30562daee05f917ec0527000000000000000000000000000000000000000000000000invalidamount000",
 			expectedAddr:   "",
 			expectedAmount: decimal.Zero,
-			expectedError:  "failed to convert amount to uint64",
+			expectedError:  "failed to convert amount (invalidamount000) to decimal",
 		},
 	}
 

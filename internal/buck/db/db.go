@@ -38,7 +38,7 @@ func GetLastBlock(dbh *sqlx.DB, chain string, l Label) (uint64, error) {
 		FROM last_block
 		WHERE chain=$1 AND label=$2
 		`
-	err = dbh.Select(&result, q, chain, l.String())
+	err = dbh.Get(&result, q, chain, l.String())
 	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
 		err = fmt.Errorf("failed to fetch last block for %s/%s, %v", chain, l.String(), err)
 		log.Error(err)
@@ -70,9 +70,6 @@ func SetLastBlock(dbh *sqlx.DB, chain string, l Label, lbn uint64) error {
 }
 
 func PersistTxs(ctxt common.Context, bn uint64, ethPrice decimal.Decimal, txs []common.Transaction) error {
-	if len(txs) == 0 {
-		return nil
-	}
 	var err error
 
 	// get token price
@@ -142,7 +139,7 @@ func updateLastBlock(dbt *sqlx.Tx, chain string, l Label, lbn uint64) error {
 }
 
 func persistTx(dtx *sqlx.Tx, tx common.Transaction) error {
-	ethQ := `
+	q := `
 		INSERT INTO donation(
 			address, amount, usd_amount, asset, tokens, price, tx_hash, status,
 			block_number, block_hash, block_time)
@@ -151,19 +148,6 @@ func persistTx(dtx *sqlx.Tx, tx common.Transaction) error {
 			:status, :block_number, :block_hash, :block_time)
 		ON CONFLICT (tx_hash) DO NOTHING
 		`
-	usdxQ := `
-		INSERT INTO donation(
-			address, amount, asset, tokens, price, tx_hash, status, block_number,
-			block_hash, block_time)
-		VALUES(
-			:address, :amount, :asset, :tokens, :price, :tx_hash, :status,
-			:block_number, :block_hash, :block_time)
-		ON CONFLICT (tx_hash) DO NOTHING
-		`
-	var q string = ethQ
-	if tx.Asset != "eth" {
-		q = usdxQ
-	}
 	_, err := dtx.NamedExec(q, tx)
 	if err != nil {
 		err = fmt.Errorf("failed to insert donation for %s, %v", tx.Hash, err)
@@ -190,7 +174,7 @@ func calcTokens(tx common.Transaction, tokenPrice, ethPrice decimal.Decimal) (de
 		return usdAmount.Div(tokenPrice).Ceil(), usdAmount, nil
 	}
 	// amount is already denominated in USD
-	return amount.Div(tokenPrice).Ceil(), decimal.Zero, nil
+	return amount.Div(tokenPrice).Ceil(), amount, nil
 }
 
 func getTokenPrice(ctxt common.Context) (decimal.Decimal, error) {
@@ -211,7 +195,7 @@ func getTokenPrice(ctxt common.Context) (decimal.Decimal, error) {
 		LIMIT 1
 		`
 	var result decimal.Decimal
-	err := ctxt.DB.Select(&result, q1)
+	err := ctxt.DB.Get(&result, q1)
 	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
 		// db error -> connection? is borked?
 		err = fmt.Errorf("failed to fetch current token price, %v", err)

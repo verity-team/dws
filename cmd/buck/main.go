@@ -54,8 +54,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	ctxt.ReceivingAddr = daddr
-	ctxt.ETHRPCURL = strings.ToLower(url)
+	ctxt.ReceivingAddr = strings.ToLower(daddr)
+	ctxt.ETHRPCURL = url
+	blockStorage, present := os.LookupEnv("DWS_BLOCK_STORAGE")
+	if present {
+		ctxt.BlockStorage = blockStorage
+	}
 
 	dsn := getDSN()
 	dbh, err := sqlx.Open("postgres", dsn)
@@ -93,7 +97,7 @@ func main() {
 
 	if *monitorLatest {
 		s := gocron.NewScheduler(time.UTC)
-		_, err = s.Every("1m").Do(monitorLatestETH, ctxt)
+		_, err = s.Every("1m").Do(monitorLatestETH, *ctxt)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -103,11 +107,12 @@ func main() {
 
 func monitorLatestETH(ctxt common.Context) error {
 	// most recent ETH block published
-	bn, err := ethereum.GetBlockNumber(ctxt.ETHRPCURL)
+	lbn, err := ethereum.GetBlockNumber(ctxt.ETHRPCURL)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
+	log.Infof("===>> tip of the ETH chain: %d", lbn)
 
 	// number of last block that was processed
 	latest, err := db.GetLastBlock(ctxt.DB, "eth", db.Latest)
@@ -115,14 +120,18 @@ func monitorLatestETH(ctxt common.Context) error {
 		log.Error(err)
 		return err
 	}
+	log.Infof("latest block processed (from db): %d", latest)
 
+	var startBlock uint64
 	if latest <= 0 {
 		// no valid latest block value in the database?
 		// process the current block
-		latest = bn
+		startBlock = lbn
+	} else {
+		startBlock = latest + 1
 	}
 
-	for i := latest + 1; i <= bn; i++ {
+	for i := startBlock; i <= lbn; i++ {
 		txs, err := ethereum.GetTransactions(ctxt, i)
 		if err != nil {
 			log.Error(err)
@@ -130,12 +139,18 @@ func monitorLatestETH(ctxt common.Context) error {
 		}
 		log.Infof("block %d: %d filtered transactions", i, len(txs))
 		if len(txs) == 0 {
+			err = db.SetLastBlock(ctxt.DB, "eth", db.Latest, i)
+			if err != nil {
+				log.Error(err)
+				return err
+			}
 			continue
 		}
+
+		// we only get the ETH price if we need to persist transactions
 		// get ETH price at the time the block was published
 		ethPrice, err := common.GetETHPrice(ctxt.DB, txs[0].BlockTime)
 		if err != nil {
-			log.Error(err)
 			return err
 		}
 		log.Infof("eth price: %s", ethPrice)

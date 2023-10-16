@@ -29,6 +29,7 @@ type Context struct {
 	ReceivingAddr string
 	ETHRPCURL     string
 	DB            *sqlx.DB
+	BlockStorage  string
 }
 
 type Block struct {

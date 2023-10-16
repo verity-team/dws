@@ -33,12 +33,14 @@ func GetLatestETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 func GetETHPrice(db *sqlx.DB, ts time.Time) (decimal.Decimal, error) {
 	// ethereum price
 	q := `
+
 		SELECT price
 		FROM price
-		WHERE asset = 'eth'
-		  AND created_at <= $1
-		ORDER BY created_at DESC
-		LIMIT 1
+			WHERE asset = 'eth'
+			  AND created_at >= $1::timestamp AT TIME ZONE 'UTC' - INTERVAL '2 minutes'
+			  AND created_at <= $1::timestamp AT TIME ZONE 'UTC' + INTERVAL '2 minutes'
+			ORDER BY ABS(EXTRACT(EPOCH FROM (created_at - $1::timestamp AT TIME ZONE 'UTC'))) ASC
+			LIMIT 1
 		`
 	var ethp decimal.Decimal
 	err := db.Get(&ethp, q, ts)
