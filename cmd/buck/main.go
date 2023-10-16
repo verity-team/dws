@@ -71,19 +71,19 @@ func main() {
 	log.Infof("erc-20 data: %v", ctxt.StableCoins)
 	log.Infof("sale params: %v", ctxt.SaleParams)
 
-	lbn := flag.Int("set-latest", 0, "set latest ETH block number")
-	fbn := flag.Int("set-finalized", 0, "set last finalized ETH block number")
+	lbn := flag.Int("set-latest", -1, "set latest ETH block number")
+	fbn := flag.Int("set-finalized", -1, "set last finalized ETH block number")
 	monitorLatest := flag.Bool("monitor-latest", false, "monitor latest ETH blocks")
 	flag.Parse()
 
-	if *lbn > 0 {
+	if *lbn >= 0 {
 		err = db.SetLastBlock(dbh, "eth", db.Latest, uint64(*lbn))
 		if err != nil {
 			log.Fatal(err)
 		}
 		os.Exit(0)
 	}
-	if *fbn > 0 {
+	if *fbn >= 0 {
 		err = db.SetLastBlock(dbh, "eth", db.Finalized, uint64(*fbn))
 		if err != nil {
 			log.Fatal(err)
