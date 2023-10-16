@@ -2,6 +2,7 @@ package common
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/shopspring/decimal"
@@ -9,7 +10,7 @@ import (
 	"github.com/verity-team/dws/api"
 )
 
-func GetETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
+func GetLatestETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 	// ethereum price
 	q1 := `
 		SELECT price FROM price
@@ -23,6 +24,28 @@ func GetETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 	err := db.Get(&ethp, q1)
 	if err != nil {
 		err = fmt.Errorf("failed to fetch an ETH price that is newer than 3 minutes, %v", err)
+		log.Error(err)
+		return decimal.Zero, err
+	}
+	return ethp, nil
+}
+
+func GetETHPrice(db *sqlx.DB, ts time.Time) (decimal.Decimal, error) {
+	// ethereum price
+	q := `
+
+		SELECT price
+		FROM price
+			WHERE asset = 'eth'
+			  AND created_at >= $1::timestamp AT TIME ZONE 'UTC' - INTERVAL '2 minutes'
+			  AND created_at <= $1::timestamp AT TIME ZONE 'UTC' + INTERVAL '2 minutes'
+			ORDER BY ABS(EXTRACT(EPOCH FROM (created_at - $1::timestamp AT TIME ZONE 'UTC'))) ASC
+			LIMIT 1
+		`
+	var ethp decimal.Decimal
+	err := db.Get(&ethp, q, ts)
+	if err != nil {
+		err = fmt.Errorf("failed to fetch ETH price for time %v, %v", ts, err)
 		log.Error(err)
 		return decimal.Zero, err
 	}

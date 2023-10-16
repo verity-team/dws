@@ -67,11 +67,14 @@ INSERT INTO price(asset, price) VALUES('truth', 0.001);
 DROP TABLE IF EXISTS last_block;
 CREATE TABLE last_block (
     id BIGSERIAL PRIMARY KEY,
-    chain VARCHAR(16) NOT NULL UNIQUE,
-    last_block BIGINT NOT NULL,
+    chain VARCHAR(16) NOT NULL,
+    label VARCHAR(16) NOT NULL,
+    value BIGINT NOT NULL,
 
     modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
-    created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())
+    created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
+
+    UNIQUE(chain, label)
 );
 
 CREATE TRIGGER last_block_update_timestamp
@@ -79,7 +82,7 @@ BEFORE UPDATE ON last_block
 FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
 
-INSERT INTO last_block(chain, last_block) VALUES('eth', 18312345);
+INSERT INTO last_block(chain, label, value) VALUES('eth', 'latest', 18312345);
 
 --- donation_stats ----------------------------------------------------
 CREATE TYPE donation_stats_status_enum AS ENUM ('open', 'paused', 'closed');
@@ -144,7 +147,7 @@ DROP TABLE IF EXISTS failed_block;
 CREATE TABLE failed_block (
     id BIGSERIAL PRIMARY KEY,
     block_number BIGINT NOT NULL UNIQUE,
-    block_hash VARCHAR(66) NOT,
+    block_hash VARCHAR(66) NOT NULL,
     block_time TIMESTAMP NOT NULL,
 
     modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
@@ -160,9 +163,9 @@ DROP TABLE IF EXISTS failed_tx;
 CREATE TABLE failed_tx (
     id BIGSERIAL PRIMARY KEY,
     block_number BIGINT NOT NULL,
-    block_hash VARCHAR(66) NOT,
+    block_hash VARCHAR(66) NOT NULL,
     block_time TIMESTAMP NOT NULL,
-    tx_hash VARCHAR(66) NOT UNIQUE,
+    tx_hash VARCHAR(66) NOT NULL UNIQUE,
 
     modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
     created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())

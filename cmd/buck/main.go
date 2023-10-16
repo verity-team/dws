@@ -54,8 +54,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	ctxt.ReceivingAddr = daddr
-	ctxt.ETHRPCURL = strings.ToLower(url)
+	ctxt.ReceivingAddr = strings.ToLower(daddr)
+	ctxt.ETHRPCURL = url
+	blockStorage, present := os.LookupEnv("DWS_BLOCK_STORAGE")
+	if present {
+		ctxt.BlockStorage = blockStorage
+	}
 
 	dsn := getDSN()
 	dbh, err := sqlx.Open("postgres", dsn)
@@ -71,57 +75,86 @@ func main() {
 	log.Infof("erc-20 data: %v", ctxt.StableCoins)
 	log.Infof("sale params: %v", ctxt.SaleParams)
 
-	sbn := flag.Int("sbn", 0, "start processing with this block number")
+	lbn := flag.Int("set-latest", -1, "set latest ETH block number")
+	fbn := flag.Int("set-finalized", -1, "set last finalized ETH block number")
+	monitorLatest := flag.Bool("monitor-latest", false, "monitor latest ETH blocks")
 	flag.Parse()
 
-	if *sbn > 0 {
-		err = db.SetLastBlock(dbh, "eth", uint64(*sbn))
+	if *lbn >= 0 {
+		err = db.SetLastBlock(dbh, "eth", db.Latest, uint64(*lbn))
+		if err != nil {
+			log.Fatal(err)
+		}
+		os.Exit(0)
+	}
+	if *fbn >= 0 {
+		err = db.SetLastBlock(dbh, "eth", db.Finalized, uint64(*fbn))
 		if err != nil {
 			log.Fatal(err)
 		}
 		os.Exit(0)
 	}
 
-	s := gocron.NewScheduler(time.UTC)
-	_, err = s.Every("1m").Do(monitorETH, ctxt)
-	if err != nil {
-		log.Fatal(err)
+	if *monitorLatest {
+		s := gocron.NewScheduler(time.UTC)
+		_, err = s.Every("1m").Do(monitorLatestETH, *ctxt)
+		if err != nil {
+			log.Fatal(err)
+		}
+		s.StartBlocking()
 	}
-	s.StartBlocking()
 }
 
-func monitorETH(ctxt common.Context) error {
+func monitorLatestETH(ctxt common.Context) error {
 	// most recent ETH block published
-	bn, err := ethereum.GetBlockNumber(ctxt.ETHRPCURL)
+	lbn, err := ethereum.GetBlockNumber(ctxt.ETHRPCURL)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
+	log.Infof("===>> tip of the ETH chain: %d", lbn)
 
 	// number of last block that was processed
-	lbn, err := db.GetLastBlock(ctxt.DB, "eth")
+	latest, err := db.GetLastBlock(ctxt.DB, "eth", db.Latest)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
+	log.Infof("latest block processed (from db): %d", latest)
 
-	if lbn <= 0 {
-		// no valid value in the database?
+	var startBlock uint64
+	if latest <= 0 {
+		// no valid latest block value in the database?
 		// process the current block
-		lbn = bn
+		startBlock = lbn
+	} else {
+		startBlock = latest + 1
 	}
 
-	for i := lbn + 1; i <= bn; i++ {
+	for i := startBlock; i <= lbn; i++ {
 		txs, err := ethereum.GetTransactions(ctxt, i)
 		if err != nil {
 			log.Error(err)
 			return err
 		}
-		log.Infof("block %d: %d Transactions", i, len(txs))
+		log.Infof("block %d: %d filtered transactions", i, len(txs))
 		if len(txs) == 0 {
+			err = db.SetLastBlock(ctxt.DB, "eth", db.Latest, i)
+			if err != nil {
+				log.Error(err)
+				return err
+			}
 			continue
 		}
-		err = db.PersistTxs(ctxt, i, txs)
+
+		// we only get the ETH price if we need to persist transactions
+		// get ETH price at the time the block was published
+		ethPrice, err := common.GetETHPrice(ctxt.DB, txs[0].BlockTime)
+		if err != nil {
+			return err
+		}
+		log.Infof("eth price: %s", ethPrice)
+		err = db.PersistTxs(ctxt, i, ethPrice, txs)
 		if err != nil {
 			log.Error(err)
 			return err

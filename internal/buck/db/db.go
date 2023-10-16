@@ -7,21 +7,40 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
-	"github.com/verity-team/dws/api"
 	"github.com/verity-team/dws/internal/common"
 )
 
-func GetLastBlock(dbh *sqlx.DB, chain string) (uint64, error) {
-	q1 := `
-		SELECT
-			last_block
+type Label int
+
+const (
+	Latest Label = iota
+	Finalized
+)
+
+func (l Label) String() string {
+	switch l {
+	case Latest:
+		return "latest"
+	case Finalized:
+		return "finalized"
+	}
+	return "invalid label"
+}
+
+func GetLastBlock(dbh *sqlx.DB, chain string, l Label) (uint64, error) {
+	var (
+		err    error
+		q      string
+		result uint64
+	)
+	q = `
+		SELECT value
 		FROM last_block
-		WHERE chain=$1
+		WHERE chain=$1 AND label=$2
 		`
-	var result uint64
-	err := dbh.Select(&result, q1, chain)
+	err = dbh.Get(&result, q, chain, l.String())
 	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
-		err = fmt.Errorf("failed to fetch last block for %s, %v", chain, err)
+		err = fmt.Errorf("failed to fetch last block for %s/%s, %v", chain, l.String(), err)
 		log.Error(err)
 		return 0, err
 	}
@@ -29,15 +48,20 @@ func GetLastBlock(dbh *sqlx.DB, chain string) (uint64, error) {
 	return result, nil
 }
 
-func SetLastBlock(dbh *sqlx.DB, chain string, sbn uint64) error {
-	q1 := `
-		INSERT INTO last_block(chain, last_block) VALUES($1, $2)
-		ON CONFLICT (chain)
-		DO UPDATE SET last_block = $2
-		`
-	_, err := dbh.Exec(q1, chain, sbn)
+func SetLastBlock(dbh *sqlx.DB, chain string, l Label, lbn uint64) error {
+	var (
+		err error
+		q   string
+	)
+	q = `
+		INSERT INTO last_block(chain, label, value) VALUES($1, $2, $3)
+		ON CONFLICT (chain, label)
+		DO UPDATE SET value = $3
+		WHERE last_block.chain=$1 and last_block.label = $2
+	`
+	_, err = dbh.Exec(q, chain, l.String(), lbn)
 	if err != nil {
-		err = fmt.Errorf("failed to set last block for %s, %v", chain, err)
+		err = fmt.Errorf("failed to set last block for %s/%s, %v", l.String(), chain, err)
 		log.Error(err)
 		return err
 	}
@@ -45,10 +69,7 @@ func SetLastBlock(dbh *sqlx.DB, chain string, sbn uint64) error {
 	return nil
 }
 
-func PersistTxs(ctxt common.Context, bn uint64, txs []common.Transaction) error {
-	if len(txs) == 0 {
-		return nil
-	}
+func PersistTxs(ctxt common.Context, bn uint64, ethPrice decimal.Decimal, txs []common.Transaction) error {
 	var err error
 
 	// get token price
@@ -57,12 +78,6 @@ func PersistTxs(ctxt common.Context, bn uint64, txs []common.Transaction) error 
 		return err
 	}
 	log.Infof("token price: %s", tokenPrice)
-	// get ETH price
-	ethPrice, err := common.GetETHPrice(ctxt.DB)
-	if err != nil {
-		return err
-	}
-	log.Infof("eth price: %s", ethPrice)
 
 	// start transaction
 	dtx, err := ctxt.DB.Beginx()
@@ -93,37 +108,29 @@ func PersistTxs(ctxt common.Context, bn uint64, txs []common.Transaction) error 
 		}
 	}
 
-	tokens, newTokens, err := updateDonationData(dtx, ctxt, txs)
+	err = updateLastBlock(dtx, "eth", Latest, bn)
 	if err != nil {
 		return err
 	}
-	log.Infof("tokens issued - before: %d, now %d", tokens.IntPart(), newTokens.IntPart())
-	weShouldUpdate, newPrice := doWeNeedToUpdatePrice(ctxt, tokens, newTokens)
-	if weShouldUpdate {
-		err = updateTokenPrice(dtx, newPrice)
-		if err != nil {
-			return err
-		}
-		log.Infof("switched to new token price %s", newPrice.StringFixed(5))
-	}
-	err = updateLastBlock(dtx, "eth", bn)
-	if err != nil {
-		return err
-	}
-	log.Infof("updated last block to %d", bn)
+	log.Infof("updated latest eth block to %d", bn)
 
 	return nil
 }
 
-func updateLastBlock(dtx *sqlx.Tx, chain string, sbn uint64) error {
-	q1 := `
-		INSERT INTO last_block(chain, last_block) VALUES($1, $2)
-		ON CONFLICT (chain)
-		DO UPDATE SET last_block = $2
-		`
-	_, err := dtx.Exec(q1, chain, sbn)
+func updateLastBlock(dbt *sqlx.Tx, chain string, l Label, lbn uint64) error {
+	var (
+		err error
+		q   string
+	)
+	q = `
+		INSERT INTO last_block(chain, label, value) VALUES($1, $2, $3)
+		ON CONFLICT (chain, label)
+		DO UPDATE SET value = $3
+		WHERE last_block.chain=$1 and last_block.label = $2
+	`
+	_, err = dbt.Exec(q, chain, l.String(), lbn)
 	if err != nil {
-		err = fmt.Errorf("failed to update last block for %s, %v", chain, err)
+		err = fmt.Errorf("failed to set last block for %s/%s, %v", l.String(), chain, err)
 		log.Error(err)
 		return err
 	}
@@ -132,7 +139,7 @@ func updateLastBlock(dtx *sqlx.Tx, chain string, sbn uint64) error {
 }
 
 func persistTx(dtx *sqlx.Tx, tx common.Transaction) error {
-	ethQ := `
+	q := `
 		INSERT INTO donation(
 			address, amount, usd_amount, asset, tokens, price, tx_hash, status,
 			block_number, block_hash, block_time)
@@ -141,19 +148,6 @@ func persistTx(dtx *sqlx.Tx, tx common.Transaction) error {
 			:status, :block_number, :block_hash, :block_time)
 		ON CONFLICT (tx_hash) DO NOTHING
 		`
-	usdxQ := `
-		INSERT INTO donation(
-			address, amount, asset, tokens, price, tx_hash, status, block_number,
-			block_hash, block_time)
-		VALUES(
-			:address, :amount, :asset, :tokens, :price, :tx_hash, :status,
-			:block_number, :block_hash, :block_time)
-		ON CONFLICT (tx_hash) DO NOTHING
-		`
-	var q string = ethQ
-	if tx.Asset != "eth" {
-		q = usdxQ
-	}
 	_, err := dtx.NamedExec(q, tx)
 	if err != nil {
 		err = fmt.Errorf("failed to insert donation for %s, %v", tx.Hash, err)
@@ -162,101 +156,6 @@ func persistTx(dtx *sqlx.Tx, tx common.Transaction) error {
 	}
 
 	return nil
-}
-
-func updateDonationData(dtx *sqlx.Tx, ctxt common.Context, txs []common.Transaction) (decimal.Decimal, decimal.Decimal, error) {
-	if len(txs) == 0 {
-		return decimal.Zero, decimal.Zero, nil
-	}
-	total, tokens, err := common.GetDonationStats(ctxt.DB)
-	if err != nil {
-		return decimal.Zero, decimal.Zero, nil
-	}
-	var newTotal, newTokens decimal.Decimal
-	newTotal = total
-	newTokens = tokens
-	for _, tx := range txs {
-		if tx.Status == string(api.Failed) {
-			// skip failed transactions
-			continue
-		}
-		newTokens.Add(tx.Tokens)
-		if tx.Asset == "eth" {
-			newTotal.Add(tx.USDAmount)
-		} else {
-			amount, err := decimal.NewFromString(tx.Value)
-			if err != nil {
-				err = fmt.Errorf("invalid amount for tx %s, %v", tx.Hash, err)
-				log.Error(err)
-				continue
-			}
-			newTotal.Add(amount)
-		}
-	}
-	if newTotal.GreaterThan(total) || newTokens.GreaterThan(tokens) {
-		err = updateDonationStats(dtx, newTotal, newTokens)
-		if err != nil {
-			return decimal.Zero, decimal.Zero, nil
-		}
-	}
-	return tokens, newTokens, nil
-}
-
-func updateDonationStats(dtx *sqlx.Tx, newTotal, newTokens decimal.Decimal) error {
-	q1 := `
-		UPDATE donation_stats
-			SET total = $1, tokens = $2
-		`
-	_, err := dtx.Exec(q1, newTotal, newTokens.IntPart())
-	if err != nil {
-		err = fmt.Errorf("failed to update donation stats %v", err)
-		log.Error(err)
-		return err
-	}
-
-	return nil
-}
-
-func updateTokenPrice(dtx *sqlx.Tx, newTokenPrice decimal.Decimal) error {
-	q1 := `
-		WITH check_existing AS (
-			 SELECT 1
-			 FROM price
-			 WHERE asset = 'truth' AND price = $1
-			 LIMIT 1
-		)
-		INSERT INTO price (asset, price)
-		SELECT 'truth', $1
-		WHERE NOT EXISTS (SELECT 1 FROM check_existing)
-		RETURNING *;
-		`
-	_, err := dtx.Exec(q1, newTokenPrice.StringFixed(5))
-	if err != nil {
-		err = fmt.Errorf("failed to update token price %v", err)
-		log.Error(err)
-		return err
-	}
-
-	return nil
-}
-
-func doWeNeedToUpdatePrice(ctxt common.Context, tokens, newTokens decimal.Decimal) (bool, decimal.Decimal) {
-	// did we enter a new price range? do we need to update the price?
-	currentP := priceBucket(ctxt, tokens)
-	newP := priceBucket(ctxt, tokens)
-
-	return newP.GreaterThan(currentP), newP
-}
-
-func priceBucket(ctxt common.Context, tokens decimal.Decimal) decimal.Decimal {
-	// find the correct price given the number of tokens sold
-	for _, sp := range ctxt.SaleParams {
-		if tokens.LessThan(decimal.NewFromInt(int64(sp.Limit))) {
-			return sp.Price
-		}
-	}
-	// we fell through the loop, return the max price
-	return ctxt.SaleParams[len(ctxt.SaleParams)-1].Price
 }
 
 func calcTokens(tx common.Transaction, tokenPrice, ethPrice decimal.Decimal) (decimal.Decimal, decimal.Decimal, error) {
@@ -275,7 +174,7 @@ func calcTokens(tx common.Transaction, tokenPrice, ethPrice decimal.Decimal) (de
 		return usdAmount.Div(tokenPrice).Ceil(), usdAmount, nil
 	}
 	// amount is already denominated in USD
-	return amount.Div(tokenPrice).Ceil(), decimal.Zero, nil
+	return amount.Div(tokenPrice).Ceil(), amount, nil
 }
 
 func getTokenPrice(ctxt common.Context) (decimal.Decimal, error) {
@@ -296,7 +195,7 @@ func getTokenPrice(ctxt common.Context) (decimal.Decimal, error) {
 		LIMIT 1
 		`
 	var result decimal.Decimal
-	err := ctxt.DB.Select(&result, q1)
+	err := ctxt.DB.Get(&result, q1)
 	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
 		// db error -> connection? is borked?
 		err = fmt.Errorf("failed to fetch current token price, %v", err)

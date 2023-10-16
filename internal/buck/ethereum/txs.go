@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -27,7 +28,7 @@ func GetTransactions(ctxt common.Context, blockNumber uint64) ([]common.Transact
 	request := EthGetBlockByNumberRequest{
 		JsonRPC: "2.0",
 		Method:  "eth_getBlockByNumber",
-		Params:  []interface{}{blockNumber, true},
+		Params:  []interface{}{fmt.Sprintf("0x%x", blockNumber), true},
 		ID:      1,
 	}
 
@@ -40,6 +41,7 @@ func GetTransactions(ctxt common.Context, blockNumber uint64) ([]common.Transact
 		Timeout: MaxWaitInSeconds * time.Second,
 	}
 
+	log.Infof("** getting transactions for block %d", blockNumber)
 	resp, err := client.Post(ctxt.ETHRPCURL, "application/json", bytes.NewBuffer(requestBytes))
 	if err != nil {
 		err := fmt.Errorf("failed to request block #%d, %v", blockNumber, err)
@@ -61,6 +63,16 @@ func GetTransactions(ctxt common.Context, blockNumber uint64) ([]common.Transact
 		return nil, err
 	}
 
+	log.Infof("fetched block %d", blockNumber)
+
+	if ctxt.BlockStorage != "" {
+		fp := ctxt.BlockStorage + "/" + fmt.Sprintf("%d.json", blockNumber)
+		err = os.WriteFile(fp, body, 0644)
+		if err != nil {
+			log.Error(err)
+			return nil, err
+		}
+	}
 	block, err := parseBlock(body)
 	if err != nil {
 		err := fmt.Errorf("failed to parse block #%d, %v", blockNumber, err)
@@ -96,9 +108,12 @@ func filterTransactions(ctxt common.Context, b common.Block) ([]common.Transacti
 			tx.Asset = "eth"
 			amount, err := common.HexStringToDecimal(tx.Value)
 			if err != nil {
-				err = fmt.Errorf("failed to process ETH tx '%s'", tx.Hash)
+				err = fmt.Errorf("failed to process ETH tx '%s', %v", tx.Hash, err)
 				log.Error(err)
-				db.PersistFailedTx(ctxt.DB, b, tx)
+				err = db.PersistFailedTx(ctxt.DB, b, tx)
+				if err != nil {
+					log.Error(err)
+				}
 				continue
 			}
 			tx.Value = amount.Shift(-18).StringFixed(8)
@@ -112,9 +127,12 @@ func filterTransactions(ctxt common.Context, b common.Block) ([]common.Transacti
 				// yes, actual receiver and amount are encoded in the input string
 				receiver, amount, err := parseInputData(tx.Input)
 				if err != nil {
-					err = fmt.Errorf("failed to process ERC-20 tx '%s'", tx.Hash)
+					err = fmt.Errorf("failed to process ERC-20 tx '%s', %v", tx.Hash, err)
 					log.Error(err)
-					db.PersistFailedTx(ctxt.DB, b, tx)
+					err = db.PersistFailedTx(ctxt.DB, b, tx)
+					if err != nil {
+						log.Error(err)
+					}
 					continue
 				}
 				// is this a stable coin tx to the receiving address?
@@ -154,10 +172,12 @@ func parseBlock(body []byte) (*common.Block, error) {
 	}
 	seconds, err := common.HexStringToDecimal(resp.Block.HexSeconds)
 	if err != nil {
+		err = fmt.Errorf("failed to convert block timestamp, %v", err)
 		return nil, err
 	}
 	number, err := common.HexStringToDecimal(resp.Block.HexNumber)
 	if err != nil {
+		err = fmt.Errorf("failed to convert block number, %v", err)
 		return nil, err
 	}
 	ts := time.Unix(seconds.IntPart(), 0)
@@ -167,6 +187,7 @@ func parseBlock(body []byte) (*common.Block, error) {
 		Transactions: resp.Block.Transactions,
 		Timestamp:    ts.UTC(),
 	}
+	log.Infof("parsed block %d, %s -- %d transactions", result.Number, result.Hash, len(result.Transactions))
 	return &result, nil
 }
 
@@ -207,11 +228,23 @@ func parseInputData(input string) (string, decimal.Decimal, error) {
 	// Ensure receivingAddress is 40 characters long
 	receivingAddress = strings.Repeat("0", 40-len(receivingAddress)) + receivingAddress
 
-	// Extract the amount (next 32 bytes) and convert it to a uint64
-	amountHex := input[72:]
-	amount, err := common.HexStringToDecimal(amountHex)
+	var (
+		amount decimal.Decimal
+		err    error
+	)
+
+	// Extract the amount (next 32 bytes) and convert it to a decimal
+	// remove leading zeroes
+	amountHex := strings.TrimLeft(input[72:], "0")
+	// all zeroes, nothing left?
+	if amountHex == "" {
+		amount = decimal.Zero
+		err = nil
+	} else {
+		amount, err = common.HexStringToDecimal(amountHex)
+	}
 	if err != nil {
-		return "", decimal.Zero, fmt.Errorf("failed to convert amount to uint64")
+		return "", decimal.Zero, fmt.Errorf("failed to convert amount (%s) to decimal", amountHex)
 	}
 
 	return "0x" + receivingAddress, amount, nil

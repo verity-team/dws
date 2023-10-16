@@ -2,26 +2,22 @@ package common
 
 import (
 	"fmt"
-	"strconv"
+	"math/big"
 	"strings"
 
 	"github.com/shopspring/decimal"
 )
 
 func HexStringToDecimal(hexValue string) (decimal.Decimal, error) {
-	var (
-		amount int64
-		err    error
-	)
+	// Remove "0x" prefix if present
+	hexValue = strings.TrimPrefix(hexValue, "0x")
 	hexValue = strings.ToLower(hexValue)
-	if strings.HasPrefix(hexValue, "0x") {
-		amount, err = strconv.ParseInt(hexValue, 0, 64)
-	} else {
-		amount, err = strconv.ParseInt(hexValue, 16, 64)
-	}
-	if err != nil {
-		err := fmt.Errorf("failed to convert '%s' to int64, %v", hexValue, err)
+	bi := new(big.Int)
+	_, result := bi.SetString(hexValue, 16)
+
+	if !result {
+		err := fmt.Errorf("failed to convert '%s' to big.Int", hexValue)
 		return decimal.Zero, err
 	}
-	return decimal.NewFromInt(amount), nil
+	return decimal.NewFromBigInt(bi, 0), nil
 }
