@@ -46,6 +46,7 @@ type Transaction struct {
 	USDAmount   decimal.Decimal `db:"usd_amount" json:"-"`
 	BlockNumber uint64          `db:"block_number" json:"-"`
 	BlockHash   string          `db:"block_hash" json:"blockhash"`
+	BlockTime   time.Time       `db:"block_time" json:"-"`
 }
 
 func GetTransactions(ctxt buck.Context, blockNumber uint64) ([]Transaction, error) {
@@ -103,24 +104,23 @@ func GetTransactions(ctxt buck.Context, blockNumber uint64) ([]Transaction, erro
 func filterTransactions(ctxt buck.Context, b Block) ([]Transaction, error) {
 	result := make([]Transaction, 0)
 	for _, tx := range b.Transactions {
-		tx.BlockNumber = b.Number
-		tx.Status = string(api.Unconfirmed)
+		var txBelongsToUs bool
 		if tx.Input == "0x" {
 			// plain ETH tx -- only return txs that send ETH to the receiving
 			// address
-			if strings.ToLower(tx.To) == ctxt.ReceivingAddr {
-				tx.Asset = "eth"
-				amount, err := common.HexStringToDecimal(tx.Value)
-				if err != nil {
-					log.Error(err)
-					continue
-					// TODO: log these failed/malformed stable coin transfers
-					// to the database -- they need to be processed by a human
-				}
-				tx.Value = amount.Shift(-18).StringFixed(8)
-				result = append(result, tx)
+			if strings.ToLower(tx.To) != ctxt.ReceivingAddr {
 				continue
 			}
+			tx.Asset = "eth"
+			amount, err := common.HexStringToDecimal(tx.Value)
+			if err != nil {
+				log.Error(err)
+				continue
+				// TODO: log these failed/malformed stable coin transfers
+				// to the database -- they need to be processed by a human
+			}
+			tx.Value = amount.Shift(-18).StringFixed(8)
+			txBelongsToUs = true
 		}
 		// ERC-20 transfer?
 		if strings.HasPrefix(tx.Input, "0xa9059cbb") {
@@ -136,13 +136,20 @@ func filterTransactions(ctxt buck.Context, b Block) ([]Transaction, error) {
 					// to the database -- they need to be processed by a human
 				}
 				// is this a stable coin tx to the receiving address?
-				if strings.ToLower(receiver) == ctxt.ReceivingAddr {
-					tx.To = ctxt.ReceivingAddr
-					tx.Value = amount.Shift(-erc20.Scale).StringFixed(6)
-					tx.Asset = erc20.Asset
-					result = append(result, tx)
+				if strings.ToLower(receiver) != ctxt.ReceivingAddr {
+					continue
 				}
+				tx.To = ctxt.ReceivingAddr
+				tx.Value = amount.Shift(-erc20.Scale).StringFixed(6)
+				tx.Asset = erc20.Asset
+				txBelongsToUs = true
 			}
+		}
+		if txBelongsToUs {
+			tx.BlockNumber = b.Number
+			tx.BlockTime = b.Timestamp
+			tx.Status = string(api.Unconfirmed)
+			result = append(result, tx)
 		}
 	}
 	return result, nil
@@ -154,7 +161,6 @@ func parseBlock(body []byte) (*Block, error) {
 		HexSeconds string `json:"timestamp"`
 		HexNumber  string `json:"number"`
 	}
-	log.Infof("body length: %d", len(body))
 	type Response struct {
 		Block pblock `json:"result"`
 	}
@@ -179,7 +185,6 @@ func parseBlock(body []byte) (*Block, error) {
 		Transactions: resp.Block.Transactions,
 		Timestamp:    ts.UTC(),
 	}
-
 	return &result, nil
 }
 

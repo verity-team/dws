@@ -137,19 +137,19 @@ func persistTx(dtx *sqlx.Tx, tx ethereum.Transaction) error {
 	ethQ := `
 		INSERT INTO donation(
 			address, amount, usd_amount, asset, tokens, price, tx_hash, status,
-			block_number, block_hash)
+			block_number, block_hash, block_time)
 		VALUES(
 			:address, :amount, :usd_amount, :asset, :tokens, :price, :tx_hash,
-			:status, :block_number, :block_hash)
+			:status, :block_number, :block_hash, :block_time)
 		ON CONFLICT (tx_hash) DO NOTHING
 		`
 	usdxQ := `
 		INSERT INTO donation(
 			address, amount, asset, tokens, price, tx_hash, status, block_number,
-			block_hash)
+			block_hash, block_time)
 		VALUES(
 			:address, :amount, :asset, :tokens, :price, :tx_hash, :status,
-			:block_number, :block_hash)
+			:block_number, :block_hash, :block_time)
 		ON CONFLICT (tx_hash) DO NOTHING
 		`
 	var q string = ethQ
