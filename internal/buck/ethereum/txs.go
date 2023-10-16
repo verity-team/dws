@@ -44,21 +44,21 @@ func GetTransactions(ctxt common.Context, blockNumber uint64) ([]common.Transact
 	log.Infof("** getting transactions for block %d", blockNumber)
 	resp, err := client.Post(ctxt.ETHRPCURL, "application/json", bytes.NewBuffer(requestBytes))
 	if err != nil {
-		err := fmt.Errorf("failed to request block #%d, %v", blockNumber, err)
+		err = fmt.Errorf("failed to request block #%d, %v", blockNumber, err)
 		log.Error(err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		err := fmt.Errorf("failed to fetch block #%d, status code: %d, %v", blockNumber, resp.StatusCode, err)
+		err = fmt.Errorf("failed to fetch block #%d, status code: %d, %v", blockNumber, resp.StatusCode, err)
 		log.Error(err)
 		return nil, err
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		err := fmt.Errorf("failed to read block #%d, %v", blockNumber, err)
+		err = fmt.Errorf("failed to read block #%d, %v", blockNumber, err)
 		log.Error(err)
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func GetTransactions(ctxt common.Context, blockNumber uint64) ([]common.Transact
 	}
 	block, err := parseBlock(body)
 	if err != nil {
-		err := fmt.Errorf("failed to parse block #%d, %v", blockNumber, err)
+		err = fmt.Errorf("failed to parse block #%d, %v", blockNumber, err)
 		log.Error(err)
 		return nil, err
 	}

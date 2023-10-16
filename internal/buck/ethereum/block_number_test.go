@@ -33,7 +33,7 @@ func (suite *BlockNumberSuite) TestLatestBlockSuccess() {
 }
 
 func (suite *BlockNumberSuite) TestLatestFinalizedBlockSuccess() {
-	actual, err := parseLatestFinalizedBlock(suite.finalized)
+	actual, err := parseMaxFinalizedBlock(suite.finalized)
 	assert.Nil(suite.T(), err)
 	assert.Equal(suite.T(), uint64(4486885), actual)
 }
