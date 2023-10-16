@@ -121,23 +121,37 @@ FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
 CREATE INDEX ON user_stats (address);
 
---- eth_block ----------------------------------------------------
-CREATE TYPE eth_block_status_enum AS ENUM ('latest', 'safe', 'finalized');
-DROP TABLE IF EXISTS eth_block;
-CREATE TABLE eth_block (
+--- finalized_block ----------------------------------------------------
+DROP TABLE IF EXISTS finalized_block;
+CREATE TABLE finalized_block (
     id BIGSERIAL PRIMARY KEY,
     block_number BIGINT NOT NULL UNIQUE,
     block_hash VARCHAR(66) NOT NULL UNIQUE,
-    status eth_block_status_enum NOT NULL DEFAULT 'latest',
-    -- enough to keep ca. 300 tx hashes
-    tx_hashes VARCHAR(20099) NOT NULL,
-    block_ts TIMESTAMP NOT NULL,
+    -- enough to keep 400 tx hashes
+    tx_hashes VARCHAR(26799) NOT NULL,
+    block_time TIMESTAMP NOT NULL,
 
     modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
     created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())
 );
-CREATE TRIGGER eth_block_update_timestamp
-BEFORE UPDATE ON eth_block
+CREATE TRIGGER finalized_block_update_timestamp
+BEFORE UPDATE ON finalized_block
+FOR EACH ROW
+EXECUTE PROCEDURE trigger_update_modified_at();
+
+--- failed_block ----------------------------------------------------
+DROP TABLE IF EXISTS failed_block;
+CREATE TABLE failed_block (
+    id BIGSERIAL PRIMARY KEY,
+    block_number BIGINT NOT NULL UNIQUE,
+    block_hash VARCHAR(66) NOT,
+    block_time TIMESTAMP NOT NULL,
+
+    modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
+    created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())
+);
+CREATE TRIGGER failed_block_update_timestamp
+BEFORE UPDATE ON failed_block
 FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
 
