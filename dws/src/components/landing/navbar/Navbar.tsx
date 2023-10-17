@@ -1,6 +1,15 @@
 import Image from "next/image";
 import { ReactElement } from "react";
 import NavbarItem from "./NavbarItem";
+import NavbarDropdownItem, {
+  NavbarDropdownItemOption,
+} from "./NavbarDropdownItem";
+
+const aboutOptions: NavbarDropdownItemOption[] = [
+  { text: "Whitepaper", href: "/" },
+  { text: "Airdrop", href: "/" },
+  { text: "Contact", href: "/" },
+];
 
 const Navbar = (): ReactElement => {
   return (
@@ -19,7 +28,7 @@ const Navbar = (): ReactElement => {
           <NavbarItem text="community" href="#" />
           <NavbarItem text="staking" href="#" />
           <NavbarItem text="memes" href="#" />
-          <NavbarItem text="about" href="#" />
+          <NavbarDropdownItem title="about" options={aboutOptions} />
         </nav>
       </div>
     </div>

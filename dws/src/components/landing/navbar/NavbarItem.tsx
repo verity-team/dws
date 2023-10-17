@@ -1,6 +1,6 @@
 import { ReactElement } from "react";
-import config, { customColors } from "../../../../tailwind.config";
 import Link from "next/link";
+import NavbarButton from "./NavbarBtn";
 
 interface NavbarItemProps {
   text: string;
@@ -15,13 +15,7 @@ const NavbarItem = ({
 }: NavbarItemProps): ReactElement<NavbarItemProps> => {
   return (
     <Link className="px-4 py-2 cursor-pointer" href={href}>
-      <button
-        type="button"
-        className="text-2xl tracking-wide no-underline uppercase hover:text-cred"
-        style={{ color: isActive ? customColors.cred : customColors.cblack }}
-      >
-        {text}
-      </button>
+      <NavbarButton text={text} isActive={isActive} />
     </Link>
   );
 };
