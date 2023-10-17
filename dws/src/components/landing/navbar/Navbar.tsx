@@ -1,11 +1,11 @@
 import Image from "next/image";
 import { ReactElement } from "react";
 import NavbarItem from "./NavbarItem";
-import NavbarDropdownItem, {
-  NavbarDropdownItemOption,
-} from "./NavbarDropdownItem";
+import NavbarDropdown from "./dropdown/NavbarDropdown";
+import ConnectButton from "./ConnectBtn";
+import { NavbarDropdownItemProps } from "./dropdown/NavbarDropdownItem";
 
-const aboutOptions: NavbarDropdownItemOption[] = [
+const aboutOptions: NavbarDropdownItemProps[] = [
   { text: "Whitepaper", href: "/" },
   { text: "Airdrop", href: "/" },
   { text: "Contact", href: "/" },
@@ -13,7 +13,7 @@ const aboutOptions: NavbarDropdownItemOption[] = [
 
 const Navbar = (): ReactElement => {
   return (
-    <div className="p-5 mx-auto bg-white">
+    <div className="p-5 mx-auto bg-white z-auto">
       <div className="px-5 flex justify-between items-center">
         <div>
           <Image
@@ -23,13 +23,20 @@ const Navbar = (): ReactElement => {
             height={78}
           />
         </div>
-        <nav className="space-x-3 flex items-center">
-          <NavbarItem text="home" isActive={true} href="#" />
-          <NavbarItem text="community" href="#" />
-          <NavbarItem text="staking" href="#" />
-          <NavbarItem text="memes" href="#" />
-          <NavbarDropdownItem title="about" options={aboutOptions} />
-        </nav>
+        <div>
+          <nav className="flex">
+            <div className="flex space-x-2 items-center mr-6">
+              <NavbarItem text="home" isActive={true} href="#" />
+              <NavbarItem text="community" href="#" />
+              <NavbarItem text="staking" href="#" />
+              <NavbarItem text="memes" href="#" />
+              <NavbarDropdown title="about" options={aboutOptions} />
+            </div>
+            <div className="mx-4">
+              <ConnectButton />
+            </div>
+          </nav>
+        </div>
       </div>
     </div>
   );
