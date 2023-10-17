@@ -304,3 +304,172 @@ func GetOldestUnconfirmed(dbh *sqlx.DB) (uint64, error) {
 
 	return result, nil
 }
+
+func FinalizeTxs(ctxt common.Context, ethPrice decimal.Decimal, fb common.FinalizedBlock) error {
+	var err error
+	// start transaction
+	dtx, err := ctxt.DB.Beginx()
+	if err != nil {
+		return err
+	}
+	// at the end of the function: commit if there are no errors,
+	// roll back otherwise
+	defer func() {
+		if err != nil {
+			dtx.Rollback() // nolint:errcheck
+		} else {
+			dtx.Commit() // nolint:errcheck
+		}
+	}()
+
+	utotal, utokens, err := unconfirmedTxsValue(dtx, fb)
+	if err != nil {
+		return err
+	}
+	log.Infof("finalized block #%d confirms %s USD / %d tokens", fb.Number, utotal.StringFixed(2), utokens.IntPart())
+
+	if utotal.IsZero() {
+		// nothing to do - return
+		return nil
+	}
+	ra, err := confirmTxs(dtx, fb)
+	if err != nil {
+		return err
+	}
+	if ra != -1 {
+		log.Infof("confirmed %d transactions for finalized block #%d", ra, fb.Number)
+	}
+	_, newTokens, err := updateDonationStats(dtx, utotal, utokens)
+	if err != nil {
+		return err
+	}
+	if doUpdate, newP := newTokenPrice(ctxt, utokens, newTokens); doUpdate {
+		err = updateTokenPrice(dtx, newP)
+		if err != nil {
+			return err
+		}
+	}
+	err = updateLastBlock(dtx, "eth", Finalized, fb.Number)
+	if err != nil {
+		return err
+	}
+	log.Infof("updated last Finalized eth block to %d", fb.Number)
+
+	return nil
+}
+
+func unconfirmedTxsValue(dtx *sqlx.Tx, fb common.FinalizedBlock) (decimal.Decimal, decimal.Decimal, error) {
+	var err error
+	q := `
+		SELECT SUM(usd_amount) AS total, SUM(tokens) AS tokens
+		FROM donation
+		WHERE status='unconfirmed' AND tx_hash in (?)
+	`
+	query, args, err := sqlx.In(q, fb.Transactions)
+	if err != nil {
+		err = fmt.Errorf("failed to get unconfirmed transactions stats for block %d (%s), %v", fb.Number, fb.Hash, err)
+		log.Error(err)
+		return decimal.Zero, decimal.Zero, err
+	}
+	query = dtx.Rebind(query)
+	var stats []decimal.Decimal
+	err = dtx.Get(&stats, query, args...)
+	if err != nil {
+		err = fmt.Errorf("failed to get unconfirmed transactions stats for block %d (%s), %v", fb.Number, fb.Hash, err)
+		log.Error(err)
+		return decimal.Zero, decimal.Zero, err
+	}
+	return stats[0], stats[1], nil
+}
+
+func confirmTxs(dtx *sqlx.Tx, fb common.FinalizedBlock) (int64, error) {
+	var err error
+	q := `
+		UPDATE donation SET status='confirmed'
+		WHERE status='unconfirmed' AND tx_hash in (?)
+	`
+	query, args, err := sqlx.In(q, fb.Transactions)
+	if err != nil {
+		err = fmt.Errorf("failed to confirm transactions for block %d (%s), %v", fb.Number, fb.Hash, err)
+		log.Error(err)
+		return -1, err
+	}
+	query = dtx.Rebind(query)
+	result, err := dtx.Exec(query, args...)
+	if err != nil {
+		err = fmt.Errorf("failed to confirm transactions for block %d (%s), %v", fb.Number, fb.Hash, err)
+		log.Error(err)
+		return -1, err
+	}
+	ra, err := result.RowsAffected()
+	if err != nil {
+		err = fmt.Errorf("failed to get the count of confirmed transactions for block %d (%s), %v", fb.Number, fb.Hash, err)
+		log.Error(err)
+		return -1, nil
+	}
+	return ra, nil
+}
+
+func updateDonationStats(dtx *sqlx.Tx, incTotal, incTokens decimal.Decimal) (decimal.Decimal, decimal.Decimal, error) {
+	q1 := `
+		WITH updated_stats AS (
+		 UPDATE donation_stats
+		 SET total = total + $1,
+			  tokens = tokens + $2
+		 RETURNING total, tokens
+		)
+		SELECT total, tokens
+		FROM updated_stats
+		`
+	var newTotal, newTokens decimal.Decimal
+	err := dtx.QueryRowx(q1, incTotal, incTokens.IntPart()).Scan(&newTotal, &newTokens)
+	if err != nil {
+		err = fmt.Errorf("failed to update donation stats %v", err)
+		log.Error(err)
+		return decimal.Zero, decimal.Zero, err
+	}
+
+	return newTotal, newTokens, nil
+}
+
+func updateTokenPrice(dtx *sqlx.Tx, ntp decimal.Decimal) error {
+	q1 := `
+		WITH check_existing AS (
+			 SELECT 1
+			 FROM price
+			 WHERE asset = 'truth' AND price = $1
+			 LIMIT 1
+		)
+		INSERT INTO price (asset, price)
+		SELECT 'truth', $1
+		WHERE NOT EXISTS (SELECT 1 FROM check_existing)
+		RETURNING *;
+		`
+	_, err := dtx.Exec(q1, ntp.StringFixed(5))
+	if err != nil {
+		err = fmt.Errorf("failed to update token price to '%s', %v", ntp.StringFixed(5), err)
+		log.Error(err)
+		return err
+	}
+
+	return nil
+}
+
+func newTokenPrice(ctxt common.Context, incTokens, newTokens decimal.Decimal) (bool, decimal.Decimal) {
+	// did we enter a new price range? do we need to update the price?
+	currentP := priceBucket(ctxt, newTokens.Sub(incTokens))
+	newP := priceBucket(ctxt, newTokens)
+
+	return newP.GreaterThan(currentP), newP
+}
+
+func priceBucket(ctxt common.Context, tokens decimal.Decimal) decimal.Decimal {
+	// find the correct price given the number of tokens sold
+	for _, sp := range ctxt.SaleParams {
+		if tokens.LessThan(decimal.NewFromInt(int64(sp.Limit))) {
+			return sp.Price
+		}
+	}
+	// we fell through the loop, return the max price
+	return ctxt.SaleParams[len(ctxt.SaleParams)-1].Price
+}

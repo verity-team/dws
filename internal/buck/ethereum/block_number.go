@@ -119,7 +119,7 @@ func GetFinalizedBlock(ctxt common.Context, blockNumber uint64) (*common.Finaliz
 		return nil, err
 	}
 
-	log.Infof("fetched block %d", blockNumber)
+	log.Infof("fetched finalized block %d", blockNumber)
 
 	if ctxt.BlockStorage != "" {
 		fp := ctxt.BlockStorage + "/" + fmt.Sprintf("fb-%d.json", blockNumber)
@@ -132,7 +132,7 @@ func GetFinalizedBlock(ctxt common.Context, blockNumber uint64) (*common.Finaliz
 
 	fb, err := parseFinalizedBlock(body)
 	if err != nil {
-		err = fmt.Errorf("failed to finalized parse block #%d, %v", blockNumber, err)
+		err = fmt.Errorf("failed to parse finalized block #%d, %v", blockNumber, err)
 		log.Error(err)
 		return nil, err
 	}
