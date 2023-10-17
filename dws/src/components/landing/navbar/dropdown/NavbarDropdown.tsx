@@ -1,24 +1,24 @@
 "use client";
 
-import { Menu, MenuItem, useMediaQuery } from "@mui/material";
+import { Menu, MenuItem } from "@mui/material";
 import { ReactElement, MouseEvent, useState, useMemo } from "react";
-import NavbarButton from "../NavbarBtn";
 import { Nullable } from "@/utils/types";
-import NavbarItem from "../NavbarItem";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import NavbarDropdownItem, {
   NavbarDropdownItemProps,
 } from "./NavbarDropdownItem";
-import { customColors } from "../../../../../tailwind.config";
 
 interface NavbarDropdownProps {
   title: string;
   options: NavbarDropdownItemProps[];
+  // Hover mostly for desktop, Click for mobile
+  openBehavior: "hover" | "click";
 }
 
 const NavbarDropdown = ({
   title,
   options,
+  openBehavior,
 }: NavbarDropdownProps): ReactElement<NavbarDropdownProps> => {
   const [anchor, setAnchor] = useState<Nullable<HTMLElement>>(null);
 
@@ -35,8 +35,12 @@ const NavbarDropdown = ({
   };
 
   return (
-    <div>
-      <div className="flex items-center text-cblack" onMouseOver={handleClick}>
+    <>
+      <div
+        className="flex items-center text-cblack"
+        onMouseOver={openBehavior === "hover" ? handleClick : undefined}
+        onClick={handleClick}
+      >
         <button
           type="button"
           className="text-2xl tracking-wide no-underline uppercase"
@@ -53,8 +57,10 @@ const NavbarDropdown = ({
         autoFocus={false}
         disableAutoFocus={true}
         disableAutoFocusItem={true}
-        hideBackdrop={true}
-        MenuListProps={{ onMouseLeave: handleClose }}
+        MenuListProps={{
+          onMouseLeave: openBehavior === "hover" ? handleClose : undefined,
+        }}
+        transformOrigin={{ horizontal: "left", vertical: "top" }}
       >
         {options.map(({ text, href }) => (
           <MenuItem
@@ -62,12 +68,13 @@ const NavbarDropdown = ({
             style={{ backgroundColor: "transparent" }}
             disableGutters={true}
             className="px-2 py-1"
+            onClick={handleClose}
           >
             <NavbarDropdownItem text={text} href={href} />
           </MenuItem>
         ))}
       </Menu>
-    </div>
+    </>
   );
 };
 
