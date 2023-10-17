@@ -245,3 +245,62 @@ func PersistFailedTx(dbh *sqlx.DB, b common.Block, tx common.Transaction) error 
 
 	return nil
 }
+
+func PersistFinalizedBlock(dbh *sqlx.DB, fb common.FinalizedBlock) error {
+	q := `
+		INSERT INTO finalized_block(
+		 base_fee_per_gas,
+		 gas_limit,
+		 gas_used,
+		 block_hash,
+		 block_number,
+		 receipts_root,
+		 block_size,
+		 state_root,
+		 block_time,
+		 transactions)
+		VALUES(
+		 :base_fee_per_gas,
+		 :gas_limit,
+		 :gas_used,
+		 :block_hash,
+		 :block_number,
+		 :receipts_root,
+		 :block_size,
+		 :state_root,
+		 :block_time,
+		 :transactions)
+		ON CONFLICT (block_hash) DO NOTHING
+		`
+	_, err := dbh.Exec(q, fb)
+	if err != nil {
+		err = fmt.Errorf("failed to insert finalized block '%s', %v", fb.Hash, err)
+		log.Error(err)
+		return err
+	}
+
+	return nil
+}
+
+func GetOldestUnconfirmed(dbh *sqlx.DB) (uint64, error) {
+	var (
+		err    error
+		q      string
+		result uint64
+	)
+	q = `
+		SELECT block_number
+		FROM donation
+		WHERE status='unconfirmed'
+		ORDER BY block_time
+		LIMIT 1
+		`
+	err = dbh.Get(&result, q)
+	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
+		err = fmt.Errorf("failed to fetch oldest unconfirmed block number, %v", err)
+		log.Error(err)
+		return 0, err
+	}
+
+	return result, nil
+}

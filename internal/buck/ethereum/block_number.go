@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -84,7 +85,7 @@ func GetFinalizedBlock(ctxt common.Context, blockNumber uint64) (*common.Finaliz
 	request := EthGetBlockByNumberRequest{
 		JsonRPC: "2.0",
 		Method:  "eth_getBlockByNumber",
-		Params:  []interface{}{"finalized", false},
+		Params:  []interface{}{fmt.Sprintf("0x%x", blockNumber), false},
 		ID:      1,
 	}
 
@@ -113,9 +114,20 @@ func GetFinalizedBlock(ctxt common.Context, blockNumber uint64) (*common.Finaliz
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		err = fmt.Errorf("failed to finalized read block #%d, %v", blockNumber, err)
+		err = fmt.Errorf("failed to read finalized block #%d, %v", blockNumber, err)
 		log.Error(err)
 		return nil, err
+	}
+
+	log.Infof("fetched block %d", blockNumber)
+
+	if ctxt.BlockStorage != "" {
+		fp := ctxt.BlockStorage + "/" + fmt.Sprintf("fb-%d.json", blockNumber)
+		err = os.WriteFile(fp, body, 0644)
+		if err != nil {
+			log.Error(err)
+			return nil, err
+		}
 	}
 
 	fb, err := parseFinalizedBlock(body)

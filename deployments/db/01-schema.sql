@@ -132,7 +132,7 @@ CREATE TABLE finalized_block (
     gas_limit VARCHAR(16) NOT NULL,
     gas_used VARCHAR(16) NOT NULL,
     block_hash VARCHAR(66) NOT NULL UNIQUE,
-    block_number BIGINT NOT NULL UNIQUE,
+    block_number BIGINT NOT NULL,
     receipts_root VARCHAR(16) NOT NULL,
     block_size VARCHAR(16) NOT NULL,
     state_root VARCHAR(16) NOT NULL,

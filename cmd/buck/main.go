@@ -78,7 +78,11 @@ func main() {
 	lbn := flag.Int("set-latest", -1, "set latest ETH block number")
 	fbn := flag.Int("set-finalized", -1, "set last finalized ETH block number")
 	monitorLatest := flag.Bool("monitor-latest", false, "monitor latest ETH blocks")
+	monitorFinal := flag.Bool("monitor-final", false, "monitor finalized ETH blocks")
 	flag.Parse()
+	if *monitorLatest && *monitorFinal {
+		log.Fatal("pick either -monitor-latest XOR -monitor-final but not both")
+	}
 
 	if *lbn >= 0 {
 		err = db.SetLastBlock(dbh, "eth", db.Latest, uint64(*lbn))
@@ -95,16 +99,86 @@ func main() {
 		os.Exit(0)
 	}
 
+	s := gocron.NewScheduler(time.UTC)
+
 	if *monitorLatest {
-		s := gocron.NewScheduler(time.UTC)
 		_, err = s.Every("1m").Do(monitorLatestETH, *ctxt)
 		if err != nil {
 			log.Fatal(err)
 		}
+	}
+
+	if *monitorFinal {
+		_, err = s.Every("1m").Do(monitorFinalizedETH, *ctxt)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	if *monitorLatest || *monitorFinal {
 		s.StartBlocking()
 	}
 }
 
+func monitorFinalizedETH(ctxt common.Context) error {
+	// most recent *finalized* ETH block published
+	fbn, err := ethereum.GetMaxFinalizedBlockNumber(ctxt.ETHRPCURL)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	log.Infof("##### latest finalized ETH block: %d", fbn)
+
+	// number of last finalized block that was processed
+	lfdb, err := db.GetLastBlock(ctxt.DB, "eth", db.Finalized)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	log.Infof("latest finalized block processed (from db): %d", lfdb)
+
+	var startBlock uint64
+	if lfdb <= 0 {
+		// no valid latest finalized block value in the database?
+		// get the block number of the oldest unconfirmed transaction
+		startBlock, err = db.GetOldestUnconfirmed(ctxt.DB)
+		if err != nil {
+			return err
+		}
+		if startBlock == 0 {
+			// no unconfirmed transactions -- nothing to do
+			return nil
+		}
+	} else {
+		startBlock = lfdb + 1
+	}
+
+	for i := startBlock; i <= fbn; i++ {
+		fb, err := ethereum.GetFinalizedBlock(ctxt, i)
+		if err != nil {
+			return err
+		}
+		log.Infof("finalized block %d: %d transaction hashes", i, len(fb.Transactions))
+		if len(fb.Transactions) == 0 {
+			err = db.SetLastBlock(ctxt.DB, "eth", db.Finalized, i)
+			if err != nil {
+				return err
+			}
+			continue
+		}
+
+		// get ETH price at the time the finalized block was published
+		ethPrice, err := common.GetETHPrice(ctxt.DB, fb.Timestamp)
+		if err != nil {
+			return err
+		}
+		log.Infof("eth price: %s", ethPrice)
+		// TODO: flip unconfimed transactions to confirmed
+		// TODO: update donation stats
+		// TODO: update truth coin price
+	}
+	return nil
+}
 func monitorLatestETH(ctxt common.Context) error {
 	// most recent ETH block published
 	lbn, err := ethereum.GetBlockNumber(ctxt.ETHRPCURL)
@@ -117,7 +191,6 @@ func monitorLatestETH(ctxt common.Context) error {
 	// number of last block that was processed
 	latest, err := db.GetLastBlock(ctxt.DB, "eth", db.Latest)
 	if err != nil {
-		log.Error(err)
 		return err
 	}
 	log.Infof("latest block processed (from db): %d", latest)
@@ -141,7 +214,6 @@ func monitorLatestETH(ctxt common.Context) error {
 		if len(txs) == 0 {
 			err = db.SetLastBlock(ctxt.DB, "eth", db.Latest, i)
 			if err != nil {
-				log.Error(err)
 				return err
 			}
 			continue
