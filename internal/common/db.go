@@ -11,7 +11,7 @@ import (
 )
 
 func GetLatestETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
-	// ethereum price
+	// ethereum price, must not be older than 3 minutes
 	q1 := `
 		SELECT price FROM price
 		WHERE
@@ -31,9 +31,9 @@ func GetLatestETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 }
 
 func GetETHPrice(db *sqlx.DB, ts time.Time) (decimal.Decimal, error) {
-	// ethereum price
+	// find a price that is in a 3 minute interval of the timestamp and closest
+	// to the timestamp
 	q := `
-
 		SELECT price
 		FROM price
 			WHERE asset = 'eth'
