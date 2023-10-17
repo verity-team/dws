@@ -337,9 +337,12 @@ func FinalizeTxs(ctxt common.Context, fb common.FinalizedBlock) error {
 	}()
 	// whatever happens -- try and update the last block at the end
 	defer func() {
-		err = updateLastBlock(dtx, "eth", Finalized, fb.Number)
-		if err != nil {
-			log.Infof("updated last finalized eth block to %d", fb.Number)
+		// only update last block if all went well
+		if err == nil {
+			err = updateLastBlock(dtx, "eth", Finalized, fb.Number)
+			if err != nil {
+				log.Infof("updated last finalized eth block to %d", fb.Number)
+			}
 		}
 	}()
 
