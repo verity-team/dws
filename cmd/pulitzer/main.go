@@ -36,6 +36,8 @@ func main() {
 	defer db.Close()
 
 	s := gocron.NewScheduler(time.UTC)
+	s.SingletonModeAll()
+
 	_, err = s.Every("1m").Do(getETHPrice, db)
 	if err != nil {
 		log.Fatal(err)

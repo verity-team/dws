@@ -136,8 +136,6 @@ func GetFinalizedBlock(ctxt common.Context, blockNumber uint64) (*common.Finaliz
 		log.Error(err)
 		return nil, err
 	}
-	log.Infof("finalized block %d: %d transactions", blockNumber, len(fb.Transactions))
-
 	return fb, nil
 }
 

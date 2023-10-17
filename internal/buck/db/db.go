@@ -246,7 +246,7 @@ func PersistFailedTx(dbh *sqlx.DB, b common.Block, tx common.Transaction) error 
 	return nil
 }
 
-func PersistFinalizedBlock(dbh *sqlx.DB, fb common.FinalizedBlock) error {
+func persistFinalizedBlock(dtx *sqlx.Tx, fb common.FinalizedBlock) error {
 	q := `
 		INSERT INTO finalized_block(
 		 base_fee_per_gas,
@@ -272,9 +272,22 @@ func PersistFinalizedBlock(dbh *sqlx.DB, fb common.FinalizedBlock) error {
 		 :transactions)
 		ON CONFLICT (block_hash) DO NOTHING
 		`
-	_, err := dbh.Exec(q, fb)
+	txs := strings.Join(fb.Transactions, ",")
+	qd := map[string]interface{}{
+		"base_fee_per_gas": fb.BaseFeePerGas,
+		"gas_limit":        fb.GasLimit,
+		"gas_used":         fb.GasUsed,
+		"block_hash":       fb.Hash,
+		"block_number":     fb.Number,
+		"receipts_root":    fb.ReceiptsRoot,
+		"block_size":       fb.Size,
+		"state_root":       fb.StateRoot,
+		"block_time":       fb.Timestamp,
+		"transactions":     txs,
+	}
+	_, err := dtx.NamedExec(q, qd)
 	if err != nil {
-		err = fmt.Errorf("failed to insert finalized block '%s', %v", fb.Hash, err)
+		err = fmt.Errorf("failed to insert finalized block #%d ('%s'), %v", fb.Number, fb.Hash, err)
 		log.Error(err)
 		return err
 	}
@@ -305,13 +318,14 @@ func GetOldestUnconfirmed(dbh *sqlx.DB) (uint64, error) {
 	return result, nil
 }
 
-func FinalizeTxs(ctxt common.Context, ethPrice decimal.Decimal, fb common.FinalizedBlock) error {
+func FinalizeTxs(ctxt common.Context, fb common.FinalizedBlock) error {
 	var err error
 	// start transaction
 	dtx, err := ctxt.DB.Beginx()
 	if err != nil {
 		return err
 	}
+
 	// at the end of the function: commit if there are no errors,
 	// roll back otherwise
 	defer func() {
@@ -321,7 +335,18 @@ func FinalizeTxs(ctxt common.Context, ethPrice decimal.Decimal, fb common.Finali
 			dtx.Commit() // nolint:errcheck
 		}
 	}()
+	// whatever happens -- try and update the last block at the end
+	defer func() {
+		err = updateLastBlock(dtx, "eth", Finalized, fb.Number)
+		if err != nil {
+			log.Infof("updated last finalized eth block to %d", fb.Number)
+		}
+	}()
 
+	err = persistFinalizedBlock(dtx, fb)
+	if err != nil {
+		return err
+	}
 	utotal, utokens, err := unconfirmedTxsValue(dtx, fb)
 	if err != nil {
 		return err
@@ -349,11 +374,6 @@ func FinalizeTxs(ctxt common.Context, ethPrice decimal.Decimal, fb common.Finali
 			return err
 		}
 	}
-	err = updateLastBlock(dtx, "eth", Finalized, fb.Number)
-	if err != nil {
-		return err
-	}
-	log.Infof("updated last Finalized eth block to %d", fb.Number)
 
 	return nil
 }
@@ -361,25 +381,29 @@ func FinalizeTxs(ctxt common.Context, ethPrice decimal.Decimal, fb common.Finali
 func unconfirmedTxsValue(dtx *sqlx.Tx, fb common.FinalizedBlock) (decimal.Decimal, decimal.Decimal, error) {
 	var err error
 	q := `
-		SELECT SUM(usd_amount) AS total, SUM(tokens) AS tokens
+		SELECT COALESCE(SUM(usd_amount), 0) AS total, COALESCE(SUM(tokens), 0) AS tokens
 		FROM donation
 		WHERE status='unconfirmed' AND tx_hash in (?)
 	`
 	query, args, err := sqlx.In(q, fb.Transactions)
 	if err != nil {
-		err = fmt.Errorf("failed to get unconfirmed transactions stats for block %d (%s), %v", fb.Number, fb.Hash, err)
+		err = fmt.Errorf("failed to prep query: get unconfirmed transactions stats for block %d (%s), %v", fb.Number, fb.Hash, err)
 		log.Error(err)
 		return decimal.Zero, decimal.Zero, err
 	}
 	query = dtx.Rebind(query)
-	var stats []decimal.Decimal
+	type statss struct {
+		Total  decimal.Decimal
+		Tokens decimal.Decimal
+	}
+	var stats statss
 	err = dtx.Get(&stats, query, args...)
 	if err != nil {
 		err = fmt.Errorf("failed to get unconfirmed transactions stats for block %d (%s), %v", fb.Number, fb.Hash, err)
 		log.Error(err)
 		return decimal.Zero, decimal.Zero, err
 	}
-	return stats[0], stats[1], nil
+	return stats.Total, stats.Tokens, nil
 }
 
 func confirmTxs(dtx *sqlx.Tx, fb common.FinalizedBlock) (int64, error) {
@@ -390,7 +414,7 @@ func confirmTxs(dtx *sqlx.Tx, fb common.FinalizedBlock) (int64, error) {
 	`
 	query, args, err := sqlx.In(q, fb.Transactions)
 	if err != nil {
-		err = fmt.Errorf("failed to confirm transactions for block %d (%s), %v", fb.Number, fb.Hash, err)
+		err = fmt.Errorf("failed to prep query: confirm transactions for block %d (%s), %v", fb.Number, fb.Hash, err)
 		log.Error(err)
 		return -1, err
 	}
