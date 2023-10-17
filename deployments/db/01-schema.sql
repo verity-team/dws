@@ -181,6 +181,24 @@ BEFORE UPDATE ON failed_tx
 FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
 
+--- price_req ----------------------------------------------------
+CREATE TYPE price_req_status_enum AS ENUM ('new', 'succeeded', 'failed');
+DROP TABLE IF EXISTS price_req;
+CREATE TABLE price_req (
+    id BIGSERIAL PRIMARY KEY,
+    what_asset asset_enum NOT NULL,
+    what_time TIMESTAMP NOT NULL,
+    status price_req_status_enum NOT NULL DEFAULT 'new',
+
+    modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
+    created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())
+);
+CREATE INDEX ON price_req (created_at);
+CREATE TRIGGER price_req_update_timestamp
+BEFORE UPDATE ON price_req
+FOR EACH ROW
+EXECUTE PROCEDURE trigger_update_modified_at();
+
 --- update_user_stats() ---------------------------------------------
 CREATE OR REPLACE FUNCTION update_user_stats(p_address VARCHAR(42))
 RETURNS TABLE (
