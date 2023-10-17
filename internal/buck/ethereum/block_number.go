@@ -119,8 +119,6 @@ func GetFinalizedBlock(ctxt common.Context, blockNumber uint64) (*common.Finaliz
 		return nil, err
 	}
 
-	log.Infof("fetched block %d", blockNumber)
-
 	if ctxt.BlockStorage != "" {
 		fp := ctxt.BlockStorage + "/" + fmt.Sprintf("fb-%d.json", blockNumber)
 		err = os.WriteFile(fp, body, 0644)
@@ -132,12 +130,10 @@ func GetFinalizedBlock(ctxt common.Context, blockNumber uint64) (*common.Finaliz
 
 	fb, err := parseFinalizedBlock(body)
 	if err != nil {
-		err = fmt.Errorf("failed to finalized parse block #%d, %v", blockNumber, err)
+		err = fmt.Errorf("failed to parse finalized block #%d, %v", blockNumber, err)
 		log.Error(err)
 		return nil, err
 	}
-	log.Infof("finalized block %d: %d transactions", blockNumber, len(fb.Transactions))
-
 	return fb, nil
 }
 
@@ -179,7 +175,6 @@ func parseFinalizedBlock(body []byte) (*common.FinalizedBlock, error) {
 		Timestamp:     ts.UTC(),
 		Transactions:  resp.Block.Transactions,
 	}
-	log.Infof("finalized block %d, %s -- %d transactions", result.Number, result.Hash, len(result.Transactions))
 	return &result, nil
 }
 
@@ -219,7 +214,6 @@ func GetMaxFinalizedBlockNumber(apiURL string) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	log.Infof("latest finalized block number: %d", blockNumber)
 
 	return blockNumber, nil
 }

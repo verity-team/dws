@@ -76,12 +76,15 @@ func main() {
 	log.Infof("sale params: %v", ctxt.SaleParams)
 
 	lbn := flag.Int("set-latest", -1, "set latest ETH block number")
-	fbn := flag.Int("set-finalized", -1, "set last finalized ETH block number")
+	fbn := flag.Int("set-final", -1, "set last finalized ETH block number")
 	monitorLatest := flag.Bool("monitor-latest", false, "monitor latest ETH blocks")
 	monitorFinal := flag.Bool("monitor-final", false, "monitor finalized ETH blocks")
 	flag.Parse()
 	if *monitorLatest && *monitorFinal {
 		log.Fatal("pick either -monitor-latest XOR -monitor-final but not both")
+	}
+	if (*lbn > -1) && (*fbn > -1) {
+		log.Fatal("pick either -set-latest XOR -set-final but not both")
 	}
 
 	if *lbn >= 0 {
@@ -100,6 +103,7 @@ func main() {
 	}
 
 	s := gocron.NewScheduler(time.UTC)
+	s.SingletonModeAll()
 
 	if *monitorLatest {
 		_, err = s.Every("1m").Do(monitorLatestETH, *ctxt)
@@ -167,15 +171,11 @@ func monitorFinalizedETH(ctxt common.Context) error {
 			continue
 		}
 
-		// get ETH price at the time the finalized block was published
-		ethPrice, err := common.GetETHPrice(ctxt.DB, fb.Timestamp)
+		err = db.FinalizeTxs(ctxt, *fb)
 		if err != nil {
+			log.Errorf("failed to confirm transactions for finalized block #%d", i)
 			return err
 		}
-		log.Infof("eth price: %s", ethPrice)
-		// TODO: flip unconfimed transactions to confirmed
-		// TODO: update donation stats
-		// TODO: update truth coin price
 	}
 	return nil
 }

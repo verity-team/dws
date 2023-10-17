@@ -85,7 +85,6 @@ func GetTransactions(ctxt common.Context, blockNumber uint64) ([]common.Transact
 	if err != nil {
 		return nil, err
 	}
-	log.Infof("block %d: %d *filtered* transactions", blockNumber, len(result))
 
 	err = markFailedTxs(ctxt, result)
 	if err != nil {
