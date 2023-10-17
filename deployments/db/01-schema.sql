@@ -128,11 +128,17 @@ CREATE INDEX ON user_stats (address);
 DROP TABLE IF EXISTS finalized_block;
 CREATE TABLE finalized_block (
     id BIGSERIAL PRIMARY KEY,
-    block_number BIGINT NOT NULL UNIQUE,
+    base_fee_per_gas VARCHAR(16) NOT NULL,
+    gas_limit VARCHAR(16) NOT NULL,
+    gas_used VARCHAR(16) NOT NULL,
     block_hash VARCHAR(66) NOT NULL UNIQUE,
-    -- enough to keep 400 tx hashes
-    tx_hashes VARCHAR(26799) NOT NULL,
+    block_number BIGINT NOT NULL,
+    receipts_root VARCHAR(16) NOT NULL,
+    block_size VARCHAR(16) NOT NULL,
+    state_root VARCHAR(16) NOT NULL,
     block_time TIMESTAMP NOT NULL,
+    -- enough to keep 400 tx hashes
+    transactions VARCHAR(26799) NOT NULL,
 
     modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
     created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())

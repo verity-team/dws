@@ -58,6 +58,19 @@ type Transaction struct {
 	BlockTime   time.Time       `db:"block_time" json:"-"`
 }
 
+type FinalizedBlock struct {
+	BaseFeePerGas string    `db:"base_fee_per_gas" json:"baseFeePerGas"`
+	GasLimit      string    `db:"gas_limit" json:"gasLimit"`
+	GasUsed       string    `db:"gas_used" json:"gasUsed"`
+	Hash          string    `db:"block_hash" json:"hash"`
+	Number        uint64    `db:"block_number" json:"-"`
+	ReceiptsRoot  string    `db:"receipts_root" json:"receiptsRoot"`
+	Size          string    `db:"block_size" json:"size"`
+	StateRoot     string    `db:"state_root" json:"stateRoot"`
+	Timestamp     time.Time `db:"block_time" json:"-"`
+	Transactions  []string  `db:"transactions" json:"transactions"`
+}
+
 func GetContext(erc20Json, saleParamJson string) (*Context, error) {
 	var (
 		err    error

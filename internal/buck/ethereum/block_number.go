@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/verity-team/dws/internal/common"
 )
 
 const MaxWaitInSeconds = 5
@@ -79,7 +81,109 @@ func parseLatestBlock(body []byte) (uint64, error) {
 	return blockNumber, nil
 }
 
-func GetLatestFinalizedBlockNumber(apiURL string) (uint64, error) {
+func GetFinalizedBlock(ctxt common.Context, blockNumber uint64) (*common.FinalizedBlock, error) {
+	request := EthGetBlockByNumberRequest{
+		JsonRPC: "2.0",
+		Method:  "eth_getBlockByNumber",
+		Params:  []interface{}{fmt.Sprintf("0x%x", blockNumber), false},
+		ID:      1,
+	}
+
+	requestBytes, err := json.Marshal(request)
+	if err != nil {
+		return nil, err
+	}
+
+	client := &http.Client{
+		Timeout: MaxWaitInSeconds * time.Second,
+	}
+
+	resp, err := client.Post(ctxt.ETHRPCURL, "application/json", bytes.NewBuffer(requestBytes))
+	if err != nil {
+		err = fmt.Errorf("failed to request finalized block #%d, %v", blockNumber, err)
+		log.Error(err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf("failed to fetch finalized block #%d, status code: %d, %v", blockNumber, resp.StatusCode, err)
+		log.Error(err)
+		return nil, err
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		err = fmt.Errorf("failed to read finalized block #%d, %v", blockNumber, err)
+		log.Error(err)
+		return nil, err
+	}
+
+	log.Infof("fetched block %d", blockNumber)
+
+	if ctxt.BlockStorage != "" {
+		fp := ctxt.BlockStorage + "/" + fmt.Sprintf("fb-%d.json", blockNumber)
+		err = os.WriteFile(fp, body, 0644)
+		if err != nil {
+			log.Error(err)
+			return nil, err
+		}
+	}
+
+	fb, err := parseFinalizedBlock(body)
+	if err != nil {
+		err = fmt.Errorf("failed to finalized parse block #%d, %v", blockNumber, err)
+		log.Error(err)
+		return nil, err
+	}
+	log.Infof("finalized block %d: %d transactions", blockNumber, len(fb.Transactions))
+
+	return fb, nil
+}
+
+func parseFinalizedBlock(body []byte) (*common.FinalizedBlock, error) {
+	type fblock struct {
+		common.FinalizedBlock
+		HexSeconds string `json:"timestamp"`
+		HexNumber  string `json:"number"`
+	}
+	type Response struct {
+		Block fblock `json:"result"`
+	}
+
+	var resp Response
+	err := json.Unmarshal(body, &resp)
+	if err != nil {
+		return nil, err
+	}
+	seconds, err := common.HexStringToDecimal(resp.Block.HexSeconds)
+	if err != nil {
+		err = fmt.Errorf("failed to convert block timestamp, %v", err)
+		return nil, err
+	}
+	number, err := common.HexStringToDecimal(resp.Block.HexNumber)
+	if err != nil {
+		err = fmt.Errorf("failed to convert block number, %v", err)
+		return nil, err
+	}
+	ts := time.Unix(seconds.IntPart(), 0)
+	result := common.FinalizedBlock{
+		BaseFeePerGas: resp.Block.BaseFeePerGas,
+		GasLimit:      resp.Block.GasLimit,
+		GasUsed:       resp.Block.GasUsed,
+		Hash:          resp.Block.Hash,
+		Number:        uint64(number.IntPart()),
+		ReceiptsRoot:  resp.Block.ReceiptsRoot,
+		Size:          resp.Block.Size,
+		StateRoot:     resp.Block.StateRoot,
+		Timestamp:     ts.UTC(),
+		Transactions:  resp.Block.Transactions,
+	}
+	log.Infof("finalized block %d, %s -- %d transactions", result.Number, result.Hash, len(result.Transactions))
+	return &result, nil
+}
+
+func GetMaxFinalizedBlockNumber(apiURL string) (uint64, error) {
 	request := EthGetBlockByNumberRequest{
 		JsonRPC: "2.0",
 		Method:  "eth_getBlockByNumber",
@@ -111,7 +215,7 @@ func GetLatestFinalizedBlockNumber(apiURL string) (uint64, error) {
 		return 0, err
 	}
 
-	blockNumber, err := parseLatestFinalizedBlock(body)
+	blockNumber, err := parseMaxFinalizedBlock(body)
 	if err != nil {
 		return 0, err
 	}
@@ -120,7 +224,7 @@ func GetLatestFinalizedBlockNumber(apiURL string) (uint64, error) {
 	return blockNumber, nil
 }
 
-func parseLatestFinalizedBlock(body []byte) (uint64, error) {
+func parseMaxFinalizedBlock(body []byte) (uint64, error) {
 	type Response struct {
 		Result struct {
 			Number string `json:"number"`
