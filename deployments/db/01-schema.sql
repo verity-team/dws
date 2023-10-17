@@ -193,7 +193,6 @@ CREATE TABLE price_req (
     modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
     created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())
 );
-CREATE INDEX ON price_req (created_at);
 CREATE TRIGGER price_req_update_timestamp
 BEFORE UPDATE ON price_req
 FOR EACH ROW
