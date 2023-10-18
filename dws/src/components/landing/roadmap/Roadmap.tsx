@@ -17,7 +17,7 @@ const Roadmap = () => {
           If you want to go fast, go alone, if you want to go far, go together.
         </p>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-4 mt-10 space-y-12">
+      <div className="grid grid-cols-1 md:grid-cols-4 mt-10 space-y-12 md:space-y-0">
         <Milestone text="Presale" time="October 31, 2023" />
         <Milestone text="Token" time="January 3, 2024" />
         <Milestone text="Launch v1" time="April 20, 2024" />

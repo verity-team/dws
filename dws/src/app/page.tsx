@@ -2,6 +2,7 @@ import ClientRoot from "@/components/ClientRoot";
 import Banner from "@/components/landing/banner/Banner";
 import BannerSection from "@/components/landing/banner/BannerSection";
 import MemeSlideshow from "@/components/landing/carousel/MemeSlideshow";
+import LandingFooter from "@/components/landing/footer/LandingFooter";
 import Navbar from "@/components/landing/navbar/Navbar";
 import Newsletter from "@/components/landing/newsletter/Newsletter";
 import Roadmap from "@/components/landing/roadmap/Roadmap";
@@ -36,6 +37,7 @@ export default function Home() {
         </h1>
       </BannerSection>
       <Newsletter />
+      <LandingFooter />
     </>
   );
 }
