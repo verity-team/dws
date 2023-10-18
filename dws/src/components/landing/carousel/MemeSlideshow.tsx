@@ -53,6 +53,14 @@ const MemeSlideshow = () => {
           </div>
         </div>
       </div>
+      <div className="flex items-center justify-center py-2 space-x-2">
+        {memes.map((src, i) => {
+          if (i === currentItem) {
+            return <div className="p-2 bg-white" key={src}></div>;
+          }
+          return <div className="p-2 bg-white opacity-40" key={src}></div>;
+        })}
+      </div>
     </div>
   );
 };
