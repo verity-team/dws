@@ -505,8 +505,9 @@ func priceBucket(ctxt common.Context, tokens decimal.Decimal) decimal.Decimal {
 func RequestPrice(ctxt common.Context, asset string, ts time.Time) error {
 	q := `
 		INSERT INTO price_req(what_asset, what_time) VALUES($1, $2)
+	   ON CONFLICT(what_asset, what_time) DO NOTHING
 	`
-	_, err := ctxt.DB.Exec(q, asset, ts)
+	_, err := ctxt.DB.Exec(q, asset, ts.Round(time.Minute))
 	if err != nil {
 		err = fmt.Errorf("failed to request price for %s/%s, %v", asset, ts, err)
 		log.Error(err)

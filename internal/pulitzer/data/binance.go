@@ -1,4 +1,4 @@
-package pulitzer
+package data
 
 import (
 	"encoding/json"
@@ -11,7 +11,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const MaxWaitInSeconds = 5
+const MaxWaitInSeconds = 8
 
 // Struct to unmarshal the JSON response
 type TickerData struct {

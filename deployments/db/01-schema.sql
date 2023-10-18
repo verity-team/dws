@@ -189,7 +189,8 @@ CREATE TABLE price_req (
     status price_req_status_enum NOT NULL DEFAULT 'new',
 
     modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
-    created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())
+    created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
+    UNIQUE(what_asset, what_time)
 );
 CREATE TRIGGER price_req_update_timestamp
 BEFORE UPDATE ON price_req

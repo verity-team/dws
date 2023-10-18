@@ -229,8 +229,9 @@ func monitorLatestETH(ctxt common.Context) error {
 			// we wake up
 			log.Infof("requesting price for ETH/%s", blockTime)
 			err2 := db.RequestPrice(ctxt, "eth", blockTime)
-			log.Errorf("failed to request price for ETH/%s, %v", blockTime, err2)
-
+			if err2 != nil {
+				log.Errorf("failed to request price for ETH/%s, %v", blockTime, err2)
+			}
 			return err
 		}
 		log.Infof("eth price: %s", ethPrice)
