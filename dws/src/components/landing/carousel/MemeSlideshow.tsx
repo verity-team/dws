@@ -29,6 +29,10 @@ const MemeSlideshow = () => {
     return () => clearInterval(timerId);
   }, []);
 
+  const handleSelectMeme = (index: number) => {
+    setCurrentItem(index);
+  };
+
   return (
     <div className="bg-cgreen">
       <div className="flex flex-1 items-center justify-center overflow-hidden">
@@ -56,9 +60,21 @@ const MemeSlideshow = () => {
       <div className="flex items-center justify-center py-2 space-x-2">
         {memes.map((src, i) => {
           if (i === currentItem) {
-            return <div className="p-2 bg-white" key={src}></div>;
+            return (
+              <div
+                className="p-2 bg-white cursor-pointer"
+                key={src}
+                onClick={() => handleSelectMeme(i)}
+              ></div>
+            );
           }
-          return <div className="p-2 bg-white opacity-40" key={src}></div>;
+          return (
+            <div
+              className="p-2 bg-white opacity-40 cursor-pointer"
+              key={src}
+              onClick={() => handleSelectMeme(i)}
+            ></div>
+          );
         })}
       </div>
     </div>

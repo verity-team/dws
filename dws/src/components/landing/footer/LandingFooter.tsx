@@ -17,28 +17,28 @@ const LandingFooter = () => {
       </div>
       <div className="flex flex-col space-x-0 mt-8 space-y-8 md:block md:space-y-0 md:space-x-12 md:mt-0">
         <a
-          href="https://www.facebook.com/webflow/"
+          href="#"
           target="_blank"
           className="text-xl uppercase font-bold text-gray-500"
         >
           TELEGRAM
         </a>
         <a
-          href="https://www.facebook.com/webflow/"
+          href="#"
           target="_blank"
           className="text-xl uppercase font-bold text-gray-500"
         >
           DISCORD
         </a>
         <a
-          href="https://twitter.com/webflow"
+          href="#"
           target="_blank"
           className="text-xl uppercase font-bold text-gray-500"
         >
           Twitter
         </a>
         <a
-          href="https://www.instagram.com/webflowapp/"
+          href="#"
           target="_blank"
           className="text-xl uppercase font-bold text-gray-500"
         >
