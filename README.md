@@ -8,10 +8,11 @@ The backend used by the donation web site frontend is called `delphi` and it wil
 
 ## how to run the dws backend
 
-The dws backend consists of a `postgres` database and 3 services
+The dws backend consists of a `postgres` database and 4 services
+- `buck`: ETH/latest crawler, checks the latest blocks for donation transactions and inserts the into the database (state: `unconfirmed`)
+- `buck`: ETH/finalized crawler, check the finalized blocks for donation transactions and confrms them, also updates the donation campaign statistics and the token price (if/as needed)
 - `pulitzer`: pulls the ETH price from 6 exchanges and inserts an average price into the database every minute
-- `buck`: monitors the ethereum blockchain for donations and inserts donation transactions into the database
-- `delphi`: [REST API](https://app.swaggerhub.com/apis/MUHAREM_1/delphi/) server -- only serves data from the database really
+- `delphi`: [REST API](https://app.swaggerhub.com/apis/MUHAREM_1/delphi/) server -- only serves data from the database
 
 The backend services are written in `go` -- you will thus need go on your development system. For testing purposes the `postgres` database can be run in a docker container i.e. you will need docker as well.
 
@@ -19,10 +20,20 @@ Once you have these in place you can simply run
 1. `go mod tidy` to fetch the dependencies
 1. `make` to build the services
 1. `make run_db` to run a fresh database in a docker container
-1. `bin/pulitzer` in a separate terminal
-1. `bin/delphi` in a separate terminal
+1. `bin/pulitzer 2>&1 | tee /tmp/pulitzer-`date +'%Y-%m-%d_%H-%M-%S'`.log` in a separate terminal
+1. `bin/delphi | tee /tmp/delphi-`date +'%Y-%m-%d_%H-%M-%S'`.log` in a separate terminal
+1. `bin/buck --monitor-latest 2>&1 | tee /tmp/buck-latest-`date +'%Y-%m-%d_%H-%M-%S'`.log`
+1. `bin/buck --monitor-final 2>&1 | tee /tmp/buck-final-`date +'%Y-%m-%d_%H-%M-%S'`.log`
 
-Please note `buck` is still being worked on.
+All services support the `-p` command-line flag allowing you to set the port they are listening to. The default ports are as follows
+
+
+|service          | port   | content served |
+|:-----------------:|------:|--------------------------------------------|
+|delphi      | 8080  | REST API + /live and /ready healtcheck endpoints |
+|pulitzer      | 8082  | /live and /ready healtcheck endpoints |
+|buck/latest      | 8082  | /live and /ready healtcheck endpoints |
+|buck/final      | 8083  | /live and /ready healtcheck endpoints |
 
 ## requirements & rules
 1. all amounts are passed as strings and should be decoded to a `decimal` type to preserve precision
