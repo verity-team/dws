@@ -13,7 +13,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
-	"github.com/verity-team/dws/internal/pulitzer"
+	"github.com/verity-team/dws/internal/pulitzer/data"
 )
 
 var (
@@ -39,6 +39,10 @@ func main() {
 	s.SingletonModeAll()
 
 	_, err = s.Every("1m").Do(getETHPrice, db)
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = s.Every("1m").Do(servePriceRequests, db)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -90,18 +94,22 @@ func checkPriceDeviation(prices []decimal.Decimal) error {
 	return nil
 }
 
+func servePriceRequests(db *sqlx.DB) error {
+	return nil
+}
+
 func getETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 	// Create a wait group to synchronize the goroutines
 	var wg sync.WaitGroup
 
 	// ethereum price sources and the functions to call to get the price
 	sources := map[string]func() (decimal.Decimal, error){
-		"binance":  pulitzer.GetWeightedAvgPriceFromBinance,
-		"kraken":   pulitzer.GetKrakenETHPrice,
-		"bitfinex": pulitzer.GetBitfinexETHPrice,
-		"coinbase": pulitzer.GetCoinbaseETHPrice,
-		"cexio":    pulitzer.GetCexIOETHUSDLastPrice,
-		"kucoin":   pulitzer.GetKuCoinETHUSDTPrice,
+		"binance":  data.GetWeightedAvgPriceFromBinance,
+		"kraken":   data.GetKrakenETHPrice,
+		"bitfinex": data.GetBitfinexETHPrice,
+		"coinbase": data.GetCoinbaseETHPrice,
+		"cexio":    data.GetCexIOETHUSDLastPrice,
+		"kucoin":   data.GetKuCoinETHUSDTPrice,
 	}
 
 	// channels the go routines will use to send back the price

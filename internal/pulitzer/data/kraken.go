@@ -1,4 +1,4 @@
-package pulitzer
+package data
 
 import (
 	"encoding/json"
