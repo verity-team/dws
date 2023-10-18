@@ -2,12 +2,15 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/go-co-op/gocron"
+	"github.com/heptiolabs/healthcheck"
 	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
@@ -36,6 +39,9 @@ func main() {
 	}
 	defer dbh.Close()
 
+	port := flag.Uint("port", 8081, "Port for the healthcheck server")
+	flag.Parse()
+
 	s := gocron.NewScheduler(time.UTC)
 	s.SingletonModeAll()
 
@@ -47,6 +53,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	health := healthcheck.NewHandler()
+	health.AddReadinessCheck("database", healthcheck.DatabasePingCheck(dbh.DB, 1*time.Second))
+	go http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", *port), health) // nolint:errcheck
 	s.StartBlocking()
 }
 

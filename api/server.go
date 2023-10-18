@@ -29,6 +29,12 @@ type ServerInterface interface {
 	// get general donation data
 	// (GET /donation/data/)
 	DonationData(ctx echo.Context) error
+	// is the service alive?
+	// (GET /live)
+	Alive(ctx echo.Context) error
+	// is the service alive and ready to do work?
+	// (GET /ready)
+	Ready(ctx echo.Context) error
 	// get the donation data for the wallet address in question
 	// (GET /user/data/{address})
 	UserData(ctx echo.Context, address string) error
@@ -54,6 +60,24 @@ func (w *ServerInterfaceWrapper) DonationData(ctx echo.Context) error {
 
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.DonationData(ctx)
+	return err
+}
+
+// Alive converts echo context to params.
+func (w *ServerInterfaceWrapper) Alive(ctx echo.Context) error {
+	var err error
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.Alive(ctx)
+	return err
+}
+
+// Ready converts echo context to params.
+func (w *ServerInterfaceWrapper) Ready(ctx echo.Context) error {
+	var err error
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.Ready(ctx)
 	return err
 }
 
@@ -103,6 +127,8 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 
 	router.POST(baseURL+"/donation/affiliate", wrapper.SetAffiliateCode)
 	router.GET(baseURL+"/donation/data/", wrapper.DonationData)
+	router.GET(baseURL+"/live", wrapper.Alive)
+	router.GET(baseURL+"/ready", wrapper.Ready)
 	router.GET(baseURL+"/user/data/:address", wrapper.UserData)
 
 }
@@ -199,6 +225,44 @@ func (response DonationData5XXJSONResponse) VisitDonationDataResponse(w http.Res
 	return json.NewEncoder(w).Encode(response.Body)
 }
 
+type AliveRequestObject struct {
+}
+
+type AliveResponseObject interface {
+	VisitAliveResponse(w http.ResponseWriter) error
+}
+
+type Alive200Response struct {
+}
+
+func (response Alive200Response) VisitAliveResponse(w http.ResponseWriter) error {
+	w.WriteHeader(200)
+	return nil
+}
+
+type ReadyRequestObject struct {
+}
+
+type ReadyResponseObject interface {
+	VisitReadyResponse(w http.ResponseWriter) error
+}
+
+type Ready200Response struct {
+}
+
+func (response Ready200Response) VisitReadyResponse(w http.ResponseWriter) error {
+	w.WriteHeader(200)
+	return nil
+}
+
+type Ready503Response struct {
+}
+
+func (response Ready503Response) VisitReadyResponse(w http.ResponseWriter) error {
+	w.WriteHeader(503)
+	return nil
+}
+
 type UserDataRequestObject struct {
 	Address string `json:"address"`
 }
@@ -234,6 +298,14 @@ func (response UserData401JSONResponse) VisitUserDataResponse(w http.ResponseWri
 	return json.NewEncoder(w).Encode(response)
 }
 
+type UserData404Response struct {
+}
+
+func (response UserData404Response) VisitUserDataResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
 type UserData5XXJSONResponse struct {
 	Body       Error
 	StatusCode int
@@ -254,6 +326,12 @@ type StrictServerInterface interface {
 	// get general donation data
 	// (GET /donation/data/)
 	DonationData(ctx context.Context, request DonationDataRequestObject) (DonationDataResponseObject, error)
+	// is the service alive?
+	// (GET /live)
+	Alive(ctx context.Context, request AliveRequestObject) (AliveResponseObject, error)
+	// is the service alive and ready to do work?
+	// (GET /ready)
+	Ready(ctx context.Context, request ReadyRequestObject) (ReadyResponseObject, error)
 	// get the donation data for the wallet address in question
 	// (GET /user/data/{address})
 	UserData(ctx context.Context, request UserDataRequestObject) (UserDataResponseObject, error)
@@ -323,6 +401,52 @@ func (sh *strictHandler) DonationData(ctx echo.Context) error {
 	return nil
 }
 
+// Alive operation middleware
+func (sh *strictHandler) Alive(ctx echo.Context) error {
+	var request AliveRequestObject
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.Alive(ctx.Request().Context(), request.(AliveRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "Alive")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(AliveResponseObject); ok {
+		return validResponse.VisitAliveResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// Ready operation middleware
+func (sh *strictHandler) Ready(ctx echo.Context) error {
+	var request ReadyRequestObject
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.Ready(ctx.Request().Context(), request.(ReadyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "Ready")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(ReadyResponseObject); ok {
+		return validResponse.VisitReadyResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
 // UserData operation middleware
 func (sh *strictHandler) UserData(ctx echo.Context, address string) error {
 	var request UserDataRequestObject
@@ -351,38 +475,39 @@ func (sh *strictHandler) UserData(ctx echo.Context, address string) error {
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"PHiIgt3d7j8BAAD//8YdTsiGHwAA",
+	"H4sIAAAAAAAC/+xZf4/buNH+KoTeF+gV9dqSf8X2oWg32W5waNAGTRY44HbhG4kjm12JVElqvUbg714M",
+	"KcuWLWfd1IuiRf6KVxqRzwxnnnmG+RIkKi+URGlNMPsSmGSJObifkKYiE2BxrvEfJRpLDwutCtRWoDNJ",
+	"FEf6l6NJtCisUDKY7T5k9J6lSjO7RMaVBLJgQjK3Hll3AnyGvMgwmAWfdZmmd/xt+TgOOkEOzx9QLuwy",
+	"mEX9TmDXBdkYq4VcBJtOYJ/nSzDL4+2tBmkgcVuRxfkAwufRaJJM4sk4fTOKw2g45TyBsD+B4RAGYR8x",
+	"xuGbJBz0cZLAZDIYpuEbgHEaJSPAQQpJE/d4fIR70wkomkIjD2a/+ADufHnYdIItyuNoQ65KaVvi7Z57",
+	"95A3PIq6/cFBLI8wdYLnKwWFuCIwC5RX+Gw1XFlYuF15XG/h4IMx2AaCHu9jkGVOHqJdBp2gNNz6f5Lg",
+	"YR+gf72Hb/JN8BwmQldokbSkpFWPKJl7ycC6bLAiR6bSOiuamdANw/4lAufxEDJjwZbmGBraJWoscxZn",
+	"KnlMliAk87aEbj9v96JaykTJVOjcxXr/dwoiQ94MctP63/ap8oSccnE1J1OSHHAWLFFaoymU5EIumFU7",
+	"x5CzKrv2IU8nYRiGl0BbQXRo3dPdJv2wP7iKwqtw/Dnqz0b9WRT+Lgxnbt9U6RxsMAs4WLyiZGmCGfS/",
+	"BUyuuEgF8jn4dP2vJLGzol45Rk6Whs9PcZdyPyBjd59uqjzoMJULS3khJEvAuCql18ZCnFFTEdI0XO6H",
+	"4bQ7uUi97mHdHJJ1naaeburs37LO7jjranc5t8/qcw4WjqndLdBWR5KB1rCmEFQ2nUBYzJ3t/2tMg1nw",
+	"f71dD+9VDbxXEU8dA7dM4DxKUDwJuZgD5xpNy661CatMXPZtXTAH6XbzJx7d4vjtIB1HyeQ24pM3wzie",
+	"jG/DyfgmCm9vk8FtGI2GzeMZtvV0itqLntWh9NYNat3yoyqQqqKA0niGzJQ5ZMXK5mu95zAD6iPwW7cF",
+	"s0bTOPXaseaxn6JPWeYx6n36zEDkLvvjNR2E0s1TmL6ZTqfTS9OlspC19VILGUtLyQ3TIIwv1LtPN03l",
+	"cUkGJxxH5egf11VI8UatlT5XpjpjVimwGngUjWqMQlpcoKYUy9EYWJxcZft6PwKQZWytSs3itUXDQCNb",
+	"aeV8bmjbyZkicbvHw77MOVCIW23WVF9Wl3b5H9FdXhV63dWWJOPBoDuZXlZonezyo89RNBuNX7/LJxpJ",
+	"1/gmf9hEqt5RtwyfuaVBfaI37Hj3q+1hn57P6hC1rGxpEmcRscNckfCBl/tgvEXt5Akq1LgCzY9dNBYe",
+	"qRP598ZpIFqHCcMwEwtBpGiVZ8hDTryMIphX2CoV/4j8DMaucfovfmR5aSyLkd2XYThIfs9+9Ya/vhKP",
+	"l2ZeYd20dkipJPrDefRLlnL7u0EUO4MLQXppdDgdyZdPfHKxnlOa+b/WCbezTLxmdilMrZxaWG8QDaPR",
+	"xUD63rilvSZAYrWeG3TBstVSJEsXzW1NVWPmCgzLwFi2nU4OxHVNn+F01h+8Pn2WZt6ck77e+Oui7GxJ",
+	"ZE+D0bdCpsrLAGkh8f0xB5G5Dp+qPz6hFnbdtQiUThJywnv98SdmyqJQ2l1caLJeWluYWa9XPe/avCsU",
+	"0WUz6p9pTMOsWAoWQ/KIkrNCqyfBSQVkmTuCtJRuuDNMIvJt3uyNdyuM76URFrv3pFIzkaA0rsNWAN//",
+	"5Y5dpylqxd6jRA0Z+1jGmUjYB2/Lngbsh+v3Hz9cDbrhb4+cWK1W3YUsu0ovetXqpgeLIiPzLsru0uaZ",
+	"6w3CukSoXPphHyIjhFsvaY8n1MZHIeqG3ZC+J50NhaDE74bdgZPldumOu+5BvfrO0HUGZVpGxXc+dsQC",
+	"khdKSEssQPqCAtdy6Qh1NF0Iqdu4v37iwSz4hPZ6+8k7L7Cqa863iq+36YJ+ZoWiyETikf7d+Ls53wVf",
+	"6pHHl6ibKp9NoSjktEA/DI/d/eufKXhD/+oiWLw6dts3t3oLJOGL0rICNORoUf/IGsJ2l8AcLYjMUFY6",
+	"eNHrw3uXCZSWZZA8GvYEmeAMSrtEaauNWKKR05+QGY9r9PPPr4/rE2pKd6fspbJspbSjVTAMnwtMLPIu",
+	"IzKojp4aWKFVDHG29n7cy7i0jgEM5XJMplYL5CwDi9oFmbp3meeg18SiaNsyfSflNp29oiI92SP3Fm03",
+	"touqcvxQy0DyLTNxwyBJyrzMXEsziqWgW2roptrohnRre05f5ASalyctJ/G9Vr7XylGtUH4vqs5Y96wq",
+	"gzpBLxNPeLI2hJedBvWT+y8DMv7DUf5fuzXOJfMGuPYNHDCN4BvQ2chc7brPKDJcuegew/2bW/j83jMK",
+	"By3zmMrRLoVc/MZU1xkvO3YCn/OWlL0nqi+VZN68yFiN06xvxleQZUSPO+G9vR9voa47g7qirbqOTTD7",
+	"5UuLljtYmPartLRiKrYgPJB7+e0Xo4L2Ilm0E6C7C8Wd9rW6xM5eKX79PnXz8IqcvLuw+M7Hl+XjYThs",
+	"mYoVM2WydIPw/z5tf0uRe/jGA26p5LPGl+aIBIXwM17Pf9x7ioLNw+afAQAA//8waT49NCEAAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

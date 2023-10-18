@@ -70,3 +70,16 @@ func (s *DelphiServer) UserData(ctx echo.Context, address string) error {
 
 	return ctx.JSON(http.StatusOK, result)
 }
+
+func (s *DelphiServer) Alive(ctx echo.Context) error {
+	return ctx.String(http.StatusOK, "{}\n")
+}
+
+func (s *DelphiServer) Ready(ctx echo.Context) error {
+	err := s.db.Ping()
+	if err != nil {
+		return ctx.String(http.StatusServiceUnavailable, "{}\n")
+	}
+	return ctx.String(http.StatusOK, "{}\n")
+
+}

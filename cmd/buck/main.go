@@ -4,11 +4,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/go-co-op/gocron"
+	"github.com/heptiolabs/healthcheck"
 	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
@@ -21,6 +23,8 @@ import (
 var (
 	bts, rev, version string
 )
+
+const defaultPort = 8082
 
 func main() {
 	err := godotenv.Overload()
@@ -79,7 +83,9 @@ func main() {
 	fbn := flag.Int("set-final", -1, "set last finalized ETH block number")
 	monitorLatest := flag.Bool("monitor-latest", false, "monitor latest ETH blocks")
 	monitorFinal := flag.Bool("monitor-final", false, "monitor finalized ETH blocks")
+	port := flag.Uint("port", defaultPort, "Port for the healthcheck server")
 	flag.Parse()
+
 	if *monitorLatest && *monitorFinal {
 		log.Fatal("pick either -monitor-latest XOR -monitor-final but not both")
 	}
@@ -120,6 +126,13 @@ func main() {
 	}
 
 	if *monitorLatest || *monitorFinal {
+		// don't clash with the healthcheck port of the ETH/latest crawler
+		if *monitorFinal && (*port == defaultPort) {
+			*port = defaultPort + 1
+		}
+		health := healthcheck.NewHandler()
+		health.AddReadinessCheck("database", healthcheck.DatabasePingCheck(dbh.DB, 1*time.Second))
+		go http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", *port), health) // nolint:errcheck
 		s.StartBlocking()
 	}
 }

@@ -126,6 +126,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/error'
+        "404":
+          description: |
+            no such user
         "5XX":
           description: |
             Servers are not working as expected. The request is probably valid
@@ -134,6 +137,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/error'
+  /live:
+    get:
+      summary: is the service alive?
+      description: is the service alive?
+      operationId: alive
+      responses:
+        "200":
+          description: OK
+  /ready:
+    get:
+      summary: is the service alive and ready to do work?
+      description: is the service alive and ready to do work?
+      operationId: ready
+      responses:
+        "200":
+          description: OK
+        "503":
+          description: something's wrong
 components:
   schemas:
     error:
