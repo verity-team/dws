@@ -31,7 +31,7 @@ All services support the `-p` command-line flag allowing you to set the port the
 |service          | port   | content served |
 |:-----------------:|------:|--------------------------------------------|
 |delphi      | 8080  | REST API + /live and /ready healtcheck endpoints |
-|pulitzer      | 8082  | /live and /ready healtcheck endpoints |
+|pulitzer      | 8081  | /live and /ready healtcheck endpoints |
 |buck/latest      | 8082  | /live and /ready healtcheck endpoints |
 |buck/final      | 8083  | /live and /ready healtcheck endpoints |
 
