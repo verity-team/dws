@@ -82,8 +82,6 @@ BEFORE UPDATE ON last_block
 FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
 
-INSERT INTO last_block(chain, label, value) VALUES('eth', 'latest', 18312345);
-
 --- donation_stats ----------------------------------------------------
 CREATE TYPE donation_stats_status_enum AS ENUM ('open', 'paused', 'closed');
 DROP TABLE IF EXISTS donation_stats;
