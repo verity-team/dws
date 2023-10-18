@@ -41,3 +41,15 @@ codegen:
 
 lint:
 	golangci-lint run
+
+run_delphi:
+	bin/delphi 2>&1 | tee /tmp/delphi-`date +'%Y-%m-%d_%H-%M-%S'`.log
+
+run_pulitzer:
+	bin/pulitzer 2>&1 | tee /tmp/pulitzer-`date +'%Y-%m-%d_%H-%M-%S'`.log
+	
+run_buck_latest:
+	bin/buck --monitor-latest 2>&1 | tee /tmp/buck-latest-`date +'%Y-%m-%d_%H-%M-%S'`.log
+
+run_buck_final:
+	bin/buck --monitor-final 2>&1 | tee /tmp/buck-final-`date +'%Y-%m-%d_%H-%M-%S'`.log
