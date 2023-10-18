@@ -1,14 +1,21 @@
 import ClientRoot from "@/components/ClientRoot";
+import Banner from "@/components/landing/banner/Banner";
+import LaunchTimer from "@/components/landing/banner/LaunchTimer";
 import Navbar from "@/components/landing/navbar/Navbar";
-import DemoConnect from "@/components/metamask/DemoConnect";
-import { theme } from "@/utils/theme";
-import { ThemeProvider } from "@mui/material";
 
 export default function Home() {
   return (
-    <ClientRoot>
-      <Navbar />
-      <DemoConnect />
-    </ClientRoot>
+    <>
+      <ClientRoot>
+        <Navbar />
+        <div className="mx-8">
+          <div className="px-8 pt-10">
+            <LaunchTimer />
+          </div>
+        </div>
+      </ClientRoot>
+
+      <Banner />
+    </>
   );
 }
