@@ -24,7 +24,7 @@ const MemeSlideshow = () => {
   useEffect(() => {
     const timerId = setInterval(() => {
       setCurrentItem((current) => (current + 1) % memes.length);
-    }, 2000);
+    }, 5000);
 
     return () => clearInterval(timerId);
   }, []);

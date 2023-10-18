@@ -4,7 +4,7 @@ import BannerSection from "./BannerSection";
 const Banner = () => {
   return (
     <div>
-      <section className="grid grid-cols-3 mx-8 px-24 pt-8">
+      <section className="grid grid-cols-1 md:grid-cols-3 mx-8 px-24 pt-8">
         <div className="col-span-2 flex h-full items-start justify-start">
           <h1 className="text-6xl leading-loose-2xl italic tracking-wide inline-block break-words">
             Let&#x27;s memefy counterculture!

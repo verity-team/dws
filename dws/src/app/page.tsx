@@ -2,6 +2,7 @@ import ClientRoot from "@/components/ClientRoot";
 import Banner from "@/components/landing/banner/Banner";
 import MemeSlideshow from "@/components/landing/carousel/MemeSlideshow";
 import Navbar from "@/components/landing/navbar/Navbar";
+import Roadmap from "@/components/landing/roadmap/Roadmap";
 import dynamic from "next/dynamic";
 
 const LaunchTimer = dynamic(
@@ -22,6 +23,7 @@ export default function Home() {
       </ClientRoot>
       <Banner />
       <MemeSlideshow />
+      <Roadmap />
     </>
   );
 }
