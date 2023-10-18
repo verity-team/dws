@@ -132,6 +132,7 @@ func getETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 	// Receive and print the results from the channels
 	var prices []decimal.Decimal
 
+	log.Infof("==> %v", time.Now().UTC())
 	for k := range channels {
 		price, ok := <-channels[k]
 		if ok {
