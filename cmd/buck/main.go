@@ -149,6 +149,7 @@ func monitorFinalizedETH(ctxt common.Context) error {
 		if err != nil {
 			return err
 		}
+		log.Infof("oldest unconfirmed tx block (from db): %d", startBlock)
 		if startBlock == 0 {
 			// no unconfirmed transactions -- nothing to do
 			return nil
@@ -221,8 +222,15 @@ func monitorLatestETH(ctxt common.Context) error {
 
 		// we only get the ETH price if we need to persist transactions
 		// get ETH price at the time the block was published
-		ethPrice, err := common.GetETHPrice(ctxt.DB, txs[0].BlockTime)
+		blockTime := txs[0].BlockTime
+		ethPrice, err := common.GetETHPrice(ctxt.DB, blockTime)
 		if err != nil {
+			// request the missing price -- let's hope it is avaiable next time
+			// we wake up
+			log.Infof("requesting price for ETH/%s", blockTime)
+			err2 := db.RequestPrice(ctxt, "eth", blockTime)
+			log.Errorf("failed to request price for ETH/%s, %v", blockTime, err2)
+
 			return err
 		}
 		log.Infof("eth price: %s", ethPrice)

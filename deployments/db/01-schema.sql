@@ -82,8 +82,6 @@ BEFORE UPDATE ON last_block
 FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
 
-INSERT INTO last_block(chain, label, value) VALUES('eth', 'latest', 18312345);
-
 --- donation_stats ----------------------------------------------------
 CREATE TYPE donation_stats_status_enum AS ENUM ('open', 'paused', 'closed');
 DROP TABLE IF EXISTS donation_stats;
@@ -178,6 +176,23 @@ CREATE TABLE failed_tx (
 );
 CREATE TRIGGER failed_tx_update_timestamp
 BEFORE UPDATE ON failed_tx
+FOR EACH ROW
+EXECUTE PROCEDURE trigger_update_modified_at();
+
+--- price_req ----------------------------------------------------
+CREATE TYPE price_req_status_enum AS ENUM ('new', 'succeeded', 'failed');
+DROP TABLE IF EXISTS price_req;
+CREATE TABLE price_req (
+    id BIGSERIAL PRIMARY KEY,
+    what_asset asset_enum NOT NULL,
+    what_time TIMESTAMP NOT NULL,
+    status price_req_status_enum NOT NULL DEFAULT 'new',
+
+    modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
+    created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())
+);
+CREATE TRIGGER price_req_update_timestamp
+BEFORE UPDATE ON price_req
 FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
 

@@ -3,6 +3,7 @@ package db
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/shopspring/decimal"
@@ -499,4 +500,18 @@ func priceBucket(ctxt common.Context, tokens decimal.Decimal) decimal.Decimal {
 	}
 	// we fell through the loop, return the max price
 	return ctxt.SaleParams[len(ctxt.SaleParams)-1].Price
+}
+
+func RequestPrice(ctxt common.Context, asset string, ts time.Time) error {
+	q := `
+		INSERT INTO price_req(what_asset, what_time) VALUES($1, $2)
+	`
+	_, err := ctxt.DB.Exec(q, asset, ts)
+	if err != nil {
+		err = fmt.Errorf("failed to request price for %s/%s, %v", asset, ts, err)
+		log.Error(err)
+		return err
+	}
+
+	return nil
 }
