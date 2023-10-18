@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { ReactElement, useEffect, useLayoutEffect, useState } from "react";
+import { ReactElement, useLayoutEffect, useState } from "react";
 import NavbarItem from "./NavbarItem";
 import NavbarDropdown from "./dropdown/NavbarDropdown";
 import ConnectButton from "./ConnectBtn";

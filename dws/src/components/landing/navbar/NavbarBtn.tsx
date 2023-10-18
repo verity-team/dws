@@ -1,5 +1,5 @@
-import { ReactElement, MouseEvent, memo, useMemo } from "react";
-import { customColors } from "../../../../tailwind.config";
+import { ReactElement, MouseEvent, memo } from "react";
+import { customColors } from "@root/tailwind.config";
 
 interface NavbarButtonProps {
   text: string;

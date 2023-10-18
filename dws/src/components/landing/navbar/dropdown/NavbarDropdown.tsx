@@ -1,13 +1,12 @@
 "use client";
 
-import { Menu, MenuItem, colors } from "@mui/material";
+import { Menu, MenuItem } from "@mui/material";
 import { ReactElement, MouseEvent, useState, useMemo } from "react";
 import { Nullable } from "@/utils/types";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import NavbarDropdownItem, {
   NavbarDropdownItemProps,
 } from "./NavbarDropdownItem";
-import { customColors } from "../../../../../tailwind.config";
 
 interface NavbarDropdownProps {
   title: string;
