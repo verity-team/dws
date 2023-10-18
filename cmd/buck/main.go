@@ -149,6 +149,7 @@ func monitorFinalizedETH(ctxt common.Context) error {
 		if err != nil {
 			return err
 		}
+		log.Infof("oldest unconfirmed tx block (from db): %d", startBlock)
 		if startBlock == 0 {
 			// no unconfirmed transactions -- nothing to do
 			return nil
