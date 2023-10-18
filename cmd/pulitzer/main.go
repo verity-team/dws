@@ -14,6 +14,7 @@ import (
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
 	"github.com/verity-team/dws/internal/pulitzer/data"
+	"github.com/verity-team/dws/internal/pulitzer/db"
 )
 
 var (
@@ -29,20 +30,20 @@ func main() {
 	log.Info("version = ", version)
 
 	dsn := getDSN()
-	db, err := sqlx.Open("postgres", dsn)
+	dbh, err := sqlx.Open("postgres", dsn)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer db.Close()
+	defer dbh.Close()
 
 	s := gocron.NewScheduler(time.UTC)
 	s.SingletonModeAll()
 
-	_, err = s.Every("1m").Do(getETHPrice, db)
+	_, err = s.Every("1m").Do(getETHPrice, dbh)
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, err = s.Every("1m").Do(servePriceRequests, db)
+	_, err = s.Every("1m").Do(servePriceRequests, dbh)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -94,11 +95,30 @@ func checkPriceDeviation(prices []decimal.Decimal) error {
 	return nil
 }
 
-func servePriceRequests(db *sqlx.DB) error {
+func servePriceRequests(dbh *sqlx.DB) error {
+	rqs, err := db.GetOpenPriceRequests(dbh)
+	if err != nil {
+		return err
+	}
+	for _, rq := range rqs {
+		klines, err := data.GetHistoricalPriceFromBinance(rq.Time)
+		if err != nil {
+			err = fmt.Errorf("failed to obtain historical prices for %s, %v", rq.Time, err)
+			log.Error(err)
+			return err
+		}
+		err = db.CloseRequest(dbh, rq.ID, klines)
+		if err != nil {
+			err = fmt.Errorf("failed to persist historical prices for request #%d/%s, %v", rq.ID, rq.Time, err)
+			log.Error(err)
+			return err
+		}
+		log.Infof("obtained historical prices for request #%d/%s", rq.ID, rq.Time)
+	}
 	return nil
 }
 
-func getETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
+func getETHPrice(dbh *sqlx.DB) (decimal.Decimal, error) {
 	// Create a wait group to synchronize the goroutines
 	var wg sync.WaitGroup
 
@@ -167,29 +187,13 @@ func getETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 		log.Infof("average price: $%s", av.StringFixed(2))
 	}
 
-	err = persistETHPrice(db, av)
+	err = db.PersistETHPrice(dbh, av)
 	if err != nil {
 		log.Errorf("failed to persist ETH price, %v", err)
 		return decimal.Zero, err
 	}
 
 	return av, nil
-}
-
-func persistETHPrice(db *sqlx.DB, avp decimal.Decimal) error {
-	q := `
-		INSERT INTO price(asset, price) VALUES(:asset, :price)
-		`
-	qd := map[string]interface{}{
-		"asset": "eth",
-		"price": avp,
-	}
-	_, err := db.NamedExec(q, qd)
-	if err != nil {
-		log.Errorf("Failed to insert ETH price, %v", err)
-		return err
-	}
-	return nil
 }
 
 func getDSN() string {

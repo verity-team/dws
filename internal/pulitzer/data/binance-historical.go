@@ -10,9 +10,9 @@ import (
 )
 
 type Kline struct {
-	ClosePrice decimal.Decimal `json:"closePrice"`
-	Volume     uint64          `json:"volume"`
-	CloseTime  time.Time       `json:"klineCloseTime"`
+	ClosePrice decimal.Decimal
+	Volume     decimal.Decimal
+	CloseTime  time.Time
 }
 
 func GetHistoricalPriceFromBinance(ts time.Time) ([]Kline, error) {
@@ -41,10 +41,36 @@ func GetHistoricalPriceFromBinance(ts time.Time) ([]Kline, error) {
 	}
 
 	var klines []Kline
+	var klineData [][]interface{}
 	decoder := json.NewDecoder(resp.Body)
-	if err := decoder.Decode(&klines); err != nil {
+	if err := decoder.Decode(&klineData); err != nil {
 		err = fmt.Errorf("error decoding JSON response, %v", err)
 		return nil, err
+	}
+
+	for _, kline := range klineData {
+		if len(kline) != 12 {
+			fmt.Println("Invalid data format")
+			continue
+		}
+
+		p, err := decimal.NewFromString(kline[4].(string))
+		if err != nil {
+			err = fmt.Errorf("error decoding close price ('%s') in JSON response, %v", kline[4].(string), err)
+			return nil, err
+		}
+		v, err := decimal.NewFromString(kline[5].(string))
+		if err != nil {
+			err = fmt.Errorf("error decoding Volume ('%s') in JSON response, %v", kline[5].(string), err)
+			return nil, err
+		}
+		ct := time.Unix(int64(kline[6].(float64)/1000), 0)
+		k := Kline{
+			ClosePrice: p,
+			Volume:     v,
+			CloseTime:  ct.UTC(),
+		}
+		klines = append(klines, k)
 	}
 	return klines, nil
 }
