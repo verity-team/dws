@@ -1,5 +1,6 @@
 import ClientRoot from "@/components/ClientRoot";
 import Banner from "@/components/landing/banner/Banner";
+import MemeSlideshow from "@/components/landing/carousel/MemeSlideshow";
 import Navbar from "@/components/landing/navbar/Navbar";
 import dynamic from "next/dynamic";
 
@@ -20,6 +21,7 @@ export default function Home() {
         </div>
       </ClientRoot>
       <Banner />
+      <MemeSlideshow />
     </>
   );
 }
