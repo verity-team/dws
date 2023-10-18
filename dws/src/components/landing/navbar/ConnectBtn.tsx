@@ -34,7 +34,7 @@ const ConnectButton = () => {
   return (
     <button
       type="button"
-      className="px-9 py-2 bg-cred text-white rounded-full border-4 border-black text-2xl tracking-wide uppercase"
+      className="px-6 py-2 bg-cred text-white rounded-full border-4 border-black text-2xl tracking-wide uppercase"
       onClick={handleWalletConnect}
       disabled={account != null}
     >

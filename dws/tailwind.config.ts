@@ -3,6 +3,7 @@ import type { Config } from "tailwindcss";
 export const customColors = {
   cblack: "1a1b1f",
   cred: "#ee382d",
+  cgreen: "#FDEEA9",
 };
 
 const config: Config = {
@@ -15,6 +16,10 @@ const config: Config = {
   theme: {
     extend: {
       colors: customColors,
+      lineHeight: {
+        "loose-xl": "3.75rem",
+        "loose-2xl": "5rem",
+      },
     },
   },
 };
