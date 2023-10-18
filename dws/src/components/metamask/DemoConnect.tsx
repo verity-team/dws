@@ -40,9 +40,6 @@ const DemoConnect = (): ReactElement => {
         <LaunchTimer />
       </div>
       <div className="flex items-center space-x-2">
-        <TextButton onClick={handleWalletConnect} disabled={account != null}>
-          Connect
-        </TextButton>
         {account && (
           <div>
             Connected with <b>{account}</b>
