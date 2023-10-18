@@ -1,11 +1,12 @@
 "use client";
 
-import { ReactElement, useEffect, useMemo, useState } from "react";
+import { ReactElement, useEffect, useState } from "react";
 
 interface TimerSpanProps {
   text: string | number;
   highlight?: boolean;
 }
+
 const TimerSpan = ({
   text,
   highlight = false,
