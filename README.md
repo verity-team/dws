@@ -9,12 +9,12 @@ The backend used by the donation web site frontend is called `delphi` and it wil
 ## how to run the dws backend
 
 The dws backend consists of a `postgres` database and 4 services
-- `buck`: ETH/latest crawler, checks the latest blocks for donation transactions and inserts these into the database (state: `unconfirmed`)
+- `buck`: ETH/latest crawler, checks the latest blocks for donation transactions and inserts these into the database (in state `unconfirmed`)
 - `buck`: ETH/finalized crawler, checks the finalized blocks for donation transactions and confrm them, also updates the donation campaign statistics and the token price (if/as needed)
 - `pulitzer`: pulls the ETH price from 6 exchanges and inserts an average price into the database every minute
 - `delphi`: [REST API](https://app.swaggerhub.com/apis/MUHAREM_1/delphi/) server -- only serves data from the database
 
-The backend services are written in `go` -- you will thus need go on your development system. For testing purposes the `postgres` database can be run in a docker container i.e. you will need docker as well.
+The backend services are written in `go` -- you will thus need `go` on your development system. For testing purposes the `postgres` database can be run in a docker container i.e. you will need docker as well.
 
 Once you have these in place you can simply run
 1. `go mod tidy` to fetch the dependencies
