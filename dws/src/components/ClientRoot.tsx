@@ -6,6 +6,7 @@ import { ThemeProvider } from "@emotion/react";
 import { MetaMaskProvider } from "@metamask/sdk-react";
 import { useSearchParams } from "next/navigation";
 import React, { ReactElement, ReactNode, createContext, useMemo } from "react";
+import { Toaster } from "react-hot-toast";
 
 interface ClientRootProps {
   children: ReactNode;
@@ -41,6 +42,7 @@ const ClientRoot = ({
       <MetaMaskProvider debug={true} sdkOptions={metamaskSettings}>
         <ClientAFC.Provider value={affliateCode}>{children}</ClientAFC.Provider>
       </MetaMaskProvider>
+      <Toaster />
     </ThemeProvider>
   );
 };

@@ -21,6 +21,7 @@
     "react": "^18",
     "react-dom": "^18",
     "react-hook-form": "^7.47.0",
+    "react-hot-toast": "^2.4.1",
     "swr": "^2.2.4",
     "web3-eth-abi": "^4.1.2",
     "web3-utils": "^4.0.6",

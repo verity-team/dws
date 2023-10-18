@@ -1,12 +1,13 @@
 "use client";
 
-import { Menu, MenuItem } from "@mui/material";
+import { Menu, MenuItem, colors } from "@mui/material";
 import { ReactElement, MouseEvent, useState, useMemo } from "react";
 import { Nullable } from "@/utils/types";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import NavbarDropdownItem, {
   NavbarDropdownItemProps,
 } from "./NavbarDropdownItem";
+import { customColors } from "../../../../../tailwind.config";
 
 interface NavbarDropdownProps {
   title: string;
@@ -25,9 +26,10 @@ const NavbarDropdown = ({
   const isOpen = useMemo(() => anchor !== null, [anchor]);
 
   const handleClick = (event: MouseEvent<HTMLElement>) => {
-    if (anchor !== event.currentTarget) {
-      setAnchor(event.currentTarget);
+    if (anchor != null) {
+      return;
     }
+    setAnchor(event.currentTarget);
   };
 
   const handleClose = () => {
@@ -60,7 +62,6 @@ const NavbarDropdown = ({
         MenuListProps={{
           onMouseLeave: openBehavior === "hover" ? handleClose : undefined,
         }}
-        transformOrigin={{ horizontal: "left", vertical: "top" }}
       >
         {options.map(({ text, href }) => (
           <MenuItem

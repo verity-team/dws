@@ -23,7 +23,7 @@ const CollapseNavbarDropdown = ({
   return (
     <>
       <div
-        className="flex items-center text-cblack cursor-pointer"
+        className="flex items-center text-cblack cursor-pointer hover:text-cred"
         onClick={handleClick}
       >
         <button
