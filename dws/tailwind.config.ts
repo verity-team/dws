@@ -1,9 +1,10 @@
 import type { Config } from "tailwindcss";
 
 export const customColors = {
-  cblack: "1a1b1f",
+  cblack: "#1a1b1f",
   cred: "#ee382d",
   cgreen: "#FDEEA9",
+  cblue: "#F4F4F4",
 };
 
 const config: Config = {
