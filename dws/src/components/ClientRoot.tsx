@@ -1,9 +1,12 @@
 "use client";
 
+import { theme } from "@/utils/theme";
 import { Nullable } from "@/utils/types";
+import { ThemeProvider } from "@emotion/react";
 import { MetaMaskProvider } from "@metamask/sdk-react";
 import { useSearchParams } from "next/navigation";
 import React, { ReactElement, ReactNode, createContext, useMemo } from "react";
+import { Toaster } from "react-hot-toast";
 
 interface ClientRootProps {
   children: ReactNode;
@@ -35,9 +38,12 @@ const ClientRoot = ({
   const affliateCode = searchParams.get("afc");
 
   return (
-    <MetaMaskProvider debug={true} sdkOptions={metamaskSettings}>
-      <ClientAFC.Provider value={affliateCode}>{children}</ClientAFC.Provider>
-    </MetaMaskProvider>
+    <ThemeProvider theme={theme}>
+      <MetaMaskProvider debug={true} sdkOptions={metamaskSettings}>
+        <ClientAFC.Provider value={affliateCode}>{children}</ClientAFC.Provider>
+      </MetaMaskProvider>
+      <Toaster />
+    </ThemeProvider>
   );
 };
 

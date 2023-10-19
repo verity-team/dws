@@ -1,3 +1,15 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* .milestone::after {
+  display: block;
+  content: "";
+  position: absolute;
+  margin-top: 6px;
+  left: 50%;
+  top: 0;
+  height: 10px;
+  width: 25vw;
+  border-top: 4px solid black;
+} */
