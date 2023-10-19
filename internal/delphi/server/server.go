@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
@@ -52,6 +53,7 @@ func (s *DelphiServer) DonationData(ctx echo.Context) error {
 }
 
 func (s *DelphiServer) UserData(ctx echo.Context, address string) error {
+	address = strings.ToLower(address)
 	dd, err := db.GetUserDonationData(s.db, address)
 	if err != nil {
 		return err
