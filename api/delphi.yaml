@@ -274,7 +274,7 @@ components:
           example: "2023-10-06T12:52:10+00:00"
           maxLength: 32
           x-oapi-codegen-extra-tags:
-            db: modified_at
+            db: block_time
     price:
       required:
       - asset

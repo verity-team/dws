@@ -66,7 +66,7 @@ type Donation struct {
 
 	// Tokens amount of tokens corresponding to the donated amount
 	Tokens string    `db:"tokens" json:"tokens"`
-	Ts     time.Time `db:"modified_at" json:"ts"`
+	Ts     time.Time `db:"block_time" json:"ts"`
 
 	// TxHash transaction hash for the donation in question
 	TxHash string `db:"tx_hash" json:"tx_hash"`

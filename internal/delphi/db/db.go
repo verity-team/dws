@@ -101,7 +101,7 @@ func GetUserDonationData(db *sqlx.DB, address string) ([]api.Donation, error) {
 	// fetch donations made by this user/address
 	q1 := `
 		SELECT
-			amount, usd_amount, asset, tokens, price, tx_hash, status, modified_at
+			amount, usd_amount, asset, tokens, price, tx_hash, status, block_time
 		FROM donation
 		WHERE address=$1
 		ORDER BY id
