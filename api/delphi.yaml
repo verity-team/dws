@@ -23,6 +23,10 @@ paths:
       summary: set affiliate code for donation
       description: |
          Call this endpoint to set the affiliate code for a donation
+      parameters:
+      - $ref: '#/components/parameters/delphi_key'
+      - $ref: '#/components/parameters/delphi_nonce'
+      - $ref: '#/components/parameters/delphi_sign'
       operationId: setAffiliateCode
       requestBody:
         content:
@@ -127,8 +131,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/error'
         "404":
-          description: |
-            no such user
+          description: no such address
         "5XX":
           description: |
             Servers are not working as expected. The request is probably valid
@@ -155,6 +158,50 @@ paths:
           description: OK
         "503":
           description: something's wrong
+  /affiliate/code:
+    post:
+      summary: generate new affiliate code
+      description: |
+         Call this endpoint to generate a new affiliate code
+      parameters:
+      - $ref: '#/components/parameters/delphi_key'
+      - $ref: '#/components/parameters/delphi_nonce'
+      - $ref: '#/components/parameters/delphi_sign'
+      operationId: genAffiliateCode
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/gen_afc_request'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/affiliate_code'
+        "400":
+          description: |
+            Bad input parameter; error message provides details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+        "401":
+          description: |
+            Client lacks valid authentication credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+        "5XX":
+          description: |
+            Servers are not working as expected. The request is probably valid
+            but needs to be retried later.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
 components:
   schemas:
     error:
@@ -387,3 +434,80 @@ components:
           type: string
           example: "0x558c8b86f75b0149ddca028a44a302eebe47c032e8ca8834f07aa6f1c5ae3fac"
           maxLength: 66
+    gen_afc_request:
+      required:
+      - platform
+      - handle
+      properties:
+        platform:
+          type: string
+          enum: [wallet, twitter, instagram]
+          example: "twitter"
+          maxLength: 16
+        handle:
+          type: string
+          maxLength: 64
+          description: handle controlled by the user on the given platform
+          example: "@elonmusk"
+    affiliate_code:
+      required:
+      - platform
+      - handle
+      - value
+      - ts
+      properties:
+        platform:
+          type: string
+          enum: [wallet, twitter, instagram]
+          example: "twitter"
+          maxLength: 16
+          x-oapi-codegen-extra-tags:
+            db: platform
+        handle:
+          type: string
+          maxLength: 64
+          description: handle controlled by the user on the given platform
+          example: "@elonmusk"
+          x-oapi-codegen-extra-tags:
+            db: handle
+        value:
+          type: string
+          maxLength: 16
+          description: affiliate code for the platform/handle in question
+          example: "GezIkgeubrOkiOv4"
+          x-oapi-codegen-extra-tags:
+            db: value
+        ts:
+          description: date/time at which the affiliate code was added
+          type: string
+          format: date-time
+          example: "2023-10-05T09:23:10+00:00"
+          maxLength: 32
+          x-oapi-codegen-extra-tags:
+            db: created_at
+  parameters:
+    delphi_key:
+      in: header
+      name: delphi-api-key
+      schema:
+        type: string
+      required: true
+      description: api key (public)
+      example: c6wU1t3oehDnQd5XSMNkOw==
+    delphi_sign:
+      in: header
+      name: delphi-auth-string
+      schema:
+        type: string
+      required: true
+      description: signature over the nonce, path and payload
+    delphi_nonce:
+      in: header
+      name: delphi-nonce
+      schema:
+        type: string
+      required: true
+      description: |
+        caller timestamp (number of milliseconds since Unix epoch) -- included
+        to prevent replay attacks
+      example: 1697787627315

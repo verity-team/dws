@@ -7,6 +7,13 @@ import (
 	"time"
 )
 
+// Defines values for AffiliateCodePlatform.
+const (
+	AffiliateCodePlatformInstagram AffiliateCodePlatform = "instagram"
+	AffiliateCodePlatformTwitter   AffiliateCodePlatform = "twitter"
+	AffiliateCodePlatformWallet    AffiliateCodePlatform = "wallet"
+)
+
 // Defines values for DonationAsset.
 const (
 	DonationAssetEth  DonationAsset = "eth"
@@ -28,6 +35,13 @@ const (
 	Paused DonationDataStatus = "paused"
 )
 
+// Defines values for GenAfcRequestPlatform.
+const (
+	GenAfcRequestPlatformInstagram GenAfcRequestPlatform = "instagram"
+	GenAfcRequestPlatformTwitter   GenAfcRequestPlatform = "twitter"
+	GenAfcRequestPlatformWallet    GenAfcRequestPlatform = "wallet"
+)
+
 // Defines values for PriceAsset.
 const (
 	PriceAssetEth   PriceAsset = "eth"
@@ -40,6 +54,22 @@ const (
 	Staking   UserStatsStatus = "staking"
 	Unstaking UserStatsStatus = "unstaking"
 )
+
+// AffiliateCode defines model for affiliate_code.
+type AffiliateCode struct {
+	// Handle handle controlled by the user on the given platform
+	Handle   string                `db:"handle" json:"handle"`
+	Platform AffiliateCodePlatform `db:"platform" json:"platform"`
+
+	// Ts date/time at which the affiliate code was added
+	Ts time.Time `db:"created_at" json:"ts"`
+
+	// Value affiliate code for the platform/handle in question
+	Value string `db:"value" json:"value"`
+}
+
+// AffiliateCodePlatform defines model for AffiliateCode.Platform.
+type AffiliateCodePlatform string
 
 // AffiliateRequest defines model for affiliate_request.
 type AffiliateRequest struct {
@@ -113,6 +143,16 @@ type Error struct {
 	Message string `json:"message"`
 }
 
+// GenAfcRequest defines model for gen_afc_request.
+type GenAfcRequest struct {
+	// Handle handle controlled by the user on the given platform
+	Handle   string                `json:"handle"`
+	Platform GenAfcRequestPlatform `json:"platform"`
+}
+
+// GenAfcRequestPlatform defines model for GenAfcRequest.Platform.
+type GenAfcRequestPlatform string
+
 // Price defines model for price.
 type Price struct {
 	Asset PriceAsset `db:"asset" json:"asset"`
@@ -153,6 +193,44 @@ type UserStats struct {
 
 // UserStatsStatus defines model for UserStats.Status.
 type UserStatsStatus string
+
+// DelphiKey defines model for delphi_key.
+type DelphiKey = string
+
+// DelphiNonce defines model for delphi_nonce.
+type DelphiNonce = string
+
+// DelphiSign defines model for delphi_sign.
+type DelphiSign = string
+
+// GenAffiliateCodeParams defines parameters for GenAffiliateCode.
+type GenAffiliateCodeParams struct {
+	// DelphiApiKey api key (public)
+	DelphiApiKey DelphiKey `json:"delphi-api-key"`
+
+	// DelphiNonce caller timestamp (number of milliseconds since Unix epoch) -- included
+	// to prevent replay attacks
+	DelphiNonce DelphiNonce `json:"delphi-nonce"`
+
+	// DelphiAuthString signature over the nonce, path and payload
+	DelphiAuthString DelphiSign `json:"delphi-auth-string"`
+}
+
+// SetAffiliateCodeParams defines parameters for SetAffiliateCode.
+type SetAffiliateCodeParams struct {
+	// DelphiApiKey api key (public)
+	DelphiApiKey DelphiKey `json:"delphi-api-key"`
+
+	// DelphiNonce caller timestamp (number of milliseconds since Unix epoch) -- included
+	// to prevent replay attacks
+	DelphiNonce DelphiNonce `json:"delphi-nonce"`
+
+	// DelphiAuthString signature over the nonce, path and payload
+	DelphiAuthString DelphiSign `json:"delphi-auth-string"`
+}
+
+// GenAffiliateCodeJSONRequestBody defines body for GenAffiliateCode for application/json ContentType.
+type GenAffiliateCodeJSONRequestBody = GenAfcRequest
 
 // SetAffiliateCodeJSONRequestBody defines body for SetAffiliateCode for application/json ContentType.
 type SetAffiliateCodeJSONRequestBody = AffiliateRequest

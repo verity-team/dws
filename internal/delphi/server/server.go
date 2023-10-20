@@ -23,7 +23,7 @@ func NewDelphiServer(db *sqlx.DB) *DelphiServer {
 	}
 }
 
-func (s *DelphiServer) SetAffiliateCode(ctx echo.Context) error {
+func (s *DelphiServer) SetAffiliateCode(ctx echo.Context, headers api.SetAffiliateCodeParams) error {
 	var afc api.AffiliateRequest
 	err := ctx.Bind(&afc)
 	if err != nil {
@@ -59,7 +59,7 @@ func (s *DelphiServer) UserData(ctx echo.Context, address string) error {
 		return err
 	}
 	if dd == nil {
-		return ctx.String(http.StatusNotFound, "no such address")
+		return ctx.NoContent(http.StatusNotFound)
 	}
 	us, err := db.GetUserStats(s.db, address)
 	if err != nil {
@@ -84,4 +84,14 @@ func (s *DelphiServer) Ready(ctx echo.Context) error {
 	}
 	return ctx.String(http.StatusOK, "{}\n")
 
+}
+
+func (s *DelphiServer) GenAffiliateCode(ctx echo.Context, headers api.GenAffiliateCodeParams) error {
+	var afc api.GenAfcRequest
+	err := ctx.Bind(&afc)
+	if err != nil {
+		log.Error("failed to bind POST param (GenAfcRequest)")
+		return err
+	}
+	return nil
 }

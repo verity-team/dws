@@ -23,9 +23,12 @@ import (
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// generate new affiliate code
+	// (POST /affiliate/code)
+	GenAffiliateCode(ctx echo.Context, params GenAffiliateCodeParams) error
 	// set affiliate code for donation
 	// (POST /donation/affiliate)
-	SetAffiliateCode(ctx echo.Context) error
+	SetAffiliateCode(ctx echo.Context, params SetAffiliateCodeParams) error
 	// get general donation data
 	// (GET /donation/data/)
 	DonationData(ctx echo.Context) error
@@ -45,12 +48,133 @@ type ServerInterfaceWrapper struct {
 	Handler ServerInterface
 }
 
+// GenAffiliateCode converts echo context to params.
+func (w *ServerInterfaceWrapper) GenAffiliateCode(ctx echo.Context) error {
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GenAffiliateCodeParams
+
+	headers := ctx.Request().Header
+	// ------------- Required header parameter "delphi-api-key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("delphi-api-key")]; found {
+		var DelphiApiKey DelphiKey
+		n := len(valueList)
+		if n != 1 {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Expected one value for delphi-api-key, got %d", n))
+		}
+
+		err = runtime.BindStyledParameterWithLocation("simple", false, "delphi-api-key", runtime.ParamLocationHeader, valueList[0], &DelphiApiKey)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter delphi-api-key: %s", err))
+		}
+
+		params.DelphiApiKey = DelphiApiKey
+	} else {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Header parameter delphi-api-key is required, but not found"))
+	}
+	// ------------- Required header parameter "delphi-nonce" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("delphi-nonce")]; found {
+		var DelphiNonce DelphiNonce
+		n := len(valueList)
+		if n != 1 {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Expected one value for delphi-nonce, got %d", n))
+		}
+
+		err = runtime.BindStyledParameterWithLocation("simple", false, "delphi-nonce", runtime.ParamLocationHeader, valueList[0], &DelphiNonce)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter delphi-nonce: %s", err))
+		}
+
+		params.DelphiNonce = DelphiNonce
+	} else {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Header parameter delphi-nonce is required, but not found"))
+	}
+	// ------------- Required header parameter "delphi-auth-string" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("delphi-auth-string")]; found {
+		var DelphiAuthString DelphiSign
+		n := len(valueList)
+		if n != 1 {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Expected one value for delphi-auth-string, got %d", n))
+		}
+
+		err = runtime.BindStyledParameterWithLocation("simple", false, "delphi-auth-string", runtime.ParamLocationHeader, valueList[0], &DelphiAuthString)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter delphi-auth-string: %s", err))
+		}
+
+		params.DelphiAuthString = DelphiAuthString
+	} else {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Header parameter delphi-auth-string is required, but not found"))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GenAffiliateCode(ctx, params)
+	return err
+}
+
 // SetAffiliateCode converts echo context to params.
 func (w *ServerInterfaceWrapper) SetAffiliateCode(ctx echo.Context) error {
 	var err error
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SetAffiliateCodeParams
+
+	headers := ctx.Request().Header
+	// ------------- Required header parameter "delphi-api-key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("delphi-api-key")]; found {
+		var DelphiApiKey DelphiKey
+		n := len(valueList)
+		if n != 1 {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Expected one value for delphi-api-key, got %d", n))
+		}
+
+		err = runtime.BindStyledParameterWithLocation("simple", false, "delphi-api-key", runtime.ParamLocationHeader, valueList[0], &DelphiApiKey)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter delphi-api-key: %s", err))
+		}
+
+		params.DelphiApiKey = DelphiApiKey
+	} else {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Header parameter delphi-api-key is required, but not found"))
+	}
+	// ------------- Required header parameter "delphi-nonce" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("delphi-nonce")]; found {
+		var DelphiNonce DelphiNonce
+		n := len(valueList)
+		if n != 1 {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Expected one value for delphi-nonce, got %d", n))
+		}
+
+		err = runtime.BindStyledParameterWithLocation("simple", false, "delphi-nonce", runtime.ParamLocationHeader, valueList[0], &DelphiNonce)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter delphi-nonce: %s", err))
+		}
+
+		params.DelphiNonce = DelphiNonce
+	} else {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Header parameter delphi-nonce is required, but not found"))
+	}
+	// ------------- Required header parameter "delphi-auth-string" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("delphi-auth-string")]; found {
+		var DelphiAuthString DelphiSign
+		n := len(valueList)
+		if n != 1 {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Expected one value for delphi-auth-string, got %d", n))
+		}
+
+		err = runtime.BindStyledParameterWithLocation("simple", false, "delphi-auth-string", runtime.ParamLocationHeader, valueList[0], &DelphiAuthString)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter delphi-auth-string: %s", err))
+		}
+
+		params.DelphiAuthString = DelphiAuthString
+	} else {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Header parameter delphi-auth-string is required, but not found"))
+	}
+
 	// Invoke the callback with all the unmarshaled arguments
-	err = w.Handler.SetAffiliateCode(ctx)
+	err = w.Handler.SetAffiliateCode(ctx, params)
 	return err
 }
 
@@ -125,6 +249,7 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 		Handler: si,
 	}
 
+	router.POST(baseURL+"/affiliate/code", wrapper.GenAffiliateCode)
 	router.POST(baseURL+"/donation/affiliate", wrapper.SetAffiliateCode)
 	router.GET(baseURL+"/donation/data/", wrapper.DonationData)
 	router.GET(baseURL+"/live", wrapper.Alive)
@@ -133,8 +258,57 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 
 }
 
+type GenAffiliateCodeRequestObject struct {
+	Params GenAffiliateCodeParams
+	Body   *GenAffiliateCodeJSONRequestBody
+}
+
+type GenAffiliateCodeResponseObject interface {
+	VisitGenAffiliateCodeResponse(w http.ResponseWriter) error
+}
+
+type GenAffiliateCode200JSONResponse AffiliateCode
+
+func (response GenAffiliateCode200JSONResponse) VisitGenAffiliateCodeResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GenAffiliateCode400JSONResponse Error
+
+func (response GenAffiliateCode400JSONResponse) VisitGenAffiliateCodeResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GenAffiliateCode401JSONResponse Error
+
+func (response GenAffiliateCode401JSONResponse) VisitGenAffiliateCodeResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GenAffiliateCode5XXJSONResponse struct {
+	Body       Error
+	StatusCode int
+}
+
+func (response GenAffiliateCode5XXJSONResponse) VisitGenAffiliateCodeResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
 type SetAffiliateCodeRequestObject struct {
-	Body *SetAffiliateCodeJSONRequestBody
+	Params SetAffiliateCodeParams
+	Body   *SetAffiliateCodeJSONRequestBody
 }
 
 type SetAffiliateCodeResponseObject interface {
@@ -320,6 +494,9 @@ func (response UserData5XXJSONResponse) VisitUserDataResponse(w http.ResponseWri
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// generate new affiliate code
+	// (POST /affiliate/code)
+	GenAffiliateCode(ctx context.Context, request GenAffiliateCodeRequestObject) (GenAffiliateCodeResponseObject, error)
 	// set affiliate code for donation
 	// (POST /donation/affiliate)
 	SetAffiliateCode(ctx context.Context, request SetAffiliateCodeRequestObject) (SetAffiliateCodeResponseObject, error)
@@ -349,9 +526,42 @@ type strictHandler struct {
 	middlewares []StrictMiddlewareFunc
 }
 
+// GenAffiliateCode operation middleware
+func (sh *strictHandler) GenAffiliateCode(ctx echo.Context, params GenAffiliateCodeParams) error {
+	var request GenAffiliateCodeRequestObject
+
+	request.Params = params
+
+	var body GenAffiliateCodeJSONRequestBody
+	if err := ctx.Bind(&body); err != nil {
+		return err
+	}
+	request.Body = &body
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GenAffiliateCode(ctx.Request().Context(), request.(GenAffiliateCodeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GenAffiliateCode")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(GenAffiliateCodeResponseObject); ok {
+		return validResponse.VisitGenAffiliateCodeResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
 // SetAffiliateCode operation middleware
-func (sh *strictHandler) SetAffiliateCode(ctx echo.Context) error {
+func (sh *strictHandler) SetAffiliateCode(ctx echo.Context, params SetAffiliateCodeParams) error {
 	var request SetAffiliateCodeRequestObject
+
+	request.Params = params
 
 	var body SetAffiliateCodeJSONRequestBody
 	if err := ctx.Bind(&body); err != nil {
@@ -475,39 +685,47 @@ func (sh *strictHandler) UserData(ctx echo.Context, address string) error {
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
