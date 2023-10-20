@@ -10,9 +10,9 @@ $$ LANGUAGE plpgsql;
 
 CREATE TYPE asset_enum AS ENUM ('eth', 'truth', 'usdc', 'usdt');
 
---- affiliate_connection ----------------------------------------------------
-DROP TABLE IF EXISTS affiliate_connection;
-CREATE TABLE affiliate_connection (
+--- wallet_connection ----------------------------------------------------
+DROP TABLE IF EXISTS wallet_connection;
+CREATE TABLE wallet_connection (
     id BIGSERIAL PRIMARY KEY,
     code VARCHAR(16) NOT NULL,
     address VARCHAR(42) NOT NULL,

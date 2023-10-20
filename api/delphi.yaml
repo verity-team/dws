@@ -18,7 +18,7 @@ servers:
   description: delphi (donation web site backend)
 
 paths:
-  /affiliate/connection:
+  /wallet/connection:
     post:
       summary: associate a wallet address with an affiliate code
       description: |
@@ -33,6 +33,10 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/user_data_result'
         "400":
           description: |
             Bad input parameter; error message provides details.
@@ -421,17 +425,17 @@ components:
             db: code
     connection_request:
       required:
-      - affiliate_code
-      - wallet_address
+      - code
+      - address
       properties:
-        affiliate_code:
-          description: affiliate code
+        code:
+          description: affiliate code, pass `none` if there's no code in the URL
           type: string
-          example: "ThyagEbNufElyiv7"
+          example: "none"
           maxLength: 16
           x-oapi-codegen-extra-tags:
             db: code
-        wallet_address:
+        address:
           description: address of the wallet that connected
           type: string
           example: "0xDEd1Fe6B3f61c8F1d874bb86F086D10FFc3F0154"
@@ -440,18 +444,18 @@ components:
             db: address
     affiliate_code:
       required:
-      - wallet_address
-      - affiliate_code
+      - address
+      - code
       - ts
       properties:
-        wallet_address:
+        address:
           description: address of the wallet that requested the affiliate code
           type: string
           example: "0xDEd1Fe6B3f61c8F1d874bb86F086D10FFc3F0154"
           maxLength: 42
           x-oapi-codegen-extra-tags:
             db: address
-        affiliate_code:
+        code:
           type: string
           maxLength: 16
           description: |

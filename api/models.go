@@ -43,23 +43,23 @@ const (
 
 // AffiliateCode defines model for affiliate_code.
 type AffiliateCode struct {
-	// AffiliateCode affiliate code generated for the requesting wallet address
-	AffiliateCode string `db:"code" json:"affiliate_code"`
+	// Address address of the wallet that requested the affiliate code
+	Address string `db:"address" json:"address"`
+
+	// Code affiliate code generated for the requesting wallet address
+	Code string `db:"code" json:"code"`
 
 	// Ts date/time at which the affiliate code was added
 	Ts time.Time `db:"created_at" json:"ts"`
-
-	// WalletAddress address of the wallet that requested the affiliate code
-	WalletAddress string `db:"address" json:"wallet_address"`
 }
 
 // ConnectionRequest defines model for connection_request.
 type ConnectionRequest struct {
-	// AffiliateCode affiliate code
-	AffiliateCode string `db:"code" json:"affiliate_code"`
+	// Address address of the wallet that connected
+	Address string `db:"address" json:"address"`
 
-	// WalletAddress address of the wallet that connected
-	WalletAddress string `db:"address" json:"wallet_address"`
+	// Code affiliate code
+	Code string `db:"code" json:"code"`
 }
 
 // Donation defines model for donation.

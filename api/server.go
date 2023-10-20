@@ -26,9 +26,6 @@ type ServerInterface interface {
 	// generate new affiliate code
 	// (POST /affiliate/code)
 	GenerateCode(ctx echo.Context, params GenerateCodeParams) error
-	// associate a wallet address with an affiliate code
-	// (POST /affiliate/connection)
-	ConnectWallet(ctx echo.Context) error
 	// get general donation data
 	// (GET /donation/data)
 	DonationData(ctx echo.Context) error
@@ -41,6 +38,9 @@ type ServerInterface interface {
 	// get the donation data for the wallet address in question
 	// (GET /user/data/{address})
 	UserData(ctx echo.Context, address string) error
+	// associate a wallet address with an affiliate code
+	// (POST /wallet/connection)
+	ConnectWallet(ctx echo.Context) error
 }
 
 // ServerInterfaceWrapper converts echo contexts to parameters.
@@ -113,15 +113,6 @@ func (w *ServerInterfaceWrapper) GenerateCode(ctx echo.Context) error {
 	return err
 }
 
-// ConnectWallet converts echo context to params.
-func (w *ServerInterfaceWrapper) ConnectWallet(ctx echo.Context) error {
-	var err error
-
-	// Invoke the callback with all the unmarshaled arguments
-	err = w.Handler.ConnectWallet(ctx)
-	return err
-}
-
 // DonationData converts echo context to params.
 func (w *ServerInterfaceWrapper) DonationData(ctx echo.Context) error {
 	var err error
@@ -165,6 +156,15 @@ func (w *ServerInterfaceWrapper) UserData(ctx echo.Context) error {
 	return err
 }
 
+// ConnectWallet converts echo context to params.
+func (w *ServerInterfaceWrapper) ConnectWallet(ctx echo.Context) error {
+	var err error
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.ConnectWallet(ctx)
+	return err
+}
+
 // This is a simple interface which specifies echo.Route addition functions which
 // are present on both echo.Echo and echo.Group, since we want to allow using
 // either of them for path registration
@@ -194,11 +194,11 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 	}
 
 	router.POST(baseURL+"/affiliate/code", wrapper.GenerateCode)
-	router.POST(baseURL+"/affiliate/connection", wrapper.ConnectWallet)
 	router.GET(baseURL+"/donation/data", wrapper.DonationData)
 	router.GET(baseURL+"/live", wrapper.Alive)
 	router.GET(baseURL+"/ready", wrapper.Ready)
 	router.GET(baseURL+"/user/data/:address", wrapper.UserData)
+	router.POST(baseURL+"/wallet/connection", wrapper.ConnectWallet)
 
 }
 
@@ -243,52 +243,6 @@ type GenerateCode5XXJSONResponse struct {
 }
 
 func (response GenerateCode5XXJSONResponse) VisitGenerateCodeResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(response.StatusCode)
-
-	return json.NewEncoder(w).Encode(response.Body)
-}
-
-type ConnectWalletRequestObject struct {
-	Body *ConnectWalletJSONRequestBody
-}
-
-type ConnectWalletResponseObject interface {
-	VisitConnectWalletResponse(w http.ResponseWriter) error
-}
-
-type ConnectWallet200Response struct {
-}
-
-func (response ConnectWallet200Response) VisitConnectWalletResponse(w http.ResponseWriter) error {
-	w.WriteHeader(200)
-	return nil
-}
-
-type ConnectWallet400JSONResponse Error
-
-func (response ConnectWallet400JSONResponse) VisitConnectWalletResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(400)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type ConnectWallet401JSONResponse Error
-
-func (response ConnectWallet401JSONResponse) VisitConnectWalletResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(401)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type ConnectWallet5XXJSONResponse struct {
-	Body       Error
-	StatusCode int
-}
-
-func (response ConnectWallet5XXJSONResponse) VisitConnectWalletResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(response.StatusCode)
 
@@ -434,14 +388,58 @@ func (response UserData5XXJSONResponse) VisitUserDataResponse(w http.ResponseWri
 	return json.NewEncoder(w).Encode(response.Body)
 }
 
+type ConnectWalletRequestObject struct {
+	Body *ConnectWalletJSONRequestBody
+}
+
+type ConnectWalletResponseObject interface {
+	VisitConnectWalletResponse(w http.ResponseWriter) error
+}
+
+type ConnectWallet200JSONResponse UserDataResult
+
+func (response ConnectWallet200JSONResponse) VisitConnectWalletResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ConnectWallet400JSONResponse Error
+
+func (response ConnectWallet400JSONResponse) VisitConnectWalletResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ConnectWallet401JSONResponse Error
+
+func (response ConnectWallet401JSONResponse) VisitConnectWalletResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ConnectWallet5XXJSONResponse struct {
+	Body       Error
+	StatusCode int
+}
+
+func (response ConnectWallet5XXJSONResponse) VisitConnectWalletResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// generate new affiliate code
 	// (POST /affiliate/code)
 	GenerateCode(ctx context.Context, request GenerateCodeRequestObject) (GenerateCodeResponseObject, error)
-	// associate a wallet address with an affiliate code
-	// (POST /affiliate/connection)
-	ConnectWallet(ctx context.Context, request ConnectWalletRequestObject) (ConnectWalletResponseObject, error)
 	// get general donation data
 	// (GET /donation/data)
 	DonationData(ctx context.Context, request DonationDataRequestObject) (DonationDataResponseObject, error)
@@ -454,6 +452,9 @@ type StrictServerInterface interface {
 	// get the donation data for the wallet address in question
 	// (GET /user/data/{address})
 	UserData(ctx context.Context, request UserDataRequestObject) (UserDataResponseObject, error)
+	// associate a wallet address with an affiliate code
+	// (POST /wallet/connection)
+	ConnectWallet(ctx context.Context, request ConnectWalletRequestObject) (ConnectWalletResponseObject, error)
 }
 
 type StrictHandlerFunc = strictecho.StrictEchoHandlerFunc
@@ -487,35 +488,6 @@ func (sh *strictHandler) GenerateCode(ctx echo.Context, params GenerateCodeParam
 		return err
 	} else if validResponse, ok := response.(GenerateCodeResponseObject); ok {
 		return validResponse.VisitGenerateCodeResponse(ctx.Response())
-	} else if response != nil {
-		return fmt.Errorf("unexpected response type: %T", response)
-	}
-	return nil
-}
-
-// ConnectWallet operation middleware
-func (sh *strictHandler) ConnectWallet(ctx echo.Context) error {
-	var request ConnectWalletRequestObject
-
-	var body ConnectWalletJSONRequestBody
-	if err := ctx.Bind(&body); err != nil {
-		return err
-	}
-	request.Body = &body
-
-	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.ConnectWallet(ctx.Request().Context(), request.(ConnectWalletRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ConnectWallet")
-	}
-
-	response, err := handler(ctx, request)
-
-	if err != nil {
-		return err
-	} else if validResponse, ok := response.(ConnectWalletResponseObject); ok {
-		return validResponse.VisitConnectWalletResponse(ctx.Response())
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
 	}
@@ -616,49 +588,78 @@ func (sh *strictHandler) UserData(ctx echo.Context, address string) error {
 	return nil
 }
 
+// ConnectWallet operation middleware
+func (sh *strictHandler) ConnectWallet(ctx echo.Context) error {
+	var request ConnectWalletRequestObject
+
+	var body ConnectWalletJSONRequestBody
+	if err := ctx.Bind(&body); err != nil {
+		return err
+	}
+	request.Body = &body
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.ConnectWallet(ctx.Request().Context(), request.(ConnectWalletRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ConnectWallet")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(ConnectWalletResponseObject); ok {
+		return validResponse.VisitConnectWalletResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"m/8GAAD//0agWvdvKwAA",
+	"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",
+	"XYMrAAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

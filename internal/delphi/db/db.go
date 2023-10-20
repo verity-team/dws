@@ -11,16 +11,16 @@ import (
 	"github.com/verity-team/dws/api"
 )
 
-func ConnectWalletToAffiliate(db *sqlx.DB, wc api.ConnectionRequest) error {
+func ConnectWallet(db *sqlx.DB, wc api.ConnectionRequest) error {
 	q := `
-		INSERT INTO affiliate_connection (code, address)
+		INSERT INTO wallet_connection (code, address)
 		SELECT :code, :address
 		WHERE NOT EXISTS (
 			 SELECT 1
-			 FROM affiliate_connection
+			 FROM wallet_connection
 			 ORDER BY created_at DESC
 			 LIMIT 1
-			 WHERE code = :code OR address = :address
+			 WHERE code = :code AND address = :address
 		)
 	 `
 	_, err := db.NamedExec(q, wc)
@@ -131,6 +131,9 @@ func GetUserData(db *sqlx.DB, address string) (*api.UserData, error) {
 		err = fmt.Errorf("failed to fetch user stats for %s, %v", address, err)
 		log.Error(err)
 		return nil, err
+	}
+	if err != nil && strings.Contains(err.Error(), "sql: no rows in result set") {
+		return nil, nil
 	}
 
 	return &result, nil
