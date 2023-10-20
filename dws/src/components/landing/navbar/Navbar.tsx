@@ -60,9 +60,9 @@ const Navbar = (): ReactElement => {
             options={aboutOptions}
             openBehavior="hover"
           />
-          <div className="px-4">
+          {/* <div className="px-4">
             <ConnectButton />
-          </div>
+          </div> */}
         </nav>
         <div className="flex items-center lg:hidden">
           <button type="button" onClick={handleMenuToggle}>
@@ -77,9 +77,9 @@ const Navbar = (): ReactElement => {
           <NavbarItem text="staking" href="#" />
           <NavbarItem text="memes" href="#" />
           <CollapseNavbarDropdown title="About" options={aboutOptions} />
-          <div className="pt-4 px-4 md:mt-0">
+          {/* <div className="pt-4 px-4 md:mt-0">
             <ConnectButton />
-          </div>
+          </div> */}
         </nav>
       </Collapse>
     </div>
