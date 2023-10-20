@@ -18,21 +18,18 @@ servers:
   description: delphi (donation web site backend)
 
 paths:
-  /donation/affiliate:
+  /affiliate/connection:
     post:
-      summary: set affiliate code for donation
+      summary: associate a wallet address with an affiliate code
       description: |
-         Call this endpoint to set the affiliate code for a donation
-      parameters:
-      - $ref: '#/components/parameters/delphi_key'
-      - $ref: '#/components/parameters/delphi_nonce'
-      - $ref: '#/components/parameters/delphi_sign'
-      operationId: setAffiliateCode
+         Call this endpoint to associate a wallet address with an
+         affiliate code
+      operationId: connectWallet
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/affiliate_request'
+              $ref: '#/components/schemas/connection_request'
       responses:
         "200":
           description: OK
@@ -58,7 +55,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/error'
-  /donation/data/:
+  /donation/data:
     get:
       summary: get general donation data
       description: |
@@ -115,7 +112,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/user_data'
+                $ref: '#/components/schemas/user_data_result'
         "400":
           description: |
             Bad input parameter; error message provides details.
@@ -165,14 +162,9 @@ paths:
          Call this endpoint to generate a new affiliate code
       parameters:
       - $ref: '#/components/parameters/delphi_key'
-      - $ref: '#/components/parameters/delphi_nonce'
-      - $ref: '#/components/parameters/delphi_sign'
-      operationId: genAffiliateCode
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/gen_afc_request'
+      - $ref: '#/components/parameters/delphi_ts'
+      - $ref: '#/components/parameters/delphi_signature'
+      operationId: generateCode
       responses:
         "200":
           description: OK
@@ -242,18 +234,18 @@ components:
           enum: [open, paused, closed]
           example: "open"
           maxLength: 8
-    user_data:
+    user_data_result:
       required:
       - donations
-      - stats
+      - user_data
       properties:
         donations:
           type: array
           description: an array of donations
           items:
             $ref: '#/components/schemas/donation'
-        stats:
-          $ref: '#/components/schemas/user_stats'
+        user_data:
+          $ref: '#/components/schemas/user_data'
     donation:
       required:
       - amount
@@ -368,7 +360,7 @@ components:
           maxLength: 16
           x-oapi-codegen-extra-tags:
             db: tokens
-    user_stats:
+    user_data:
       required:
       - total
       - tokens
@@ -419,64 +411,54 @@ components:
           maxLength: 32
           x-oapi-codegen-extra-tags:
             db: us_modified_at
-    affiliate_request:
-      required:
-      - code
-      - tx_hash
-      properties:
-        code:
-          description: affiliate code for the donation in question
-          type: string
-          example: "TruffUdBuk6"
-          maxLength: 12
-        tx_hash:
-          description: transaction hash for the donation in question
-          type: string
-          example: "0x558c8b86f75b0149ddca028a44a302eebe47c032e8ca8834f07aa6f1c5ae3fac"
-          maxLength: 66
-    gen_afc_request:
-      required:
-      - platform
-      - handle
-      properties:
-        platform:
-          type: string
-          enum: [wallet, twitter, instagram]
-          example: "twitter"
-          maxLength: 16
-        handle:
-          type: string
-          maxLength: 64
-          description: handle controlled by the user on the given platform
-          example: "@elonmusk"
-    affiliate_code:
-      required:
-      - platform
-      - handle
-      - value
-      - ts
-      properties:
-        platform:
-          type: string
-          enum: [wallet, twitter, instagram]
-          example: "twitter"
-          maxLength: 16
-          x-oapi-codegen-extra-tags:
-            db: platform
-        handle:
-          type: string
-          maxLength: 64
-          description: handle controlled by the user on the given platform
-          example: "@elonmusk"
-          x-oapi-codegen-extra-tags:
-            db: handle
-        value:
+        affiliate_code:
           type: string
           maxLength: 16
-          description: affiliate code for the platform/handle in question
+          description: |
+            affiliate code generated for this wallet address
           example: "GezIkgeubrOkiOv4"
           x-oapi-codegen-extra-tags:
-            db: value
+            db: code
+    connection_request:
+      required:
+      - affiliate_code
+      - wallet_address
+      properties:
+        affiliate_code:
+          description: affiliate code
+          type: string
+          example: "ThyagEbNufElyiv7"
+          maxLength: 16
+          x-oapi-codegen-extra-tags:
+            db: code
+        wallet_address:
+          description: address of the wallet that connected
+          type: string
+          example: "0xDEd1Fe6B3f61c8F1d874bb86F086D10FFc3F0154"
+          maxLength: 42
+          x-oapi-codegen-extra-tags:
+            db: address
+    affiliate_code:
+      required:
+      - wallet_address
+      - affiliate_code
+      - ts
+      properties:
+        wallet_address:
+          description: address of the wallet that requested the affiliate code
+          type: string
+          example: "0xDEd1Fe6B3f61c8F1d874bb86F086D10FFc3F0154"
+          maxLength: 42
+          x-oapi-codegen-extra-tags:
+            db: address
+        affiliate_code:
+          type: string
+          maxLength: 16
+          description: |
+            affiliate code generated for the requesting wallet address
+          example: "GezIkgeubrOkiOv4"
+          x-oapi-codegen-extra-tags:
+            db: code
         ts:
           description: date/time at which the affiliate code was added
           type: string
@@ -488,26 +470,26 @@ components:
   parameters:
     delphi_key:
       in: header
-      name: delphi-api-key
+      name: delphi-key
       schema:
         type: string
       required: true
-      description: api key (public)
-      example: c6wU1t3oehDnQd5XSMNkOw==
-    delphi_sign:
+      description: a key/address (public)
+      example: "0xDEd1Fe6B3f61c8F1d874bb86F086D10FFc3F0154"
+    delphi_signature:
       in: header
-      name: delphi-auth-string
+      name: delphi-signature
       schema:
         type: string
       required: true
-      description: signature over the nonce, path and payload
-    delphi_nonce:
+      description: signature over the path, timestamp and body
+    delphi_ts:
       in: header
-      name: delphi-nonce
+      name: delphi-ts
       schema:
         type: string
       required: true
       description: |
         caller timestamp (number of milliseconds since Unix epoch) -- included
-        to prevent replay attacks
+        to prevent replay attacks; must not be older than 5 seconds
       example: 1697787627315

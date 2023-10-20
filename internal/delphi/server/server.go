@@ -23,14 +23,14 @@ func NewDelphiServer(db *sqlx.DB) *DelphiServer {
 	}
 }
 
-func (s *DelphiServer) SetAffiliateCode(ctx echo.Context, headers api.SetAffiliateCodeParams) error {
-	var afc api.AffiliateRequest
-	err := ctx.Bind(&afc)
+func (s *DelphiServer) ConnectWallet(ctx echo.Context) error {
+	var cr api.ConnectionRequest
+	err := ctx.Bind(&cr)
 	if err != nil {
 		log.Error("failed to bind POST param (AffiliateRequest)")
 		return err
 	}
-	return db.AddAffiliateCD(s.db, afc)
+	return db.ConnectWalletToAffiliate(s.db, cr)
 }
 
 func (s *DelphiServer) DonationData(ctx echo.Context) error {
@@ -61,13 +61,13 @@ func (s *DelphiServer) UserData(ctx echo.Context, address string) error {
 	if dd == nil {
 		return ctx.NoContent(http.StatusNotFound)
 	}
-	us, err := db.GetUserStats(s.db, address)
+	us, err := db.GetUserData(s.db, address)
 	if err != nil {
 		return err
 	}
-	var result api.UserData = api.UserData{
+	var result api.UserDataResult = api.UserDataResult{
 		Donations: dd,
-		Stats:     *us,
+		UserData:  *us,
 	}
 
 	return ctx.JSON(http.StatusOK, result)
@@ -86,12 +86,6 @@ func (s *DelphiServer) Ready(ctx echo.Context) error {
 
 }
 
-func (s *DelphiServer) GenAffiliateCode(ctx echo.Context, headers api.GenAffiliateCodeParams) error {
-	var afc api.GenAfcRequest
-	err := ctx.Bind(&afc)
-	if err != nil {
-		log.Error("failed to bind POST param (GenAfcRequest)")
-		return err
-	}
+func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodeParams) error {
 	return nil
 }

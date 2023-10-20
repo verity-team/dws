@@ -11,18 +11,19 @@ import (
 	"github.com/verity-team/dws/api"
 )
 
-// AddAffiliateCD adds a donation made by a user with an affiliate code to the
-// database.
-func AddAffiliateCD(db *sqlx.DB, afc api.AffiliateRequest) error {
+func ConnectWalletToAffiliate(db *sqlx.DB, wc api.ConnectionRequest) error {
 	q := `
-		 INSERT INTO afc_donation(afc, tx_hash)
-		 VALUES(:afc, :tx_hash)
+		INSERT INTO affiliate_connection (code, address)
+		SELECT :code, :address
+		WHERE NOT EXISTS (
+			 SELECT 1
+			 FROM affiliate_connection
+			 ORDER BY created_at DESC
+			 LIMIT 1
+			 WHERE code = :code OR address = :address
+		)
 	 `
-	qd := map[string]interface{}{
-		"afc":     afc.Code,
-		"tx_hash": afc.TxHash,
-	}
-	_, err := db.NamedExec(q, qd)
+	_, err := db.NamedExec(q, wc)
 	if err != nil {
 		log.Errorf("failed to insert affiliate donation data, %v", err)
 		return err
@@ -117,14 +118,14 @@ func GetUserDonationData(db *sqlx.DB, address string) ([]api.Donation, error) {
 	return result, nil
 }
 
-func GetUserStats(db *sqlx.DB, address string) (*api.UserStats, error) {
+func GetUserData(db *sqlx.DB, address string) (*api.UserData, error) {
 	// fetch donations made by this user/address
 	q1 := `
 		SELECT
 			us_total, us_tokens, us_staked, us_reward, us_staked, us_modified_at
-		FROM update_user_stats($1)
+		FROM update_user_data($1)
 		`
-	var result api.UserStats
+	var result api.UserData
 	err := db.Get(&result, q1, address)
 	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
 		err = fmt.Errorf("failed to fetch user stats for %s, %v", address, err)

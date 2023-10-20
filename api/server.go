@@ -25,12 +25,12 @@ import (
 type ServerInterface interface {
 	// generate new affiliate code
 	// (POST /affiliate/code)
-	GenAffiliateCode(ctx echo.Context, params GenAffiliateCodeParams) error
-	// set affiliate code for donation
-	// (POST /donation/affiliate)
-	SetAffiliateCode(ctx echo.Context, params SetAffiliateCodeParams) error
+	GenerateCode(ctx echo.Context, params GenerateCodeParams) error
+	// associate a wallet address with an affiliate code
+	// (POST /affiliate/connection)
+	ConnectWallet(ctx echo.Context) error
 	// get general donation data
-	// (GET /donation/data/)
+	// (GET /donation/data)
 	DonationData(ctx echo.Context) error
 	// is the service alive?
 	// (GET /live)
@@ -48,133 +48,77 @@ type ServerInterfaceWrapper struct {
 	Handler ServerInterface
 }
 
-// GenAffiliateCode converts echo context to params.
-func (w *ServerInterfaceWrapper) GenAffiliateCode(ctx echo.Context) error {
+// GenerateCode converts echo context to params.
+func (w *ServerInterfaceWrapper) GenerateCode(ctx echo.Context) error {
 	var err error
 
 	// Parameter object where we will unmarshal all parameters from the context
-	var params GenAffiliateCodeParams
+	var params GenerateCodeParams
 
 	headers := ctx.Request().Header
-	// ------------- Required header parameter "delphi-api-key" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("delphi-api-key")]; found {
-		var DelphiApiKey DelphiKey
+	// ------------- Required header parameter "delphi-key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("delphi-key")]; found {
+		var DelphiKey DelphiKey
 		n := len(valueList)
 		if n != 1 {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Expected one value for delphi-api-key, got %d", n))
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Expected one value for delphi-key, got %d", n))
 		}
 
-		err = runtime.BindStyledParameterWithLocation("simple", false, "delphi-api-key", runtime.ParamLocationHeader, valueList[0], &DelphiApiKey)
+		err = runtime.BindStyledParameterWithLocation("simple", false, "delphi-key", runtime.ParamLocationHeader, valueList[0], &DelphiKey)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter delphi-api-key: %s", err))
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter delphi-key: %s", err))
 		}
 
-		params.DelphiApiKey = DelphiApiKey
+		params.DelphiKey = DelphiKey
 	} else {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Header parameter delphi-api-key is required, but not found"))
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Header parameter delphi-key is required, but not found"))
 	}
-	// ------------- Required header parameter "delphi-nonce" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("delphi-nonce")]; found {
-		var DelphiNonce DelphiNonce
+	// ------------- Required header parameter "delphi-ts" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("delphi-ts")]; found {
+		var DelphiTs DelphiTs
 		n := len(valueList)
 		if n != 1 {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Expected one value for delphi-nonce, got %d", n))
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Expected one value for delphi-ts, got %d", n))
 		}
 
-		err = runtime.BindStyledParameterWithLocation("simple", false, "delphi-nonce", runtime.ParamLocationHeader, valueList[0], &DelphiNonce)
+		err = runtime.BindStyledParameterWithLocation("simple", false, "delphi-ts", runtime.ParamLocationHeader, valueList[0], &DelphiTs)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter delphi-nonce: %s", err))
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter delphi-ts: %s", err))
 		}
 
-		params.DelphiNonce = DelphiNonce
+		params.DelphiTs = DelphiTs
 	} else {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Header parameter delphi-nonce is required, but not found"))
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Header parameter delphi-ts is required, but not found"))
 	}
-	// ------------- Required header parameter "delphi-auth-string" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("delphi-auth-string")]; found {
-		var DelphiAuthString DelphiSign
+	// ------------- Required header parameter "delphi-signature" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("delphi-signature")]; found {
+		var DelphiSignature DelphiSignature
 		n := len(valueList)
 		if n != 1 {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Expected one value for delphi-auth-string, got %d", n))
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Expected one value for delphi-signature, got %d", n))
 		}
 
-		err = runtime.BindStyledParameterWithLocation("simple", false, "delphi-auth-string", runtime.ParamLocationHeader, valueList[0], &DelphiAuthString)
+		err = runtime.BindStyledParameterWithLocation("simple", false, "delphi-signature", runtime.ParamLocationHeader, valueList[0], &DelphiSignature)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter delphi-auth-string: %s", err))
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter delphi-signature: %s", err))
 		}
 
-		params.DelphiAuthString = DelphiAuthString
+		params.DelphiSignature = DelphiSignature
 	} else {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Header parameter delphi-auth-string is required, but not found"))
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Header parameter delphi-signature is required, but not found"))
 	}
 
 	// Invoke the callback with all the unmarshaled arguments
-	err = w.Handler.GenAffiliateCode(ctx, params)
+	err = w.Handler.GenerateCode(ctx, params)
 	return err
 }
 
-// SetAffiliateCode converts echo context to params.
-func (w *ServerInterfaceWrapper) SetAffiliateCode(ctx echo.Context) error {
+// ConnectWallet converts echo context to params.
+func (w *ServerInterfaceWrapper) ConnectWallet(ctx echo.Context) error {
 	var err error
 
-	// Parameter object where we will unmarshal all parameters from the context
-	var params SetAffiliateCodeParams
-
-	headers := ctx.Request().Header
-	// ------------- Required header parameter "delphi-api-key" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("delphi-api-key")]; found {
-		var DelphiApiKey DelphiKey
-		n := len(valueList)
-		if n != 1 {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Expected one value for delphi-api-key, got %d", n))
-		}
-
-		err = runtime.BindStyledParameterWithLocation("simple", false, "delphi-api-key", runtime.ParamLocationHeader, valueList[0], &DelphiApiKey)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter delphi-api-key: %s", err))
-		}
-
-		params.DelphiApiKey = DelphiApiKey
-	} else {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Header parameter delphi-api-key is required, but not found"))
-	}
-	// ------------- Required header parameter "delphi-nonce" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("delphi-nonce")]; found {
-		var DelphiNonce DelphiNonce
-		n := len(valueList)
-		if n != 1 {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Expected one value for delphi-nonce, got %d", n))
-		}
-
-		err = runtime.BindStyledParameterWithLocation("simple", false, "delphi-nonce", runtime.ParamLocationHeader, valueList[0], &DelphiNonce)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter delphi-nonce: %s", err))
-		}
-
-		params.DelphiNonce = DelphiNonce
-	} else {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Header parameter delphi-nonce is required, but not found"))
-	}
-	// ------------- Required header parameter "delphi-auth-string" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("delphi-auth-string")]; found {
-		var DelphiAuthString DelphiSign
-		n := len(valueList)
-		if n != 1 {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Expected one value for delphi-auth-string, got %d", n))
-		}
-
-		err = runtime.BindStyledParameterWithLocation("simple", false, "delphi-auth-string", runtime.ParamLocationHeader, valueList[0], &DelphiAuthString)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter delphi-auth-string: %s", err))
-		}
-
-		params.DelphiAuthString = DelphiAuthString
-	} else {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Header parameter delphi-auth-string is required, but not found"))
-	}
-
 	// Invoke the callback with all the unmarshaled arguments
-	err = w.Handler.SetAffiliateCode(ctx, params)
+	err = w.Handler.ConnectWallet(ctx)
 	return err
 }
 
@@ -249,104 +193,102 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 		Handler: si,
 	}
 
-	router.POST(baseURL+"/affiliate/code", wrapper.GenAffiliateCode)
-	router.POST(baseURL+"/donation/affiliate", wrapper.SetAffiliateCode)
-	router.GET(baseURL+"/donation/data/", wrapper.DonationData)
+	router.POST(baseURL+"/affiliate/code", wrapper.GenerateCode)
+	router.POST(baseURL+"/affiliate/connection", wrapper.ConnectWallet)
+	router.GET(baseURL+"/donation/data", wrapper.DonationData)
 	router.GET(baseURL+"/live", wrapper.Alive)
 	router.GET(baseURL+"/ready", wrapper.Ready)
 	router.GET(baseURL+"/user/data/:address", wrapper.UserData)
 
 }
 
-type GenAffiliateCodeRequestObject struct {
-	Params GenAffiliateCodeParams
-	Body   *GenAffiliateCodeJSONRequestBody
+type GenerateCodeRequestObject struct {
+	Params GenerateCodeParams
 }
 
-type GenAffiliateCodeResponseObject interface {
-	VisitGenAffiliateCodeResponse(w http.ResponseWriter) error
+type GenerateCodeResponseObject interface {
+	VisitGenerateCodeResponse(w http.ResponseWriter) error
 }
 
-type GenAffiliateCode200JSONResponse AffiliateCode
+type GenerateCode200JSONResponse AffiliateCode
 
-func (response GenAffiliateCode200JSONResponse) VisitGenAffiliateCodeResponse(w http.ResponseWriter) error {
+func (response GenerateCode200JSONResponse) VisitGenerateCodeResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 
 	return json.NewEncoder(w).Encode(response)
 }
 
-type GenAffiliateCode400JSONResponse Error
+type GenerateCode400JSONResponse Error
 
-func (response GenAffiliateCode400JSONResponse) VisitGenAffiliateCodeResponse(w http.ResponseWriter) error {
+func (response GenerateCode400JSONResponse) VisitGenerateCodeResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(400)
 
 	return json.NewEncoder(w).Encode(response)
 }
 
-type GenAffiliateCode401JSONResponse Error
+type GenerateCode401JSONResponse Error
 
-func (response GenAffiliateCode401JSONResponse) VisitGenAffiliateCodeResponse(w http.ResponseWriter) error {
+func (response GenerateCode401JSONResponse) VisitGenerateCodeResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
 
 	return json.NewEncoder(w).Encode(response)
 }
 
-type GenAffiliateCode5XXJSONResponse struct {
+type GenerateCode5XXJSONResponse struct {
 	Body       Error
 	StatusCode int
 }
 
-func (response GenAffiliateCode5XXJSONResponse) VisitGenAffiliateCodeResponse(w http.ResponseWriter) error {
+func (response GenerateCode5XXJSONResponse) VisitGenerateCodeResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(response.StatusCode)
 
 	return json.NewEncoder(w).Encode(response.Body)
 }
 
-type SetAffiliateCodeRequestObject struct {
-	Params SetAffiliateCodeParams
-	Body   *SetAffiliateCodeJSONRequestBody
+type ConnectWalletRequestObject struct {
+	Body *ConnectWalletJSONRequestBody
 }
 
-type SetAffiliateCodeResponseObject interface {
-	VisitSetAffiliateCodeResponse(w http.ResponseWriter) error
+type ConnectWalletResponseObject interface {
+	VisitConnectWalletResponse(w http.ResponseWriter) error
 }
 
-type SetAffiliateCode200Response struct {
+type ConnectWallet200Response struct {
 }
 
-func (response SetAffiliateCode200Response) VisitSetAffiliateCodeResponse(w http.ResponseWriter) error {
+func (response ConnectWallet200Response) VisitConnectWalletResponse(w http.ResponseWriter) error {
 	w.WriteHeader(200)
 	return nil
 }
 
-type SetAffiliateCode400JSONResponse Error
+type ConnectWallet400JSONResponse Error
 
-func (response SetAffiliateCode400JSONResponse) VisitSetAffiliateCodeResponse(w http.ResponseWriter) error {
+func (response ConnectWallet400JSONResponse) VisitConnectWalletResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(400)
 
 	return json.NewEncoder(w).Encode(response)
 }
 
-type SetAffiliateCode401JSONResponse Error
+type ConnectWallet401JSONResponse Error
 
-func (response SetAffiliateCode401JSONResponse) VisitSetAffiliateCodeResponse(w http.ResponseWriter) error {
+func (response ConnectWallet401JSONResponse) VisitConnectWalletResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
 
 	return json.NewEncoder(w).Encode(response)
 }
 
-type SetAffiliateCode5XXJSONResponse struct {
+type ConnectWallet5XXJSONResponse struct {
 	Body       Error
 	StatusCode int
 }
 
-func (response SetAffiliateCode5XXJSONResponse) VisitSetAffiliateCodeResponse(w http.ResponseWriter) error {
+func (response ConnectWallet5XXJSONResponse) VisitConnectWalletResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(response.StatusCode)
 
@@ -445,7 +387,7 @@ type UserDataResponseObject interface {
 	VisitUserDataResponse(w http.ResponseWriter) error
 }
 
-type UserData200JSONResponse UserData
+type UserData200JSONResponse UserDataResult
 
 func (response UserData200JSONResponse) VisitUserDataResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -496,12 +438,12 @@ func (response UserData5XXJSONResponse) VisitUserDataResponse(w http.ResponseWri
 type StrictServerInterface interface {
 	// generate new affiliate code
 	// (POST /affiliate/code)
-	GenAffiliateCode(ctx context.Context, request GenAffiliateCodeRequestObject) (GenAffiliateCodeResponseObject, error)
-	// set affiliate code for donation
-	// (POST /donation/affiliate)
-	SetAffiliateCode(ctx context.Context, request SetAffiliateCodeRequestObject) (SetAffiliateCodeResponseObject, error)
+	GenerateCode(ctx context.Context, request GenerateCodeRequestObject) (GenerateCodeResponseObject, error)
+	// associate a wallet address with an affiliate code
+	// (POST /affiliate/connection)
+	ConnectWallet(ctx context.Context, request ConnectWalletRequestObject) (ConnectWalletResponseObject, error)
 	// get general donation data
-	// (GET /donation/data/)
+	// (GET /donation/data)
 	DonationData(ctx context.Context, request DonationDataRequestObject) (DonationDataResponseObject, error)
 	// is the service alive?
 	// (GET /live)
@@ -526,62 +468,54 @@ type strictHandler struct {
 	middlewares []StrictMiddlewareFunc
 }
 
-// GenAffiliateCode operation middleware
-func (sh *strictHandler) GenAffiliateCode(ctx echo.Context, params GenAffiliateCodeParams) error {
-	var request GenAffiliateCodeRequestObject
+// GenerateCode operation middleware
+func (sh *strictHandler) GenerateCode(ctx echo.Context, params GenerateCodeParams) error {
+	var request GenerateCodeRequestObject
 
 	request.Params = params
 
-	var body GenAffiliateCodeJSONRequestBody
-	if err := ctx.Bind(&body); err != nil {
-		return err
-	}
-	request.Body = &body
-
 	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.GenAffiliateCode(ctx.Request().Context(), request.(GenAffiliateCodeRequestObject))
+		return sh.ssi.GenerateCode(ctx.Request().Context(), request.(GenerateCodeRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GenAffiliateCode")
+		handler = middleware(handler, "GenerateCode")
 	}
 
 	response, err := handler(ctx, request)
 
 	if err != nil {
 		return err
-	} else if validResponse, ok := response.(GenAffiliateCodeResponseObject); ok {
-		return validResponse.VisitGenAffiliateCodeResponse(ctx.Response())
+	} else if validResponse, ok := response.(GenerateCodeResponseObject); ok {
+		return validResponse.VisitGenerateCodeResponse(ctx.Response())
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
 	}
 	return nil
 }
 
-// SetAffiliateCode operation middleware
-func (sh *strictHandler) SetAffiliateCode(ctx echo.Context, params SetAffiliateCodeParams) error {
-	var request SetAffiliateCodeRequestObject
+// ConnectWallet operation middleware
+func (sh *strictHandler) ConnectWallet(ctx echo.Context) error {
+	var request ConnectWalletRequestObject
 
-	request.Params = params
-
-	var body SetAffiliateCodeJSONRequestBody
+	var body ConnectWalletJSONRequestBody
 	if err := ctx.Bind(&body); err != nil {
 		return err
 	}
 	request.Body = &body
 
 	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
-		return sh.ssi.SetAffiliateCode(ctx.Request().Context(), request.(SetAffiliateCodeRequestObject))
+		return sh.ssi.ConnectWallet(ctx.Request().Context(), request.(ConnectWalletRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "SetAffiliateCode")
+		handler = middleware(handler, "ConnectWallet")
 	}
 
 	response, err := handler(ctx, request)
 
 	if err != nil {
 		return err
-	} else if validResponse, ok := response.(SetAffiliateCodeResponseObject); ok {
-		return validResponse.VisitSetAffiliateCodeResponse(ctx.Response())
+	} else if validResponse, ok := response.(ConnectWalletResponseObject); ok {
+		return validResponse.VisitConnectWalletResponse(ctx.Response())
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
 	}
@@ -685,47 +619,46 @@ func (sh *strictHandler) UserData(ctx echo.Context, address string) error {
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
+	"m/8GAAD//0agWvdvKwAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
