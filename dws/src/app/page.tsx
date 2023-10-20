@@ -6,6 +6,7 @@ import LandingFooter from "@/components/landing/footer/LandingFooter";
 import Navbar from "@/components/landing/navbar/Navbar";
 import Newsletter from "@/components/landing/newsletter/Newsletter";
 import Roadmap from "@/components/landing/roadmap/Roadmap";
+import DonateFormV2 from "@/components/metamask/donatev2/DonateFormv2";
 import dynamic from "next/dynamic";
 
 const LaunchTimer = dynamic(
@@ -16,14 +17,12 @@ const LaunchTimer = dynamic(
 export default function Home() {
   return (
     <>
-      <ClientRoot>
-        <Navbar />
-        <div className="mx-8">
-          <div className="px-24 pt-10">
-            <LaunchTimer />
-          </div>
+      <Navbar />
+      <div className="mx-8">
+        <div className="px-24 pt-10">
+          <LaunchTimer />
         </div>
-      </ClientRoot>
+      </div>
       <Banner />
       <MemeSlideshow />
       <Roadmap />
@@ -36,6 +35,11 @@ export default function Home() {
           truth-seeking: Meme-Artists and crypto-lovers.
         </h1>
       </BannerSection>
+      <ClientRoot>
+        <div className="flex items-center justify-center mb-8">
+          <DonateFormV2 />
+        </div>
+      </ClientRoot>
       <Newsletter />
       <LandingFooter />
     </>
