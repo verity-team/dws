@@ -36,7 +36,7 @@ export default function Home() {
         </h1>
       </BannerSection>
       <ClientRoot>
-        <div className="flex items-center justify-center my-2">
+        <div className="flex items-center justify-center mb-8">
           <DonateFormV2 />
         </div>
       </ClientRoot>

@@ -1,10 +1,13 @@
 import { AvailableToken } from "@/utils/token";
 import { ReactElement, memo } from "react";
+import { UseFormRegister } from "react-hook-form";
+import { DonateFormData } from "./DonateFormv2";
 
 interface DonateInputProps {
   label: string;
   value: number | string;
   currency: AvailableToken | "MEMEME";
+  register: UseFormRegister<DonateFormData>;
 }
 
 const DonateInput = ({
