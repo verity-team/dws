@@ -25,7 +25,7 @@ func ConnectWallet(db *sqlx.DB, wc api.ConnectionRequest) error {
 	 `
 	_, err := db.NamedExec(q, wc)
 	if err != nil {
-		log.Errorf("failed to insert affiliate donation data, %v", err)
+		log.Errorf("failed to insert wallet connection data, %v", err)
 		return err
 	}
 
