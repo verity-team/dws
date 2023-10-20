@@ -61,6 +61,12 @@ const NavbarDropdown = ({
         MenuListProps={{
           onMouseLeave: openBehavior === "hover" ? handleClose : undefined,
         }}
+        style={{ boxShadow: "none" }}
+        sx={(theme) => ({
+          "& .MuiMenu-paper": {
+            boxShadow: "none",
+          },
+        })}
       >
         {options.map(({ text, href }) => (
           <MenuItem
