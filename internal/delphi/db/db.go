@@ -21,7 +21,10 @@ func ConnectWallet(db *sqlx.DB, wc api.ConnectionRequest) error {
 		  WHERE
 			 code = :code
 			 AND address = :address
-			 AND id = (SELECT MAX(id) from wallet_connection)
+			 AND id = (
+				SELECT id FROM wallet_connection
+				WHERE address = :address
+				ORDER BY id DESC LIMIT 1)
 		)
 	 `
 	_, err := db.NamedExec(q, wc)
