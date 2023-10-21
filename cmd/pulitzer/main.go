@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"sync"
@@ -37,8 +36,8 @@ func main() {
 	}
 	defer dbh.Close()
 
-	port := flag.Uint("port", 8081, "Port for the healthcheck server")
-	flag.Parse()
+	// port := flag.Uint("port", 8081, "Port for the healthcheck server")
+	// flag.Parse()
 
 	s := gocron.NewScheduler(time.UTC)
 	s.SingletonModeAll()

@@ -2,10 +2,14 @@ package server
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/accounts"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"
@@ -116,4 +120,29 @@ func (s *DelphiServer) DonationData(ctx echo.Context) error {
 		dd.Status = api.Paused
 	}
 	return ctx.JSON(http.StatusOK, *dd)
+}
+
+func verifySig(from, msg, sigHex string) (bool, error) {
+	sig, err := hexutil.Decode(sigHex)
+	if err != nil {
+		err = fmt.Errorf("invalid sig ('%s'), %v", sigHex, err)
+		log.Error(err)
+		return false, err
+	}
+
+	msgHash := accounts.TextHash([]byte(msg))
+	if sig[crypto.RecoveryIDOffset] == 27 || sig[crypto.RecoveryIDOffset] == 28 {
+		sig[crypto.RecoveryIDOffset] -= 27
+	}
+
+	recovered, err := crypto.SigToPub(msgHash, sig)
+	if err != nil {
+		err = fmt.Errorf("failed to recover publick key from signature, %v", err)
+		log.Error(err)
+		return false, err
+	}
+
+	recoveredAddr := crypto.PubkeyToAddress(*recovered)
+	result := strings.ToLower(from) == strings.ToLower(recoveredAddr.Hex())
+	return result, nil
 }
