@@ -58,7 +58,7 @@ type ConnectionRequest struct {
 	// Address address of the wallet that connected
 	Address string `db:"address" json:"address"`
 
-	// Code affiliate code
+	// Code affiliate code, pass `none` if there's no code in the URL
 	Code string `db:"code" json:"code"`
 }
 
@@ -140,7 +140,7 @@ type PriceAsset string
 // UserData defines model for user_data.
 type UserData struct {
 	// AffiliateCode affiliate code generated for this wallet address
-	AffiliateCode *string `db:"code" json:"affiliate_code,omitempty"`
+	AffiliateCode *string `db:"us_code" json:"affiliate_code,omitempty"`
 
 	// Reward staking rewards the user is eligible to claim
 	Reward string `db:"us_reward" json:"reward"`

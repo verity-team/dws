@@ -30,6 +30,7 @@ func (s *DelphiServer) ConnectWallet(ctx echo.Context) error {
 		log.Error("failed to bind POST param (AffiliateRequest)")
 		return err
 	}
+	cr.Address = strings.ToLower(cr.Address)
 	if err = db.ConnectWallet(s.db, cr); err != nil {
 		log.Error("failed to log wallet connection")
 		return err

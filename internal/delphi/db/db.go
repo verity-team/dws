@@ -16,11 +16,12 @@ func ConnectWallet(db *sqlx.DB, wc api.ConnectionRequest) error {
 		INSERT INTO wallet_connection (code, address)
 		SELECT :code, :address
 		WHERE NOT EXISTS (
-			 SELECT 1
-			 FROM wallet_connection
-			 ORDER BY created_at DESC
-			 LIMIT 1
-			 WHERE code = :code AND address = :address
+		  SELECT 1
+		  FROM wallet_connection
+		  WHERE
+			 code = :code
+			 AND address = :address
+			 AND id = (SELECT MAX(id) from wallet_connection)
 		)
 	 `
 	_, err := db.NamedExec(q, wc)
@@ -128,7 +129,7 @@ func GetUserData(db *sqlx.DB, address string) (*api.UserData, error) {
 	var result api.UserData
 	err := db.Get(&result, q1, address)
 	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
-		err = fmt.Errorf("failed to fetch user stats for %s, %v", address, err)
+		err = fmt.Errorf("failed to fetch user data for %s, %v", address, err)
 		log.Error(err)
 		return nil, err
 	}

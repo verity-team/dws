@@ -422,7 +422,7 @@ components:
             affiliate code generated for this wallet address
           example: "GezIkgeubrOkiOv4"
           x-oapi-codegen-extra-tags:
-            db: code
+            db: us_code
     connection_request:
       required:
       - code

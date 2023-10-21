@@ -208,6 +208,7 @@ RETURNS TABLE (
     us_staked BIGINT,
     us_reward BIGINT,
     us_status user_data_status_enum,
+    us_code VARCHAR(16),
     us_modified_at TIMESTAMP,
     us_created_at TIMESTAMP
 )
@@ -255,7 +256,17 @@ BEGIN
 
     -- Return the updated user_data record
     RETURN QUERY
-    SELECT *
+    SELECT
+        id,
+        address,
+        total,
+        tokens,
+        staked,
+        reward,
+        status,
+        affiliate_code,
+        modified_at,
+        created_at
     FROM user_data
     WHERE user_data.address = p_address;
 END;
