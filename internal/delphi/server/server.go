@@ -143,6 +143,6 @@ func verifySig(from, msg, sigHex string) (bool, error) {
 	}
 
 	recoveredAddr := crypto.PubkeyToAddress(*recovered)
-	result := strings.ToLower(from) == strings.ToLower(recoveredAddr.Hex())
+	result := strings.EqualFold(from, recoveredAddr.Hex())
 	return result, nil
 }
