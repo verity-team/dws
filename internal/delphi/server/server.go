@@ -100,6 +100,27 @@ func (s *DelphiServer) Ready(ctx echo.Context) error {
 }
 
 func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodeParams) error {
+	msg := params.DelphiKey + params.DelphiTs + ctx.Path()
+	authOK := verifySig(params.DelphiKey, msg, params.DelphiSignature)
+	if !authOK {
+		return ctx.NoContent(http.StatusUnauthorized)
+	}
+	afc, err := db.GetAffiliateCode(s.db, params.DelphiKey)
+	if err != nil {
+		return err
+	}
+	if afc != nil {
+		// we have an affiliate code for this address already
+		return ctx.JSON(http.StatusOK, *afc)
+	}
+	afc, err = db.GenerateAffiliateCode(s.db, params.DelphiKey)
+	if err != nil {
+		return err
+	}
+	if afc != nil {
+		// return the newly generated affiliate code
+		return ctx.JSON(http.StatusOK, *afc)
+	}
 	return nil
 }
 

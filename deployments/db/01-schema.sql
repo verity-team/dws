@@ -107,8 +107,8 @@ DROP TABLE IF EXISTS user_data;
 CREATE TABLE user_data (
     id BIGSERIAL PRIMARY KEY,
     address VARCHAR(42) NOT NULL UNIQUE,
-    total NUMERIC(12,2) NOT NULL,
-    tokens BIGINT NOT NULL,
+    total NUMERIC(12,2) NOT NULL DEFAULT 0.0,
+    tokens BIGINT NOT NULL DEFAULT 0,
     staked BIGINT NOT NULL DEFAULT 0,
     reward BIGINT NOT NULL DEFAULT 0,
     status user_data_status_enum NOT NULL DEFAULT 'none',
