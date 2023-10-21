@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/go-co-op/gocron"
 	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
+	"github.com/labstack/echo/v4"
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
 	"github.com/verity-team/dws/internal/buck/db"
@@ -123,13 +125,35 @@ func main() {
 		}
 	}
 
-	if *monitorLatest || *monitorFinal {
-		// don't clash with the healthcheck port of the ETH/latest crawler
-		if *monitorFinal && (*port == defaultPort) {
-			*port = defaultPort + 1
-		}
-		s.StartBlocking()
+	if !*monitorLatest && !*monitorFinal {
+		os.Exit(0)
 	}
+	// don't clash with the healthcheck port of the ETH/latest crawler
+	if *monitorFinal && (*port == defaultPort) {
+		*port = defaultPort + 1
+	}
+
+	// healthcheck endpoints
+	e := echo.New()
+	e.GET("/live", func(c echo.Context) error {
+		return c.String(http.StatusOK, "{}\n")
+	})
+	e.GET("/ready", func(c echo.Context) error {
+		err := dbh.Ping()
+		if err != nil {
+			return c.String(http.StatusServiceUnavailable, "{}\n")
+		}
+		return c.String(http.StatusOK, "{}\n")
+	})
+	go func() {
+		err := e.Start(fmt.Sprintf(":%d", *port))
+		if err != http.ErrServerClosed {
+
+			log.Fatal(err)
+		}
+	}()
+
+	s.StartBlocking()
 }
 
 func monitorFinalizedETH(ctxt common.Context) error {
