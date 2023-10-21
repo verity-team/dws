@@ -4,13 +4,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/go-co-op/gocron"
-	"github.com/heptiolabs/healthcheck"
 	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
@@ -130,9 +128,6 @@ func main() {
 		if *monitorFinal && (*port == defaultPort) {
 			*port = defaultPort + 1
 		}
-		health := healthcheck.NewHandler()
-		health.AddReadinessCheck("database", healthcheck.DatabasePingCheck(dbh.DB, 1*time.Second))
-		go http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", *port), health) // nolint:errcheck
 		s.StartBlocking()
 	}
 }
