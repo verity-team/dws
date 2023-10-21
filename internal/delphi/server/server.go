@@ -27,7 +27,7 @@ func (s *DelphiServer) ConnectWallet(ctx echo.Context) error {
 	var cr api.ConnectionRequest
 	err := ctx.Bind(&cr)
 	if err != nil {
-		log.Error("failed to bind POST param (AffiliateRequest)")
+		log.Error("failed to bind POST param (ConnectionRequest)")
 		return err
 	}
 	cr.Address = strings.ToLower(cr.Address)
