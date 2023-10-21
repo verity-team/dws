@@ -11,20 +11,25 @@ import (
 	"github.com/verity-team/dws/api"
 )
 
-// AddAffiliateCD adds a donation made by a user with an affiliate code to the
-// database.
-func AddAffiliateCD(db *sqlx.DB, afc api.AffiliateRequest) error {
+func ConnectWallet(db *sqlx.DB, wc api.ConnectionRequest) error {
 	q := `
-		 INSERT INTO afc_donation(afc, tx_hash)
-		 VALUES(:afc, :tx_hash)
+		INSERT INTO wallet_connection (code, address)
+		SELECT :code, :address
+		WHERE NOT EXISTS (
+		  SELECT 1
+		  FROM wallet_connection
+		  WHERE
+			 code = :code
+			 AND address = :address
+			 AND id = (
+				SELECT id FROM wallet_connection
+				WHERE address = :address
+				ORDER BY id DESC LIMIT 1)
+		)
 	 `
-	qd := map[string]interface{}{
-		"afc":     afc.Code,
-		"tx_hash": afc.TxHash,
-	}
-	_, err := db.NamedExec(q, qd)
+	_, err := db.NamedExec(q, wc)
 	if err != nil {
-		log.Errorf("failed to insert affiliate donation data, %v", err)
+		log.Errorf("failed to insert wallet connection data, %v", err)
 		return err
 	}
 
@@ -117,19 +122,28 @@ func GetUserDonationData(db *sqlx.DB, address string) ([]api.Donation, error) {
 	return result, nil
 }
 
-func GetUserStats(db *sqlx.DB, address string) (*api.UserStats, error) {
+func GetUserData(db *sqlx.DB, address string) (*api.UserData, error) {
 	// fetch donations made by this user/address
 	q1 := `
 		SELECT
-			us_total, us_tokens, us_staked, us_reward, us_staked, us_modified_at
-		FROM update_user_stats($1)
+			 us_total,
+			 us_tokens,
+			 us_staked,
+			 us_reward,
+			 us_status,
+			 us_code,
+			 us_modified_at
+		FROM update_user_data($1)
 		`
-	var result api.UserStats
+	var result api.UserData
 	err := db.Get(&result, q1, address)
 	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
-		err = fmt.Errorf("failed to fetch user stats for %s, %v", address, err)
+		err = fmt.Errorf("failed to fetch user data for %s, %v", address, err)
 		log.Error(err)
 		return nil, err
+	}
+	if err != nil && strings.Contains(err.Error(), "sql: no rows in result set") {
+		return nil, nil
 	}
 
 	return &result, nil

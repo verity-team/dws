@@ -18,20 +18,25 @@ servers:
   description: delphi (donation web site backend)
 
 paths:
-  /donation/affiliate:
+  /wallet/connection:
     post:
-      summary: set affiliate code for donation
+      summary: associate a wallet address with an affiliate code
       description: |
-         Call this endpoint to set the affiliate code for a donation
-      operationId: setAffiliateCode
+         Call this endpoint to associate a wallet address with an
+         affiliate code
+      operationId: connectWallet
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/affiliate_request'
+              $ref: '#/components/schemas/connection_request'
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/user_data_result'
         "400":
           description: |
             Bad input parameter; error message provides details.
@@ -54,7 +59,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/error'
-  /donation/data/:
+  /donation/data:
     get:
       summary: get general donation data
       description: |
@@ -111,7 +116,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/user_data'
+                $ref: '#/components/schemas/user_data_result'
         "400":
           description: |
             Bad input parameter; error message provides details.
@@ -127,8 +132,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/error'
         "404":
-          description: |
-            no such user
+          description: no such address
         "5XX":
           description: |
             Servers are not working as expected. The request is probably valid
@@ -155,6 +159,45 @@ paths:
           description: OK
         "503":
           description: something's wrong
+  /affiliate/code:
+    post:
+      summary: generate new affiliate code
+      description: |
+         Call this endpoint to generate a new affiliate code
+      parameters:
+      - $ref: '#/components/parameters/delphi_key'
+      - $ref: '#/components/parameters/delphi_ts'
+      - $ref: '#/components/parameters/delphi_signature'
+      operationId: generateCode
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/affiliate_code'
+        "400":
+          description: |
+            Bad input parameter; error message provides details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+        "401":
+          description: |
+            Client lacks valid authentication credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+        "5XX":
+          description: |
+            Servers are not working as expected. The request is probably valid
+            but needs to be retried later.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
 components:
   schemas:
     error:
@@ -195,18 +238,18 @@ components:
           enum: [open, paused, closed]
           example: "open"
           maxLength: 8
-    user_data:
+    user_data_result:
       required:
       - donations
-      - stats
+      - user_data
       properties:
         donations:
           type: array
           description: an array of donations
           items:
             $ref: '#/components/schemas/donation'
-        stats:
-          $ref: '#/components/schemas/user_stats'
+        user_data:
+          $ref: '#/components/schemas/user_data'
     donation:
       required:
       - amount
@@ -321,7 +364,7 @@ components:
           maxLength: 16
           x-oapi-codegen-extra-tags:
             db: tokens
-    user_stats:
+    user_data:
       required:
       - total
       - tokens
@@ -372,18 +415,85 @@ components:
           maxLength: 32
           x-oapi-codegen-extra-tags:
             db: us_modified_at
-    affiliate_request:
+        affiliate_code:
+          type: string
+          maxLength: 16
+          description: |
+            affiliate code generated for this wallet address
+          example: "GezIkgeubrOkiOv4"
+          x-oapi-codegen-extra-tags:
+            db: us_code
+    connection_request:
       required:
       - code
-      - tx_hash
+      - address
       properties:
         code:
-          description: affiliate code for the donation in question
+          description: affiliate code, pass `none` if there's no code in the URL
           type: string
-          example: "TruffUdBuk6"
-          maxLength: 12
-        tx_hash:
-          description: transaction hash for the donation in question
+          example: "none"
+          maxLength: 16
+          x-oapi-codegen-extra-tags:
+            db: code
+        address:
+          description: address of the wallet that connected
           type: string
-          example: "0x558c8b86f75b0149ddca028a44a302eebe47c032e8ca8834f07aa6f1c5ae3fac"
-          maxLength: 66
+          example: "0xDEd1Fe6B3f61c8F1d874bb86F086D10FFc3F0154"
+          maxLength: 42
+          x-oapi-codegen-extra-tags:
+            db: address
+    affiliate_code:
+      required:
+      - address
+      - code
+      - ts
+      properties:
+        address:
+          description: address of the wallet that requested the affiliate code
+          type: string
+          example: "0xDEd1Fe6B3f61c8F1d874bb86F086D10FFc3F0154"
+          maxLength: 42
+          x-oapi-codegen-extra-tags:
+            db: address
+        code:
+          type: string
+          maxLength: 16
+          description: |
+            affiliate code generated for the requesting wallet address
+          example: "GezIkgeubrOkiOv4"
+          x-oapi-codegen-extra-tags:
+            db: code
+        ts:
+          description: date/time at which the affiliate code was added
+          type: string
+          format: date-time
+          example: "2023-10-05T09:23:10+00:00"
+          maxLength: 32
+          x-oapi-codegen-extra-tags:
+            db: created_at
+  parameters:
+    delphi_key:
+      in: header
+      name: delphi-key
+      schema:
+        type: string
+      required: true
+      description: a key/address (public)
+      example: "0xDEd1Fe6B3f61c8F1d874bb86F086D10FFc3F0154"
+    delphi_signature:
+      in: header
+      name: delphi-signature
+      schema:
+        type: string
+      required: true
+      description: signature over the path, timestamp and body
+    delphi_ts:
+      in: header
+      name: delphi-ts
+      schema:
+        type: string
+      required: true
+      description: |
+        caller timestamp (number of milliseconds since Unix epoch) -- included
+        to prevent replay attacks; must not be older than 5 seconds
+      example: 1697787627315

@@ -34,20 +34,32 @@ const (
 	PriceAssetTruth PriceAsset = "truth"
 )
 
-// Defines values for UserStatsStatus.
+// Defines values for UserDataStatus.
 const (
-	None      UserStatsStatus = "none"
-	Staking   UserStatsStatus = "staking"
-	Unstaking UserStatsStatus = "unstaking"
+	None      UserDataStatus = "none"
+	Staking   UserDataStatus = "staking"
+	Unstaking UserDataStatus = "unstaking"
 )
 
-// AffiliateRequest defines model for affiliate_request.
-type AffiliateRequest struct {
-	// Code affiliate code for the donation in question
-	Code string `json:"code"`
+// AffiliateCode defines model for affiliate_code.
+type AffiliateCode struct {
+	// Address address of the wallet that requested the affiliate code
+	Address string `db:"address" json:"address"`
 
-	// TxHash transaction hash for the donation in question
-	TxHash string `json:"tx_hash"`
+	// Code affiliate code generated for the requesting wallet address
+	Code string `db:"code" json:"code"`
+
+	// Ts date/time at which the affiliate code was added
+	Ts time.Time `db:"created_at" json:"ts"`
+}
+
+// ConnectionRequest defines model for connection_request.
+type ConnectionRequest struct {
+	// Address address of the wallet that connected
+	Address string `db:"address" json:"address"`
+
+	// Code affiliate code, pass `none` if there's no code in the URL
+	Code string `db:"code" json:"code"`
 }
 
 // Donation defines model for donation.
@@ -127,19 +139,15 @@ type PriceAsset string
 
 // UserData defines model for user_data.
 type UserData struct {
-	// Donations an array of donations
-	Donations []Donation `json:"donations"`
-	Stats     UserStats  `json:"stats"`
-}
+	// AffiliateCode affiliate code generated for this wallet address
+	AffiliateCode *string `db:"us_code" json:"affiliate_code,omitempty"`
 
-// UserStats defines model for user_stats.
-type UserStats struct {
 	// Reward staking rewards the user is eligible to claim
 	Reward string `db:"us_reward" json:"reward"`
 
 	// Staked number of tokens the user staked; must be <= `tokens`
-	Staked string          `db:"us_staked" json:"staked"`
-	Status UserStatsStatus `db:"us_status" json:"status"`
+	Staked string         `db:"us_staked" json:"staked"`
+	Status UserDataStatus `db:"us_status" json:"status"`
 
 	// Tokens number of tokens the user is eligible to claim
 	Tokens string `db:"us_tokens" json:"tokens"`
@@ -151,8 +159,37 @@ type UserStats struct {
 	Ts *time.Time `db:"us_modified_at" json:"ts,omitempty"`
 }
 
-// UserStatsStatus defines model for UserStats.Status.
-type UserStatsStatus string
+// UserDataStatus defines model for UserData.Status.
+type UserDataStatus string
 
-// SetAffiliateCodeJSONRequestBody defines body for SetAffiliateCode for application/json ContentType.
-type SetAffiliateCodeJSONRequestBody = AffiliateRequest
+// UserDataResult defines model for user_data_result.
+type UserDataResult struct {
+	// Donations an array of donations
+	Donations []Donation `json:"donations"`
+	UserData  UserData   `json:"user_data"`
+}
+
+// DelphiKey defines model for delphi_key.
+type DelphiKey = string
+
+// DelphiSignature defines model for delphi_signature.
+type DelphiSignature = string
+
+// DelphiTs defines model for delphi_ts.
+type DelphiTs = string
+
+// GenerateCodeParams defines parameters for GenerateCode.
+type GenerateCodeParams struct {
+	// DelphiKey a key/address (public)
+	DelphiKey DelphiKey `json:"delphi-key"`
+
+	// DelphiTs caller timestamp (number of milliseconds since Unix epoch) -- included
+	// to prevent replay attacks; must not be older than 5 seconds
+	DelphiTs DelphiTs `json:"delphi-ts"`
+
+	// DelphiSignature signature over the path, timestamp and body
+	DelphiSignature DelphiSignature `json:"delphi-signature"`
+}
+
+// ConnectWalletJSONRequestBody defines body for ConnectWallet for application/json ContentType.
+type ConnectWalletJSONRequestBody = ConnectionRequest

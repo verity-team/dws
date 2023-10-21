@@ -23,14 +23,80 @@ func NewDelphiServer(db *sqlx.DB) *DelphiServer {
 	}
 }
 
-func (s *DelphiServer) SetAffiliateCode(ctx echo.Context) error {
-	var afc api.AffiliateRequest
-	err := ctx.Bind(&afc)
+func (s *DelphiServer) ConnectWallet(ctx echo.Context) error {
+	var cr api.ConnectionRequest
+	err := ctx.Bind(&cr)
 	if err != nil {
-		log.Error("failed to bind POST param (AffiliateRequest)")
+		log.Error("failed to bind POST param (ConnectionRequest)")
 		return err
 	}
-	return db.AddAffiliateCD(s.db, afc)
+	cr.Address = strings.ToLower(cr.Address)
+	if err = db.ConnectWallet(s.db, cr); err != nil {
+		log.Error("failed to log wallet connection")
+		return err
+	}
+	udr, err := s.getUserData(cr.Address)
+	if err != nil {
+		return err
+	}
+	if udr == nil {
+		return ctx.NoContent(http.StatusNotFound)
+	}
+	return ctx.JSON(http.StatusOK, *udr)
+}
+
+func (s *DelphiServer) getUserData(address string) (*api.UserDataResult, error) {
+	address = strings.ToLower(address)
+	dd, err := db.GetUserDonationData(s.db, address)
+	if err != nil {
+		return nil, err
+	}
+	udata, err := db.GetUserData(s.db, address)
+	if err != nil {
+		return nil, err
+	}
+	if (dd == nil) && (udata == nil) {
+		// no user data for the address given
+		return nil, nil
+	}
+
+	result := api.UserDataResult{
+		Donations: dd,
+	}
+	if udata != nil {
+		result.UserData = *udata
+	}
+
+	return &result, nil
+}
+
+func (s *DelphiServer) UserData(ctx echo.Context, address string) error {
+	udr, err := s.getUserData(address)
+	if err != nil {
+		return err
+	}
+
+	if udr == nil {
+		return ctx.NoContent(http.StatusNotFound)
+	}
+	return ctx.JSON(http.StatusOK, *udr)
+}
+
+func (s *DelphiServer) Alive(ctx echo.Context) error {
+	return ctx.String(http.StatusOK, "{}\n")
+}
+
+func (s *DelphiServer) Ready(ctx echo.Context) error {
+	err := s.db.Ping()
+	if err != nil {
+		return ctx.String(http.StatusServiceUnavailable, "{}\n")
+	}
+	return ctx.String(http.StatusOK, "{}\n")
+
+}
+
+func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodeParams) error {
+	return nil
 }
 
 func (s *DelphiServer) DonationData(ctx echo.Context) error {
@@ -50,38 +116,4 @@ func (s *DelphiServer) DonationData(ctx echo.Context) error {
 		dd.Status = api.Paused
 	}
 	return ctx.JSON(http.StatusOK, *dd)
-}
-
-func (s *DelphiServer) UserData(ctx echo.Context, address string) error {
-	address = strings.ToLower(address)
-	dd, err := db.GetUserDonationData(s.db, address)
-	if err != nil {
-		return err
-	}
-	if dd == nil {
-		return ctx.String(http.StatusNotFound, "no such address")
-	}
-	us, err := db.GetUserStats(s.db, address)
-	if err != nil {
-		return err
-	}
-	var result api.UserData = api.UserData{
-		Donations: dd,
-		Stats:     *us,
-	}
-
-	return ctx.JSON(http.StatusOK, result)
-}
-
-func (s *DelphiServer) Alive(ctx echo.Context) error {
-	return ctx.String(http.StatusOK, "{}\n")
-}
-
-func (s *DelphiServer) Ready(ctx echo.Context) error {
-	err := s.db.Ping()
-	if err != nil {
-		return ctx.String(http.StatusServiceUnavailable, "{}\n")
-	}
-	return ctx.String(http.StatusOK, "{}\n")
-
 }

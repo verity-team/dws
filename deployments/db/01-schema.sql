@@ -10,12 +10,12 @@ $$ LANGUAGE plpgsql;
 
 CREATE TYPE asset_enum AS ENUM ('eth', 'truth', 'usdc', 'usdt');
 
---- afc_donation ----------------------------------------------------
-DROP TABLE IF EXISTS afc_donation;
-CREATE TABLE afc_donation (
+--- wallet_connection ----------------------------------------------------
+DROP TABLE IF EXISTS wallet_connection;
+CREATE TABLE wallet_connection (
     id BIGSERIAL PRIMARY KEY,
-    afc VARCHAR(16) NOT NULL,
-    tx_hash VARCHAR(66) NOT NULL UNIQUE,
+    code VARCHAR(16) NOT NULL,
+    address VARCHAR(42) NOT NULL,
 
     created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())
 );
@@ -101,26 +101,27 @@ EXECUTE PROCEDURE trigger_update_modified_at();
 
 INSERT INTO donation_stats(total, tokens) VALUES(0, 0);
 
---- user_stats ----------------------------------------------------
-CREATE TYPE user_stats_status_enum AS ENUM ('none', 'staking', 'unstaking');
-DROP TABLE IF EXISTS user_stats;
-CREATE TABLE user_stats (
+--- user_data ----------------------------------------------------
+CREATE TYPE user_data_status_enum AS ENUM ('none', 'staking', 'unstaking');
+DROP TABLE IF EXISTS user_data;
+CREATE TABLE user_data (
     id BIGSERIAL PRIMARY KEY,
     address VARCHAR(42) NOT NULL UNIQUE,
     total NUMERIC(12,2) NOT NULL,
     tokens BIGINT NOT NULL,
     staked BIGINT NOT NULL DEFAULT 0,
     reward BIGINT NOT NULL DEFAULT 0,
-    status user_stats_status_enum NOT NULL DEFAULT 'none',
+    status user_data_status_enum NOT NULL DEFAULT 'none',
+    affiliate_code VARCHAR(16),
 
     modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
     created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())
 );
-CREATE TRIGGER user_stats_update_timestamp
-BEFORE UPDATE ON user_stats
+CREATE TRIGGER user_data_update_timestamp
+BEFORE UPDATE ON user_data
 FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
-CREATE INDEX ON user_stats (address);
+CREATE INDEX ON user_data (address);
 
 --- finalized_block ----------------------------------------------------
 DROP TABLE IF EXISTS finalized_block;
@@ -197,8 +198,8 @@ BEFORE UPDATE ON price_req
 FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
 
---- update_user_stats() ---------------------------------------------
-CREATE OR REPLACE FUNCTION update_user_stats(p_address VARCHAR(42))
+--- update_user_data() ---------------------------------------------
+CREATE OR REPLACE FUNCTION update_user_data(p_address VARCHAR(42))
 RETURNS TABLE (
     us_id BIGINT,
     us_address VARCHAR(42),
@@ -206,7 +207,8 @@ RETURNS TABLE (
     us_tokens BIGINT,
     us_staked BIGINT,
     us_reward BIGINT,
-    us_status user_stats_status_enum,
+    us_status user_data_status_enum,
+    us_code VARCHAR(16),
     us_modified_at TIMESTAMP,
     us_created_at TIMESTAMP
 )
@@ -223,7 +225,7 @@ BEGIN
           AND d.status = 'confirmed'
           AND d.modified_at > (
             SELECT COALESCE(MAX(us.modified_at), '2000-01-01'::timestamp)
-            FROM user_stats us
+            FROM user_data us
             WHERE us.address = p_address
           )
     ) THEN
@@ -241,21 +243,31 @@ BEGIN
         WHERE dtab.address = p_address
           AND dtab.status = 'confirmed';
 
-        -- Update user_stats record with the calculated totals
-        INSERT INTO user_stats(address, total, tokens)
+        -- Update user_data record with the calculated totals
+        INSERT INTO user_data(address, total, tokens)
         VALUES(p_address, ds_total, ds_tokens)
         ON CONFLICT (address)
         DO UPDATE SET
             total = ds_total,
             tokens = ds_tokens,
             modified_at = NOW()
-        WHERE user_stats.address = p_address;
+        WHERE user_data.address = p_address;
     END IF;
 
-    -- Return the updated user_stats record
+    -- Return the updated user_data record
     RETURN QUERY
-    SELECT *
-    FROM user_stats
-    WHERE user_stats.address = p_address;
+    SELECT
+        id,
+        address,
+        total,
+        tokens,
+        staked,
+        reward,
+        status,
+        affiliate_code,
+        modified_at,
+        created_at
+    FROM user_data
+    WHERE user_data.address = p_address;
 END;
 $$ LANGUAGE plpgsql;
