@@ -126,7 +126,13 @@ func GetUserData(db *sqlx.DB, address string) (*api.UserData, error) {
 	// fetch donations made by this user/address
 	q1 := `
 		SELECT
-			us_total, us_tokens, us_staked, us_reward, us_staked, us_modified_at
+			 us_total,
+			 us_tokens,
+			 us_staked,
+			 us_reward,
+			 us_status,
+			 us_code,
+			 us_modified_at
 		FROM update_user_data($1)
 		`
 	var result api.UserData

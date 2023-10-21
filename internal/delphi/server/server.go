@@ -62,7 +62,9 @@ func (s *DelphiServer) getUserData(address string) (*api.UserDataResult, error) 
 
 	result := api.UserDataResult{
 		Donations: dd,
-		UserData:  *udata,
+	}
+	if udata != nil {
+		result.UserData = *udata
 	}
 
 	return &result, nil

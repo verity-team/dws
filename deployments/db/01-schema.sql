@@ -112,7 +112,7 @@ CREATE TABLE user_data (
     staked BIGINT NOT NULL DEFAULT 0,
     reward BIGINT NOT NULL DEFAULT 0,
     status user_data_status_enum NOT NULL DEFAULT 'none',
-    affiliate_code VARCHAR(16) NOT NULL,
+    affiliate_code VARCHAR(16),
 
     modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
     created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())
