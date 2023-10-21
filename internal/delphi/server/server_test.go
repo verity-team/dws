@@ -13,8 +13,7 @@ func TestVerifySigBoring(t *testing.T) {
 		from = "0xb938F65DfE303EdF96A511F1e7E3190f69036860"
 	)
 
-	res, err := verifySig(from, msg, sig)
-	assert.Nil(t, err)
+	res := verifySig(from, msg, sig)
 	assert.True(t, res)
 }
 
@@ -25,7 +24,6 @@ func TestVerifySig(t *testing.T) {
 		from = "0xb938f65dfe303edf96a511f1e7e3190f69036860"
 	)
 
-	res, err := verifySig(from, msg, sig)
-	assert.Nil(t, err)
+	res := verifySig(from, msg, sig)
 	assert.True(t, res)
 }

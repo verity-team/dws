@@ -122,12 +122,12 @@ func (s *DelphiServer) DonationData(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, *dd)
 }
 
-func verifySig(from, msg, sigHex string) (bool, error) {
+func verifySig(from, msg, sigHex string) bool {
 	sig, err := hexutil.Decode(sigHex)
 	if err != nil {
 		err = fmt.Errorf("invalid sig ('%s'), %v", sigHex, err)
 		log.Error(err)
-		return false, err
+		return false
 	}
 
 	msgHash := accounts.TextHash([]byte(msg))
@@ -135,14 +135,14 @@ func verifySig(from, msg, sigHex string) (bool, error) {
 		sig[crypto.RecoveryIDOffset] -= 27
 	}
 
-	recovered, err := crypto.SigToPub(msgHash, sig)
+	pk, err := crypto.SigToPub(msgHash, sig)
 	if err != nil {
-		err = fmt.Errorf("failed to recover publick key from signature, %v", err)
+		err = fmt.Errorf("failed to recover public key from sig ('%s'), %v", sigHex, err)
 		log.Error(err)
-		return false, err
+		return false
 	}
 
-	recoveredAddr := crypto.PubkeyToAddress(*recovered)
+	recoveredAddr := crypto.PubkeyToAddress(*pk)
 	result := strings.EqualFold(from, recoveredAddr.Hex())
-	return result, nil
+	return result
 }
