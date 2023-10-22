@@ -1,12 +1,14 @@
 import { HttpMethod, serverBaseRequest } from "@/utils/api/baseAPI";
-import { AffiliateDonationInfo, FailedResponse } from "@/utils/api/types";
+import { FailedResponse } from "@/utils/api/types";
+import { WalletAffliateRequest } from "@/utils/api/types/affliate.type";
 import { Nullable } from "@/utils/types";
 import { NextResponse } from "next/server";
+import { isAddress } from "web3-validator";
 
 export const runtime = "edge";
 
 export async function POST(request: Request): Promise<Response> {
-  let requestBody: Nullable<AffiliateDonationInfo> = null;
+  let requestBody: Nullable<WalletAffliateRequest> = null;
   try {
     requestBody = await request.json();
   } catch {
@@ -17,23 +19,26 @@ export async function POST(request: Request): Promise<Response> {
     return getDefaultErrResponse();
   }
 
-  const { code, tx_hash } = requestBody;
+  const { code, address } = requestBody;
   if (code == null) {
     return getBadRequestResponse("Affiliate code is required");
   }
-  if (tx_hash == null) {
+  if (address == null) {
     return getBadRequestResponse("Transaction hash is required");
   }
+  if (!isAddress(address)) {
+    return getBadRequestResponse("Invalid user wallet address");
+  }
 
-  const serverResponse = await requestAffiliateDonation(requestBody);
+  const serverResponse = await requestWalletConnection(requestBody);
   return serverResponse;
 }
 
-async function requestAffiliateDonation(
-  donationInfo: AffiliateDonationInfo
+async function requestWalletConnection(
+  donationInfo: WalletAffliateRequest
 ): Promise<NextResponse> {
   const response = await serverBaseRequest(
-    "/donation/affiliate",
+    "/wallet/connection",
     HttpMethod.POST,
     donationInfo
   );

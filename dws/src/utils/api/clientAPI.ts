@@ -1,25 +1,23 @@
 "use client";
 
-import useSWR, { Revalidator, RevalidatorOptions } from "swr";
+import useSWR, { Revalidator } from "swr";
 import { HttpMethod, clientBaseRequest } from "./baseAPI";
 import {
-  AffiliateDonationInfo,
   CampaignStatus,
+  CustomError,
   DonationData,
   DonationStats,
-  FailedResponse,
   TokenPrice,
   UserDonationData,
 } from "./types";
 import { useMemo } from "react";
-import { getExponentialWaitTime } from "../utils";
-import { Nullable } from "../types";
+import { getExponentialWaitTime, sleep } from "../utils";
+import { Maybe, Nullable } from "../types";
 import useSWRImmutable from "swr/immutable";
-
-interface CustomError extends Error {
-  info: FailedResponse;
-  status: number;
-}
+import {
+  WalletAffiliateResponse,
+  WalletAffliateRequest,
+} from "./types/affliate.type";
 
 const fetcher = async (url: string) => {
   const response = await clientBaseRequest(url, HttpMethod.GET);
@@ -148,4 +146,73 @@ export const useUserDonationData = (account: string) => {
   );
 
   return { data, error, isLoading };
+};
+
+export const connectWalletWithAffliate = async (
+  walletAffliateRequest: WalletAffliateRequest
+): Promise<Nullable<UserDonationData>> => {
+  // const response = await withErrorRetry(
+  //   async () => {
+  //     return await clientBaseRequest(
+  //       "/api/donation/affliate",
+  //       HttpMethod.POST,
+  //       walletAffliateRequest
+  //     );
+  //   },
+  //   (response: Maybe<Response>) => {
+  //     if (response == null) {
+  //       return false;
+  //     }
+
+  //     if (response.ok || response.status === 400 || response.status === 404) {
+  //       return false;
+  //     }
+
+  //     return true;
+  //   },
+  //   5
+  // );
+
+  const response = await clientBaseRequest(
+    "/api/donation/affliate",
+    HttpMethod.POST,
+    walletAffliateRequest
+  );
+
+  if (response == null) {
+    return null;
+  }
+
+  // TODO: Add extra logic to handle 404 logic if needed, or else just ignore
+  if (!response.ok) {
+    return null;
+  }
+
+  try {
+    // There should be a body in response
+    const result = await response.json();
+    return result;
+  } catch {
+    return null;
+  }
+};
+
+const withErrorRetry = async (
+  request: () => Promise<Maybe<Response>>,
+  shouldRetry: (response: Maybe<Response>) => boolean,
+  limit: number
+): Promise<Maybe<Response>> => {
+  let counter = 0;
+  while (counter < limit) {
+    const response = await request();
+
+    if (!shouldRetry(response)) {
+      return response;
+    }
+
+    await sleep(getExponentialWaitTime(1000, counter));
+    counter++;
+  }
+
+  return null;
 };
