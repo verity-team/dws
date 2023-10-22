@@ -1,13 +1,9 @@
 "use client";
 
+import { getUserDonationData } from "@/utils/api/clientAPI";
+import { requestSignature } from "@/utils/metamask/sign";
+import { useSDK } from "@metamask/sdk-react";
 import {
-  getUserDonationData,
-  useUserDonationData,
-} from "@/utils/api/clientAPI";
-import { sleep } from "@/utils/utils";
-import {
-  Modal,
-  Box,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -24,6 +20,8 @@ const AFCForm = ({ account }: AFCFormProps): ReactElement<AFCFormProps> => {
   const [isLoading, setLoading] = useState(true);
 
   const [userCode, setUserCode] = useState("");
+
+  const { sdk } = useSDK();
 
   // Try to get user generated code
   useEffect(() => {
@@ -77,8 +75,42 @@ const AFCForm = ({ account }: AFCFormProps): ReactElement<AFCFormProps> => {
 
   const handleGenAffiliateCode = async () => {
     setLoading(true);
-    await sleep(5000);
-    setUserCode("HELLO_WORLD");
+
+    // Try to (re)connect when there are no connected accounts
+    let currentAccount = account;
+    if (currentAccount == null || currentAccount === "") {
+      try {
+        if (sdk == null) {
+          return;
+        }
+        const accounts = await sdk.connect();
+
+        if (accounts == null || !Array.isArray(accounts)) {
+          return;
+        }
+        currentAccount = accounts[0];
+      } catch (err) {
+        console.warn({ err });
+      }
+    }
+
+    const currentDate = new Date();
+
+    // Timestamp in seconds
+    const timestamp = currentDate.getTime() / 1000;
+    const timezone = currentDate.getTimezoneOffset();
+    const timezoneHour = Math.abs(Math.floor(timezone / 60));
+    const timezoneMinute = Math.abs(timezone % 60);
+
+    const messageDate = `${currentDate.toISOString().split(".")[0]}${
+      timezone > 0 ? "-" : "+"
+    }${timezoneHour}:${timezoneMinute < 10 ? "0" : ""}${timezoneMinute}`;
+
+    const message = `get affiliate code, ${messageDate}`;
+    const encodedMessage = `0x${Buffer.from(message, "utf-8").toString("hex")}`;
+
+    const signature = await requestSignature(currentAccount, encodedMessage);
+    console.log(signature);
   };
 
   return (
