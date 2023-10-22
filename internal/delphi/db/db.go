@@ -156,12 +156,12 @@ func GetAffiliateCode(db *sqlx.DB, address string) (*api.AffiliateCode, error) {
 	// fetch donations made by this user/address
 	q1 := `
 		SELECT
-			address, affiliate_code, created_at
+			address, COALESCE(affiliate_code, '') AS code, created_at
 		FROM user_data
 		WHERE address=$1
 		`
 	var result api.AffiliateCode
-	err := db.Select(&result, q1, address)
+	err := db.Get(&result, q1, address)
 	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
 		err = fmt.Errorf("failed to fetch affiliate code for %s, %v", address, err)
 		log.Error(err)
@@ -188,13 +188,13 @@ func genAFC() (string, error) {
 func GenerateAffiliateCode(db *sqlx.DB, address string) (*api.AffiliateCode, error) {
 	// fetch donations made by this user/address
 	q1 := `
-		INSERT INTO user_data(address, affiliate_code)
+		INSERT INTO user_data AS ud(address, affiliate_code)
 		VALUES($1, $2)
 		ON CONFLICT(address)
 		DO UPDATE SET
-			affiliate_code = $2
-			WHERE affiliate_code IS NOT NULL
-		RETURNING address, affiliate_code, created_at
+			 affiliate_code = EXCLUDED.affiliate_code
+			 WHERE ud.affiliate_code IS NULL
+		RETURNING (address, affiliate_code AS code, created_at)
 		`
 
 	var result api.AffiliateCode

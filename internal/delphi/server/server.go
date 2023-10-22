@@ -19,6 +19,8 @@ import (
 	"github.com/verity-team/dws/internal/delphi/db"
 )
 
+const MAX_TIMESTAMP_AGE = 10
+
 type DelphiServer struct {
 	db *sqlx.DB
 }
@@ -148,7 +150,7 @@ func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodePar
 	if err != nil {
 		return err
 	}
-	if olderThan(ts, 5) {
+	if olderThan(ts, MAX_TIMESTAMP_AGE) {
 		err = fmt.Errorf("/affiliate/code delphi-ts ('%s') is not recent enough for address '%s'", params.DelphiTs, params.DelphiKey)
 		log.Error(err)
 		return err
@@ -159,11 +161,12 @@ func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodePar
 	if !authOK {
 		return ctx.NoContent(http.StatusUnauthorized)
 	}
+	log.Infof("auth OK for /affiliate/code request, address '%s'", params.DelphiKey)
 	afc, err := db.GetAffiliateCode(s.db, params.DelphiKey)
 	if err != nil {
 		return err
 	}
-	if afc != nil {
+	if afc != nil && afc.Code != "" {
 		// we have an affiliate code for this address already
 		return ctx.JSON(http.StatusOK, *afc)
 	}
