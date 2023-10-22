@@ -15,11 +15,6 @@ export interface UserDonationData {
   stats: UserStats;
 }
 
-export interface AffiliateDonationInfo {
-  code: string;
-  tx_hash: string;
-}
-
 export interface TokenPrice {
   asset: string;
   price: string;
