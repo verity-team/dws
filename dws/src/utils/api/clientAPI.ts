@@ -139,6 +139,8 @@ export const useDonationData = () => {
 export const getUserDonationDataKey = (account: string) =>
   `/api/donation/user/${account}`;
 
+// TODO: Add data refresh interval
+// For long-term use of data, have data refresh integrated
 export const useUserDonationData = (account: string) => {
   const { data, error, isLoading } = useSWR<UserDonationData, CustomError>(
     getUserDonationDataKey(account),
@@ -150,6 +152,18 @@ export const useUserDonationData = (account: string) => {
   );
 
   return { data, error, isLoading };
+};
+
+// For one-off request
+export const getUserDonationData = async (
+  account: string
+): Promise<Nullable<UserDonationData>> => {
+  try {
+    const response = await fetcher(getUserDonationDataKey(account));
+    return response;
+  } catch {
+    return null;
+  }
 };
 
 export const connectWalletWithAffliate = async (

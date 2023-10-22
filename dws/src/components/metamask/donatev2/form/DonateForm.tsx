@@ -1,25 +1,21 @@
 import { donate, exchangeToReward } from "@/utils/metamask/donate";
 import ConnectButton from "./ConnectBtn";
 import TokenSelector from "./TokenSelector";
-import {
-  connectWalletWithAffliate,
-  getUserDonationDataKey,
-  useDonationData,
-} from "@/utils/api/clientAPI";
+import { getUserDonationDataKey, useDonationData } from "@/utils/api/clientAPI";
 import { AvailableToken, stableCoinPrice } from "@/utils/token";
 import { Nullable } from "@/utils/types";
-<<<<<<< HEAD
-import { useSDK } from "@metamask/sdk-react";
-import { useState, useCallback, useEffect, useMemo, useContext, ReactElement } from "react";
-=======
-import { useState, useCallback, useEffect, useMemo, ReactElement } from "react";
->>>>>>> 272b9bb (feat: add gen affiliate form)
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  ReactElement,
+  useContext,
+} from "react";
 import { useForm } from "react-hook-form";
 import toast from "react-hot-toast";
 import { mutate } from "swr";
 import TextError from "@/components/common/TextError";
-import { ClientAFC } from "@/components/ClientRoot";
-import { WalletAffliateRequest } from "@/utils/api/types/affliate.type";
 
 export interface DonateFormData {
   payAmount: number;
@@ -36,12 +32,6 @@ const DonateForm = ({
 }: DonateFormProps): ReactElement<DonateFormProps> => {
   const { tokenPrices } = useDonationData();
 
-<<<<<<< HEAD
-  const affliateCode = useContext(ClientAFC);
-
-  const [account, setAccount] = useState<Nullable<string>>(null);
-=======
->>>>>>> 272b9bb (feat: add gen affiliate form)
   const [selectedToken, setSelectedToken] = useState<AvailableToken>("ETH");
   const [receiveAmount, setReceiveAmount] = useState<number | "N/A">(0);
 
