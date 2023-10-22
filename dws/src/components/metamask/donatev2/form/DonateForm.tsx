@@ -84,14 +84,6 @@ const DonateForm = () => {
     }
   };
 
-  const handleChangeAccount = async (
-    event: React.MouseEvent<HTMLButtonElement>
-  ) => {
-    event.preventDefault();
-    sdk?.disconnect();
-    handleConnect(event);
-  };
-
   const handleDonate = async (data: DonateFormData) => {
     if (account == null) {
       return;
@@ -188,7 +180,6 @@ const DonateForm = () => {
             disabled={receiveAmount === "N/A" || receiveAmount <= 0}
             account={account}
             onConnect={handleConnect}
-            onChangeAccount={handleChangeAccount}
             onDonate={handleSubmit(handleDonate)}
           />
         </div>
