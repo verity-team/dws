@@ -24,6 +24,7 @@ export interface UserStats {
   reward: string;
   status: UserRewardStatus;
   ts: string;
+  affliate_code: string | "none";
 }
 
 // Status of a transaction
