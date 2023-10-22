@@ -7,8 +7,8 @@ export const avaiableTokens: Array<AvailableToken> = ["ETH", "USDT", "LINK"];
 // TODO: Do NOT forget to update this when launch
 export const stableCoinPrice: Record<string, number> = {
   USDT: 1,
+  USDC: 1,
   LINK: 0.002,
-  ETH: 1600,
 };
 
 export interface TokenInfo {
