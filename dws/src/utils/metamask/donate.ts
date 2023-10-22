@@ -143,5 +143,8 @@ export const exchangeToReward = (
   }
 
   const reward = Math.ceil((amount * tokenPrice) / rewardTokenPrice);
-  return isNaN(reward) ? 0 : reward;
+  if (isNaN(reward) || reward <= 0) {
+    return 0;
+  }
+  return reward;
 };
