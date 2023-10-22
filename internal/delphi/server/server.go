@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -124,9 +126,35 @@ func verifySig(from, msg, sigHex string) bool {
 	return strings.EqualFold(from, recoveredAddr.Hex())
 }
 
+func getTS(tss string) (time.Time, error) {
+	seconds, err := strconv.Atoi(tss)
+	if err != nil {
+		err = fmt.Errorf("failed to parse string with seconds since epoch ('%s'), %v", tss, err)
+		log.Error(err)
+		return time.Unix(0, 0), err
+	}
+	ts := time.Unix(int64(seconds), 0)
+	return ts, nil
+}
+
+func olderThan(ts time.Time, seconds int) bool {
+	now := time.Now().UTC()
+	tdif := now.Sub(ts.UTC())
+	return tdif.Seconds() > float64(seconds)
+}
+
 func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodeParams) error {
-	// TODO: verify that the timestamp is no older than 5 seconds
-	msg := params.DelphiKey + params.DelphiTs + ctx.Path()
+	ts, err := getTS(params.DelphiTs)
+	if err != nil {
+		return err
+	}
+	if olderThan(ts, 5) {
+		err = fmt.Errorf("/affiliate/code delphi-ts ('%s') is not recent enough for address '%s'", params.DelphiTs, params.DelphiKey)
+		log.Error(err)
+		return err
+	}
+
+	msg := fmt.Sprintf("get affiliate code, %s", ts.Format("2006-01-02 15:04:05-07:00"))
 	authOK := verifySig(params.DelphiKey, msg, params.DelphiSignature)
 	if !authOK {
 		return ctx.NoContent(http.StatusUnauthorized)
