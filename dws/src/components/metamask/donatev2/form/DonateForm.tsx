@@ -8,8 +8,12 @@ import {
 } from "@/utils/api/clientAPI";
 import { AvailableToken, stableCoinPrice } from "@/utils/token";
 import { Nullable } from "@/utils/types";
+<<<<<<< HEAD
 import { useSDK } from "@metamask/sdk-react";
-import { useState, useCallback, useEffect, useMemo, useContext } from "react";
+import { useState, useCallback, useEffect, useMemo, useContext, ReactElement } from "react";
+=======
+import { useState, useCallback, useEffect, useMemo, ReactElement } from "react";
+>>>>>>> 272b9bb (feat: add gen affiliate form)
 import { useForm } from "react-hook-form";
 import toast from "react-hot-toast";
 import { mutate } from "swr";
@@ -21,13 +25,23 @@ export interface DonateFormData {
   payAmount: number;
 }
 
-const DonateForm = () => {
-  const { sdk } = useSDK();
+interface DonateFormProps {
+  account: Nullable<string>;
+  handleConnect: (event: React.MouseEvent<HTMLButtonElement>) => void;
+}
+
+const DonateForm = ({
+  account,
+  handleConnect,
+}: DonateFormProps): ReactElement<DonateFormProps> => {
   const { tokenPrices } = useDonationData();
 
+<<<<<<< HEAD
   const affliateCode = useContext(ClientAFC);
 
   const [account, setAccount] = useState<Nullable<string>>(null);
+=======
+>>>>>>> 272b9bb (feat: add gen affiliate form)
   const [selectedToken, setSelectedToken] = useState<AvailableToken>("ETH");
   const [receiveAmount, setReceiveAmount] = useState<number | "N/A">(0);
 
@@ -70,35 +84,6 @@ const DonateForm = () => {
   useEffect(() => {
     handleSwapTokenToReward();
   }, [selectedToken]);
-
-  const handleConnect = async (
-    event: React.MouseEvent<HTMLButtonElement>
-  ): Promise<void> => {
-    event.preventDefault();
-
-    try {
-      if (sdk == null) {
-        return;
-      }
-      const accounts = await sdk.connect();
-
-      if (accounts == null || !Array.isArray(accounts)) {
-        return;
-      }
-      setAccount(accounts[0]);
-      toast("Welcome to TruthMemes", { icon: "👋" });
-
-      // TODO: Need to test this endpoint when new server is ready
-      // Send request to track affliate code
-      const payload: WalletAffliateRequest = {
-        address: accounts[0],
-        code: affliateCode ?? "none",
-      };
-      await connectWalletWithAffliate(payload);
-    } catch (err) {
-      console.warn({ err });
-    }
-  };
 
   const handleDonate = async (data: DonateFormData) => {
     if (account == null) {

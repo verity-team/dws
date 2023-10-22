@@ -20,6 +20,10 @@ import {
 } from "./types/affliate.type";
 
 const fetcher = async (url: string) => {
+  if (url == null || url.trim() === "") {
+    return null;
+  }
+
   const response = await clientBaseRequest(url, HttpMethod.GET);
 
   if (response == null) {
