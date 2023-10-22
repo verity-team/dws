@@ -95,7 +95,7 @@ const DonateForm = () => {
     }
 
     // TODO: Change this to Toast for better UX
-    alert("Transaction sent");
+    toast.success("Transaction sent");
 
     // Revalidate user donations
     await mutate(getUserDonationDataKey(account));
