@@ -496,6 +496,6 @@ components:
         type: string
       required: true
       description: |
-        caller timestamp (number of milliseconds since Unix epoch) -- included
+        caller timestamp (number of seconds since Unix epoch) -- included
         to prevent replay attacks; must not be older than 5 seconds
-      example: 1697787627315
+      example: 1697955918

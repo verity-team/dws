@@ -99,7 +99,33 @@ func (s *DelphiServer) Ready(ctx echo.Context) error {
 
 }
 
+func verifySig(from, msg, sigHex string) bool {
+	sig, err := hexutil.Decode(sigHex)
+	if err != nil {
+		err = fmt.Errorf("invalid sig ('%s'), %v", sigHex, err)
+		log.Error(err)
+		return false
+	}
+
+	msgHash := accounts.TextHash([]byte(msg))
+	// ethereum "black magic" :(
+	if sig[crypto.RecoveryIDOffset] == 27 || sig[crypto.RecoveryIDOffset] == 28 {
+		sig[crypto.RecoveryIDOffset] -= 27
+	}
+
+	pk, err := crypto.SigToPub(msgHash, sig)
+	if err != nil {
+		err = fmt.Errorf("failed to recover public key from sig ('%s'), %v", sigHex, err)
+		log.Error(err)
+		return false
+	}
+
+	recoveredAddr := crypto.PubkeyToAddress(*pk)
+	return strings.EqualFold(from, recoveredAddr.Hex())
+}
+
 func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodeParams) error {
+	// TODO: verify that the timestamp is no older than 5 seconds
 	msg := params.DelphiKey + params.DelphiTs + ctx.Path()
 	authOK := verifySig(params.DelphiKey, msg, params.DelphiSignature)
 	if !authOK {
@@ -141,28 +167,4 @@ func (s *DelphiServer) DonationData(ctx echo.Context) error {
 		dd.Status = api.Paused
 	}
 	return ctx.JSON(http.StatusOK, *dd)
-}
-
-func verifySig(from, msg, sigHex string) bool {
-	sig, err := hexutil.Decode(sigHex)
-	if err != nil {
-		err = fmt.Errorf("invalid sig ('%s'), %v", sigHex, err)
-		log.Error(err)
-		return false
-	}
-
-	msgHash := accounts.TextHash([]byte(msg))
-	if sig[crypto.RecoveryIDOffset] == 27 || sig[crypto.RecoveryIDOffset] == 28 {
-		sig[crypto.RecoveryIDOffset] -= 27
-	}
-
-	pk, err := crypto.SigToPub(msgHash, sig)
-	if err != nil {
-		err = fmt.Errorf("failed to recover public key from sig ('%s'), %v", sigHex, err)
-		log.Error(err)
-		return false
-	}
-
-	recoveredAddr := crypto.PubkeyToAddress(*pk)
-	return strings.EqualFold(from, recoveredAddr.Hex())
 }

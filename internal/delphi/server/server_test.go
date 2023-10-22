@@ -27,3 +27,14 @@ func TestVerifySig(t *testing.T) {
 	res := verifySig(from, msg, sig)
 	assert.True(t, res)
 }
+
+func TestVerifySigFriendly(t *testing.T) {
+	const (
+		msg  = "Hello Minh! How are you today? :)"
+		sig  = "0xc9966a58f2e6b45c2b3d3205f869c419afd29c4c9dc64d68f416257a3fc236216746b44dcf95b4e0d7dd5ed97523fb179d41a87db5882292ef991385a6f87c7e1c"
+		from = "0xb938f65dfe303edf96a511f1e7e3190f69036860"
+	)
+
+	res := verifySig(from, msg, sig)
+	assert.True(t, res)
+}
