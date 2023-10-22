@@ -5,7 +5,7 @@ export const revalidate = 60; // seconds
 export const runtime = "edge";
 
 export async function GET(request: NextRequest) {
-  const response = await serverBaseRequest("/donation/data/", HttpMethod.GET);
+  const response = await serverBaseRequest("/donation/data", HttpMethod.GET);
 
   // Something is wrong with API setup
   if (response == null) {
