@@ -2,16 +2,24 @@ package server
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
+	"github.com/ethereum/go-ethereum/accounts"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"
 	"github.com/verity-team/dws/api"
 	"github.com/verity-team/dws/internal/delphi/db"
 )
+
+const MAX_TIMESTAMP_AGE = 10
 
 type DelphiServer struct {
 	db *sqlx.DB
@@ -95,7 +103,81 @@ func (s *DelphiServer) Ready(ctx echo.Context) error {
 
 }
 
+func verifySig(from, msg, sigHex string) bool {
+	sig, err := hexutil.Decode(sigHex)
+	if err != nil {
+		err = fmt.Errorf("invalid sig ('%s'), %v", sigHex, err)
+		log.Error(err)
+		return false
+	}
+
+	msgHash := accounts.TextHash([]byte(msg))
+	// ethereum "black magic" :(
+	if sig[crypto.RecoveryIDOffset] == 27 || sig[crypto.RecoveryIDOffset] == 28 {
+		sig[crypto.RecoveryIDOffset] -= 27
+	}
+
+	pk, err := crypto.SigToPub(msgHash, sig)
+	if err != nil {
+		err = fmt.Errorf("failed to recover public key from sig ('%s'), %v", sigHex, err)
+		log.Error(err)
+		return false
+	}
+
+	recoveredAddr := crypto.PubkeyToAddress(*pk)
+	return strings.EqualFold(from, recoveredAddr.Hex())
+}
+
+func getTS(tss string) (time.Time, error) {
+	seconds, err := strconv.Atoi(tss)
+	if err != nil {
+		err = fmt.Errorf("failed to parse string with seconds since epoch ('%s'), %v", tss, err)
+		log.Error(err)
+		return time.Unix(0, 0), err
+	}
+	ts := time.Unix(int64(seconds), 0)
+	return ts, nil
+}
+
+func olderThan(ts time.Time, seconds int) bool {
+	now := time.Now().UTC()
+	tdif := now.Sub(ts.UTC())
+	return tdif.Seconds() > float64(seconds)
+}
+
 func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodeParams) error {
+	ts, err := getTS(params.DelphiTs)
+	if err != nil {
+		return err
+	}
+	if olderThan(ts, MAX_TIMESTAMP_AGE) {
+		err = fmt.Errorf("/affiliate/code delphi-ts ('%s') is not recent enough for address '%s'", params.DelphiTs, params.DelphiKey)
+		log.Error(err)
+		return err
+	}
+
+	msg := fmt.Sprintf("get affiliate code, %s", ts.Format("2006-01-02 15:04:05-07:00"))
+	authOK := verifySig(params.DelphiKey, msg, params.DelphiSignature)
+	if !authOK {
+		return ctx.NoContent(http.StatusUnauthorized)
+	}
+	log.Infof("auth OK for /affiliate/code request, address '%s'", params.DelphiKey)
+	afc, err := db.GetAffiliateCode(s.db, params.DelphiKey)
+	if err != nil {
+		return err
+	}
+	if afc != nil && afc.Code != "" {
+		// we have an affiliate code for this address already
+		return ctx.JSON(http.StatusOK, *afc)
+	}
+	afc, err = db.GenerateAffiliateCode(s.db, params.DelphiKey)
+	if err != nil {
+		return err
+	}
+	if afc != nil {
+		// return the newly generated affiliate code
+		return ctx.JSON(http.StatusOK, *afc)
+	}
 	return nil
 }
 

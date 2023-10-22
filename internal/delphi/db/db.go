@@ -1,9 +1,12 @@
 package db
 
 import (
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
+
+	"crypto/rand"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/gommon/log"
@@ -144,6 +147,66 @@ func GetUserData(db *sqlx.DB, address string) (*api.UserData, error) {
 	}
 	if err != nil && strings.Contains(err.Error(), "sql: no rows in result set") {
 		return nil, nil
+	}
+
+	return &result, nil
+}
+
+func GetAffiliateCode(db *sqlx.DB, address string) (*api.AffiliateCode, error) {
+	// fetch donations made by this user/address
+	q1 := `
+		SELECT
+			address, COALESCE(affiliate_code, '') AS code, created_at
+		FROM user_data
+		WHERE address=$1
+		`
+	var result api.AffiliateCode
+	err := db.Get(&result, q1, address)
+	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
+		err = fmt.Errorf("failed to fetch affiliate code for %s, %v", address, err)
+		log.Error(err)
+		return nil, err
+	}
+	if err != nil && strings.Contains(err.Error(), "sql: no rows in result set") {
+		return nil, nil
+	}
+
+	return &result, nil
+}
+
+func genAFC() (string, error) {
+	buff := make([]byte, 8)
+	_, err := rand.Read(buff)
+	if err != nil {
+		err = fmt.Errorf("failed to generate an affiliate code, %v", err)
+		log.Error(err)
+		return "", err
+	}
+	return hex.EncodeToString(buff), nil
+}
+
+func GenerateAffiliateCode(db *sqlx.DB, address string) (*api.AffiliateCode, error) {
+	// fetch donations made by this user/address
+	q1 := `
+		INSERT INTO user_data AS ud(address, affiliate_code)
+		VALUES($1, $2)
+		ON CONFLICT(address)
+		DO UPDATE SET
+			 affiliate_code = EXCLUDED.affiliate_code
+			 WHERE ud.affiliate_code IS NULL
+		RETURNING (address, affiliate_code AS code, created_at)
+		`
+
+	var result api.AffiliateCode
+	afc, err := genAFC()
+	if err != nil {
+		return nil, err
+	}
+	err = db.QueryRowx(q1, address, afc).Scan(&result)
+	if err != nil {
+		err = fmt.Errorf("failed to set affiliate code for '%s', %v", address, err)
+		log.Error(err)
+		return nil, err
 	}
 
 	return &result, nil

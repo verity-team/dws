@@ -69,25 +69,33 @@ A user comes to our donation web site and connects his metamask wallet that is s
     {
       "donations": [
         {
-          "amount": "1.23",
-          "asset": "ETH",
-          "usd_amount": "2009.82",
-          "tokens": "980000",
-          "price": "0.002",
-          "ts": "2023-10-07T12:48:28+00:00"
+          "amount": "1.2345600000",
+          "asset": "eth",
+          "price": "0.00100",
+          "status": "confirmed",
+          "tokens": "1981414",
+          "ts": "2023-10-21T07:38:36Z",
+          "tx_hash": "0xf98c0fe5c1bf72cad294c5ba60ca5b62d3d519fe7cc71cc3cdfb064892fa90e2",
+          "usd_amount": "1981.41"
         },
         {
-          "amount": "760",
-          "asset": "USDT",
-          "tokens": "380000",
-          "price": "0.002",
-          "ts": "2023-10-06T12:52:10+00:00"
+          "amount": "0.9876540000",
+          "asset": "eth",
+          "price": "0.00100",
+          "status": "confirmed",
+          "tokens": "1586905",
+          "ts": "2023-10-21T07:56:12Z",
+          "tx_hash": "0x7ddb66c1be4ec06e0edd6c2f4ad8b878b2fb5b8075157f5881f0a7f35c5c7cb4",
+          "usd_amount": "1586.90"
         }
       ],
-      "stats": {
-        "total": "1360000",
+      "user_data": {
+        "reward": "0",
         "staked": "0",
-        "rewards": "0"
+        "status": "none",
+        "tokens": "3568319",
+        "total": "3568.31",
+        "ts": "2023-10-21T08:28:38.744069Z"
       }
     }
     ```

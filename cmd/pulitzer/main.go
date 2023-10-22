@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/go-co-op/gocron"
-	"github.com/heptiolabs/healthcheck"
 	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
+	"github.com/labstack/echo/v4"
 	_ "github.com/lib/pq"
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
@@ -53,9 +53,26 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	health := healthcheck.NewHandler()
-	health.AddReadinessCheck("database", healthcheck.DatabasePingCheck(dbh.DB, 1*time.Second))
-	go http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", *port), health) // nolint:errcheck
+
+	// healthcheck endpoints
+	e := echo.New()
+	e.GET("/live", func(c echo.Context) error {
+		return c.String(http.StatusOK, "{}\n")
+	})
+	e.GET("/ready", func(c echo.Context) error {
+		err := dbh.Ping()
+		if err != nil {
+			return c.String(http.StatusServiceUnavailable, "{}\n")
+		}
+		return c.String(http.StatusOK, "{}\n")
+	})
+	go func() {
+		err := e.Start(fmt.Sprintf(":%d", *port))
+		if err != http.ErrServerClosed {
+
+			log.Fatal(err)
+		}
+	}()
 	s.StartBlocking()
 }
 

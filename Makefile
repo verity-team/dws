@@ -14,6 +14,7 @@ clean:
 	rm -f $(BIN_DIR)/buck
 	rm -f $(BIN_DIR)/delphi
 	rm -f $(BIN_DIR)/pulitzer
+	rm -f $(BIN_DIR)/tt
 
 build: lint
 	rm -f $(BIN_DIR)/buck
@@ -25,6 +26,9 @@ build: lint
 	rm -f $(BIN_DIR)/pulitzer
 	go build -o $(BIN_DIR)/pulitzer -v -ldflags \
 		"-X main.rev=$(version) -X main.bts=$(timestamp)" cmd/pulitzer/main.go
+	rm -f $(BIN_DIR)/tt
+	go build -o $(BIN_DIR)/tt -v -ldflags \
+		"-X main.rev=$(version) -X main.bts=$(timestamp)" cmd/tt/main.go
 
 run_db:
 	$(COMPOSE_CMD) -f $(DOCKER_COMPOSE_FOLDER)/db.yaml  up -d dws-db
