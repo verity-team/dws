@@ -9,6 +9,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import toast from "react-hot-toast";
 import { mutate } from "swr";
+import TextError from "@/components/common/TextError";
 
 export interface DonateFormData {
   payAmount: number;
@@ -57,9 +58,10 @@ const DonateForm = () => {
     }
   }, [getValues, selectedToken, tokenPrices]);
 
+  // Update price when
   useEffect(() => {
     handleSwapTokenToReward();
-  }, [handleSwapTokenToReward]);
+  }, [selectedToken]);
 
   const handleConnect = async (
     event: React.MouseEvent<HTMLButtonElement>
@@ -82,7 +84,14 @@ const DonateForm = () => {
     }
   };
 
-  // If doing math, use toWei() + BN.js to avoid floating issues
+  const handleChangeAccount = async (
+    event: React.MouseEvent<HTMLButtonElement>
+  ) => {
+    event.preventDefault();
+    sdk?.disconnect();
+    handleConnect(event);
+  };
+
   const handleDonate = async (data: DonateFormData) => {
     if (account == null) {
       return;
@@ -90,12 +99,11 @@ const DonateForm = () => {
 
     const txHash = await donate(account, data.payAmount, selectedToken);
     if (txHash == null) {
-      alert("Failed to donate token.");
+      toast.error("Donate failed");
       return;
     }
 
-    // TODO: Change this to Toast for better UX
-    toast.success("Transaction sent");
+    toast.success("Donate success");
 
     // Revalidate user donations
     await mutate(getUserDonationDataKey(account));
@@ -103,7 +111,6 @@ const DonateForm = () => {
     return txHash;
   };
 
-  // TODO: Change fallback value if needed
   const minDonateAmount: number = useMemo(() => {
     if (selectedToken === "ETH") {
       const minETH = Number(process.env.NEXT_PUBLIC_MIN_ETH);
@@ -160,12 +167,29 @@ const DonateForm = () => {
             </div>
           </div>
         </div>
+        {errors.payAmount && (
+          <div className="p-2">
+            {errors.payAmount.type === "required" && (
+              <TextError>The donate amount is required</TextError>
+            )}
+            {errors.payAmount.type === "min" && (
+              <TextError>
+                The minimum donate amount for {selectedToken} is{" "}
+                {minDonateAmount}
+              </TextError>
+            )}
+            {errors.payAmount.type === "validate" && (
+              <TextError>The donate amount should be a number</TextError>
+            )}
+          </div>
+        )}
         <div className="p-2">
           <ConnectButton
             disabled={receiveAmount === "N/A" || receiveAmount <= 0}
             account={account}
-            handleConnect={handleConnect}
-            handleDonate={handleSubmit(handleDonate)}
+            onConnect={handleConnect}
+            onChangeAccount={handleChangeAccount}
+            onDonate={handleSubmit(handleDonate)}
           />
         </div>
       </form>
