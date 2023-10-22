@@ -6,7 +6,7 @@ import LandingFooter from "@/components/landing/footer/LandingFooter";
 import Navbar from "@/components/landing/navbar/Navbar";
 import Newsletter from "@/components/landing/newsletter/Newsletter";
 import Roadmap from "@/components/landing/roadmap/Roadmap";
-import DonateFormV2 from "@/components/metamask/donatev2/DonateFormv2";
+import DonateBox from "@/components/metamask/donatev2/DonateBox";
 import dynamic from "next/dynamic";
 
 const LaunchTimer = dynamic(
@@ -37,7 +37,7 @@ export default function Home() {
       </BannerSection>
       <ClientRoot>
         <div className="flex items-center justify-center mb-8">
-          <DonateFormV2 />
+          <DonateBox />
         </div>
       </ClientRoot>
       <Newsletter />
