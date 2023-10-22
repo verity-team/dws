@@ -1,6 +1,6 @@
 import { donate, exchangeToReward } from "@/utils/metamask/donate";
-import ConnectButton from "../ConnectBtn";
-import TokenSelector from "../TokenSelector";
+import ConnectButton from "./ConnectBtn";
+import TokenSelector from "./TokenSelector";
 import { getUserDonationDataKey, useDonationData } from "@/utils/api/clientAPI";
 import { AvailableToken, stableCoinPrice } from "@/utils/token";
 import { Nullable } from "@/utils/types";
@@ -10,7 +10,7 @@ import { useForm } from "react-hook-form";
 import toast from "react-hot-toast";
 import { mutate } from "swr";
 
-interface DonateFormData {
+export interface DonateFormData {
   payAmount: number;
 }
 
@@ -162,7 +162,7 @@ const DonateForm = () => {
         </div>
         <div className="p-2">
           <ConnectButton
-            disabled={receiveAmount === 0 || receiveAmount === "N/A"}
+            disabled={receiveAmount === "N/A" || receiveAmount <= 0}
             account={account}
             handleConnect={handleConnect}
             handleDonate={handleSubmit(handleDonate)}

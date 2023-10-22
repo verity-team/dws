@@ -1,7 +1,7 @@
 import { AvailableToken } from "@/utils/token";
 import { ReactElement, memo } from "react";
 import { UseFormRegister } from "react-hook-form";
-import { DonateFormData } from "./DonateBox";
+import { DonateFormData } from "./DonateForm";
 
 interface DonateInputProps {
   label: string;
