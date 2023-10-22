@@ -151,32 +151,26 @@ export const useUserDonationData = (account: string) => {
 export const connectWalletWithAffliate = async (
   walletAffliateRequest: WalletAffliateRequest
 ): Promise<Nullable<UserDonationData>> => {
-  // const response = await withErrorRetry(
-  //   async () => {
-  //     return await clientBaseRequest(
-  //       "/api/donation/affliate",
-  //       HttpMethod.POST,
-  //       walletAffliateRequest
-  //     );
-  //   },
-  //   (response: Maybe<Response>) => {
-  //     if (response == null) {
-  //       return false;
-  //     }
+  const response = await withErrorRetry(
+    async () => {
+      return await clientBaseRequest(
+        "/api/donation/affliate",
+        HttpMethod.POST,
+        walletAffliateRequest
+      );
+    },
+    (response: Maybe<Response>) => {
+      if (response == null) {
+        return false;
+      }
 
-  //     if (response.ok || response.status === 400 || response.status === 404) {
-  //       return false;
-  //     }
+      if (response.ok || response.status === 400 || response.status === 404) {
+        return false;
+      }
 
-  //     return true;
-  //   },
-  //   5
-  // );
-
-  const response = await clientBaseRequest(
-    "/api/donation/affliate",
-    HttpMethod.POST,
-    walletAffliateRequest
+      return true;
+    },
+    5
   );
 
   if (response == null) {
