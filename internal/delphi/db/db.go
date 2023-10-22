@@ -194,7 +194,7 @@ func GenerateAffiliateCode(db *sqlx.DB, address string) (*api.AffiliateCode, err
 		DO UPDATE SET
 			 affiliate_code = EXCLUDED.affiliate_code
 			 WHERE ud.affiliate_code IS NULL
-		RETURNING (address, affiliate_code AS code, created_at)
+		RETURNING address, affiliate_code AS code, created_at
 		`
 
 	var result api.AffiliateCode
@@ -202,7 +202,7 @@ func GenerateAffiliateCode(db *sqlx.DB, address string) (*api.AffiliateCode, err
 	if err != nil {
 		return nil, err
 	}
-	err = db.QueryRowx(q1, address, afc).Scan(&result)
+	err = db.QueryRowx(q1, address, afc).StructScan(&result)
 	if err != nil {
 		err = fmt.Errorf("failed to set affiliate code for '%s', %v", address, err)
 		log.Error(err)

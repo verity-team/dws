@@ -162,7 +162,7 @@ func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodePar
 		return ctx.NoContent(http.StatusUnauthorized)
 	}
 	log.Infof("auth OK for /affiliate/code request, address '%s'", params.DelphiKey)
-	afc, err := db.GetAffiliateCode(s.db, params.DelphiKey)
+	afc, err := db.GetAffiliateCode(s.db, strings.ToLower(params.DelphiKey))
 	if err != nil {
 		return err
 	}
@@ -170,7 +170,7 @@ func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodePar
 		// we have an affiliate code for this address already
 		return ctx.JSON(http.StatusOK, *afc)
 	}
-	afc, err = db.GenerateAffiliateCode(s.db, params.DelphiKey)
+	afc, err = db.GenerateAffiliateCode(s.db, strings.ToLower(params.DelphiKey))
 	if err != nil {
 		return err
 	}
