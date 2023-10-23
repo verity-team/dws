@@ -29,12 +29,7 @@ async function getUserDonation(walletAddr: string): Promise<NextResponse> {
 
   // Redirect response to frontend with their respective statusCode
   if (!response.ok) {
-    return NextResponse.json(
-      {},
-      {
-        status: response.status,
-      }
-    );
+    return new NextResponse(undefined, { status: response.status });
   }
 
   // Should exist a response body whether the request fail or not
