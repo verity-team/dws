@@ -15,6 +15,7 @@ import {
   DialogContent,
   CircularProgress,
 } from "@mui/material";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { ReactElement, memo, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
@@ -26,7 +27,7 @@ const AFCForm = ({ account }: AFCFormProps): ReactElement<AFCFormProps> => {
   const [isFormOpen, setFormOpen] = useState(false);
   const [isLoading, setLoading] = useState(true);
 
-  const [userCode, setUserCode] = useState("");
+  const [userCode, setUserCode] = useState("givemesomething");
 
   const { sdk } = useSDK();
 
@@ -130,6 +131,11 @@ const AFCForm = ({ account }: AFCFormProps): ReactElement<AFCFormProps> => {
     }
   };
 
+  const handleCopyToClipboard = () => {
+    navigator.clipboard.writeText(sharableLink);
+    toast.success("Copied to clipboard");
+  };
+
   return (
     <>
       <div className="text-center text-4xl">
@@ -183,11 +189,15 @@ const AFCForm = ({ account }: AFCFormProps): ReactElement<AFCFormProps> => {
 
             <div className="mt-4">
               <div className="text-lg mb-2">Sharable link:</div>
-              <input
-                value={sharableLink}
-                disabled
-                className="px-4 py-2 border-2 border-black rounded-lg w-full"
-              />
+              <div className="px-4 py-2 border-2 border-black rounded-lg w-full flex items-center justify-between">
+                <input value={sharableLink} disabled className="w-full" />
+                <div onClick={handleCopyToClipboard}>
+                  <ContentCopyIcon className="text-gray-600 hover:text-gray-900 cursor-pointer" />
+                </div>
+              </div>
+              {/* <div className="flex flex-col items-center justify-center">
+                <QRCode value={sharableLink} size={100} />
+              </div> */}
             </div>
           </div>
         </DialogContent>

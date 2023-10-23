@@ -33,6 +33,7 @@ const Donate = () => {
 
   return (
     <div className="flex flex-col">
+      {/* Donate section */}
       <div className="max-w-2xl border-2 border-black rounded-2xl">
         <div className="w-full border-b-2 border-black bg-cred p-8 rounded-t-xl relative h-32">
           <Image
@@ -55,6 +56,8 @@ const Donate = () => {
           <DonateForm account={account} handleConnect={handleConnect} />
         </div>
       </div>
+
+      {/* Share section */}
       <div className="mt-8">
         <AFCForm account={account ?? ""} />
       </div>
