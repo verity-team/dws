@@ -36,7 +36,7 @@ const AFCForm = ({ account }: AFCFormProps): ReactElement<AFCFormProps> => {
       return;
     }
 
-    setUserCode(data.stats.affliate_code);
+    setUserCode(data.user_data.affiliate_code);
   }, [data, error]);
 
   const sharableLink = useMemo(() => {
