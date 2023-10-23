@@ -161,12 +161,16 @@ func main() {
 func runReadyProbe(ctxt common.Context, latest bool) error {
 	err := ctxt.DB.Ping()
 	if err != nil {
+		log.Error(err)
 		return err
 	}
 	if latest {
 		_, err = ethereum.GetBlockNumber(ctxt.ETHRPCURL)
 	} else {
 		_, err = ethereum.GetMaxFinalizedBlockNumber(ctxt.ETHRPCURL)
+	}
+	if err != nil {
+		log.Error(err)
 	}
 	return err
 }
