@@ -18,14 +18,10 @@ export const getRFC3339String = (date: Date): string => {
   const timezone = date.getTimezoneOffset();
   const timezoneHour = Math.abs(Math.floor(timezone / 60));
 
-  const datePart = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
-  const timePart = `${date.getHours()}:${date.getMinutes()}:${
-    date.getSeconds() < 10 ? "0" : ""
-  }${date.getSeconds()}`;
+  const breakpoint = /[T\.]/;
+  const [datePart, timePart] = date.toISOString().split(breakpoint);
 
-  const result = `${datePart} ${timePart}${
-    timezone > 0 ? "-" : "+"
-  }${timezoneHour}:00`;
+  const result = `${datePart} ${timePart}+00:00`;
 
   return result;
 };
