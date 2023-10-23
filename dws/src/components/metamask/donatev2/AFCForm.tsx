@@ -3,6 +3,7 @@
 import {
   getUserDonationData,
   requestNewAffiliateCode,
+  useUserDonationData,
 } from "@/utils/api/clientAPI";
 import { requestSignature } from "@/utils/metamask/sign";
 import { connectWallet } from "@/utils/metamask/wallet";
@@ -25,37 +26,17 @@ interface AFCFormProps {
 
 const AFCForm = ({ account }: AFCFormProps): ReactElement<AFCFormProps> => {
   const [isFormOpen, setFormOpen] = useState(false);
-  const [isLoading, setLoading] = useState(true);
-
-  const [userCode, setUserCode] = useState("givemesomething");
 
   const { sdk } = useSDK();
+  const { data, error, isLoading } = useUserDonationData(account);
 
-  // Try to get user generated code
-  useEffect(() => {
-    if (account == null) {
-      setLoading(false);
-      return;
+  const userCode = useMemo(() => {
+    if (data == null || error != null) {
+      return "";
     }
 
-    const getUserCode = async () => {
-      const userDonationData = await getUserDonationData(account);
-      if (userDonationData == null) {
-        return;
-      }
-
-      return userDonationData.stats.affliate_code;
-    };
-
-    getUserCode()
-      .then((code) => {
-        if (code == null) {
-          return;
-        }
-        setUserCode(code);
-      })
-      .finally(() => setLoading(false));
-  }, [account]);
+    return data.stats.affliate_code;
+  }, [data, error]);
 
   const sharableLink = useMemo(() => {
     if (typeof window === "undefined") {
@@ -76,14 +57,9 @@ const AFCForm = ({ account }: AFCFormProps): ReactElement<AFCFormProps> => {
 
   const handleCloseForm = () => {
     setFormOpen(false);
-
-    // Reset form loading, but do NOT re-fetch user code
-    setLoading(false);
   };
 
   const handleGenAffiliateCode = async () => {
-    setLoading(true);
-
     // Try to (re)connect when there are no connected accounts
     let currentAccount = account;
     if (!currentAccount) {
