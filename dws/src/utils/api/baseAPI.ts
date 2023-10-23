@@ -10,7 +10,7 @@ export interface RequestConfig {
   timeout: number;
 }
 
-const getDefaultHeaders = () => {
+export const getDefaultHeaders = () => {
   const headers = new Headers();
 
   headers.append("Content-Type", "application/json");
@@ -23,11 +23,12 @@ export const baseRequest = async (
   url: string,
   method: HttpMethod,
   config: RequestConfig,
-  body?: any
+  body?: any,
+  headers?: Headers
 ): Promise<Nullable<Response>> => {
   const { host, timeout } = config;
 
-  const headers = getDefaultHeaders();
+  const requestHeaders = headers ?? getDefaultHeaders();
 
   // Use signal to avoid running the request for too long
   // Docs for canceling fetch API request
@@ -63,7 +64,8 @@ export const baseRequest = async (
 export const serverBaseRequest = async (
   url: string,
   method: HttpMethod,
-  body?: any
+  body?: any,
+  headers?: Headers
 ): Promise<Nullable<Response>> => {
   // Read configurations
 

@@ -2,6 +2,7 @@
 
 import { getUserDonationData } from "@/utils/api/clientAPI";
 import { requestSignature } from "@/utils/metamask/sign";
+import { getRFC3339String } from "@/utils/utils";
 import { useSDK } from "@metamask/sdk-react";
 import {
   Dialog,
@@ -10,6 +11,7 @@ import {
   CircularProgress,
 } from "@mui/material";
 import { ReactElement, useEffect, useMemo, useState } from "react";
+import toast from "react-hot-toast";
 
 interface AFCFormProps {
   account: string;
@@ -98,19 +100,18 @@ const AFCForm = ({ account }: AFCFormProps): ReactElement<AFCFormProps> => {
 
     // Timestamp in seconds
     const timestamp = currentDate.getTime() / 1000;
-    const timezone = currentDate.getTimezoneOffset();
-    const timezoneHour = Math.abs(Math.floor(timezone / 60));
-    const timezoneMinute = Math.abs(timezone % 60);
-
-    const messageDate = `${currentDate.toISOString().split(".")[0]}${
-      timezone > 0 ? "-" : "+"
-    }${timezoneHour}:${timezoneMinute < 10 ? "0" : ""}${timezoneMinute}`;
+    const messageDate = getRFC3339String(currentDate);
 
     const message = `get affiliate code, ${messageDate}`;
-    const encodedMessage = `0x${Buffer.from(message, "utf-8").toString("hex")}`;
 
-    const signature = await requestSignature(currentAccount, encodedMessage);
-    console.log(signature);
+    try {
+      const signature = await requestSignature(currentAccount, message);
+      console.log(signature);
+    } catch {
+      toast.error("Transaction rejected");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

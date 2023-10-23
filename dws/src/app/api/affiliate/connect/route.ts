@@ -24,7 +24,7 @@ export async function POST(request: Request): Promise<Response> {
     return getBadRequestResponse("Affiliate code is required");
   }
   if (address == null) {
-    return getBadRequestResponse("Transaction hash is required");
+    return getBadRequestResponse("Wallet address is required");
   }
   if (!isAddress(address)) {
     return getBadRequestResponse("Invalid user wallet address");
