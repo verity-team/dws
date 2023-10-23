@@ -117,19 +117,24 @@ export const donateERC = async (
     return null;
   }
 
-  return await ethereum.request<string>({
-    method: "eth_sendTransaction",
-    params: [
-      {
-        from,
-        to: tokenInfo.contractAddress,
-        data: getContractData(receiveWallet, amount, tokenInfo.decimals),
-        // gasLimit: '0x5028', // Customizable by the user during MetaMask confirmation.
-        // maxPriorityFeePerGas: '0x3b9aca00', // Customizable by the user during MetaMask confirmation.
-        // maxFeePerGas: '0x2540be400', // Customizable by the user during MetaMask confirmation.
-      },
-    ],
-  });
+  try {
+    return await ethereum.request<string>({
+      method: "eth_sendTransaction",
+      params: [
+        {
+          from,
+          to: tokenInfo.contractAddress,
+          data: getContractData(receiveWallet, amount, tokenInfo.decimals),
+          // gasLimit: '0x5028', // Customizable by the user during MetaMask confirmation.
+          // maxPriorityFeePerGas: '0x3b9aca00', // Customizable by the user during MetaMask confirmation.
+          // maxFeePerGas: '0x2540be400', // Customizable by the user during MetaMask confirmation.
+        },
+      ],
+    });
+  } catch (err: any) {
+    console.warn(err.message);
+    return null;
+  }
 };
 
 // TODO: Check number boundary. Use BN if needed
