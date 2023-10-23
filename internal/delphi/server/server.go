@@ -31,21 +31,41 @@ func NewDelphiServer(db *sqlx.DB) *DelphiServer {
 	}
 }
 
+func getError(code int, msg string, err error) (error, api.Error) {
+	var (
+		nerr error
+		cerr api.Error
+	)
+	if msg != "" {
+		nerr = fmt.Errorf(msg+", %v", err)
+	} else {
+		nerr = err
+	}
+	cerr = api.Error{
+		Code:    code,
+		Message: nerr.Error(),
+	}
+	return nerr, cerr
+}
+
 func (s *DelphiServer) ConnectWallet(ctx echo.Context) error {
 	var cr api.ConnectionRequest
 	err := ctx.Bind(&cr)
 	if err != nil {
-		log.Error("failed to bind POST param (ConnectionRequest)")
-		return err
+		err, cerr := getError(101, "failed to bind POST param (ConnectionRequest)", err)
+		log.Error(err)
+		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
 	cr.Address = strings.ToLower(cr.Address)
 	if err = db.ConnectWallet(s.db, cr); err != nil {
-		log.Error("failed to log wallet connection")
-		return err
+		err, cerr := getError(102, "failed to log wallet connection", err)
+		log.Error(err)
+		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
 	udr, err := s.getUserData(cr.Address)
 	if err != nil {
-		return err
+		_, cerr := getError(103, "", err)
+		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
 	if udr == nil {
 		return ctx.NoContent(http.StatusNotFound)
@@ -81,7 +101,8 @@ func (s *DelphiServer) getUserData(address string) (*api.UserDataResult, error) 
 func (s *DelphiServer) UserData(ctx echo.Context, address string) error {
 	udr, err := s.getUserData(address)
 	if err != nil {
-		return err
+		_, cerr := getError(104, "", err)
+		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
 
 	if udr == nil {
@@ -148,13 +169,14 @@ func olderThan(ts time.Time, seconds int) bool {
 func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodeParams) error {
 	ts, err := getTS(params.DelphiTs)
 	if err != nil {
-		return err
+		_, cerr := getError(105, "", err)
+		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
 	if olderThan(ts, MAX_TIMESTAMP_AGE) {
 		err = fmt.Errorf("/affiliate/code delphi-ts ('%s') is not recent enough for address '%s'", params.DelphiTs, params.DelphiKey)
 		log.Error(err)
 		cerr := api.Error{
-			Code:    100,
+			Code:    106,
 			Message: "timestamp is not recent enough",
 		}
 		return ctx.JSON(http.StatusBadRequest, cerr)
@@ -168,7 +190,8 @@ func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodePar
 	log.Infof("auth OK for /affiliate/code request, address '%s'", params.DelphiKey)
 	afc, err := db.GetAffiliateCode(s.db, strings.ToLower(params.DelphiKey))
 	if err != nil {
-		return err
+		_, cerr := getError(107, "", err)
+		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
 	if afc != nil && afc.Code != "" {
 		// we have an affiliate code for this address already
@@ -176,7 +199,8 @@ func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodePar
 	}
 	afc, err = db.GenerateAffiliateCode(s.db, strings.ToLower(params.DelphiKey))
 	if err != nil {
-		return err
+		_, cerr := getError(108, "", err)
+		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
 	if afc != nil {
 		// return the newly generated affiliate code
@@ -188,13 +212,15 @@ func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodePar
 func (s *DelphiServer) DonationData(ctx echo.Context) error {
 	dd, err := db.GetDonationData(s.db)
 	if err != nil {
-		return err
+		_, cerr := getError(109, "", err)
+		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
 	ra, present := os.LookupEnv("DWS_DONATION_ADDRESS")
 	if !present {
 		err = errors.New("DWS_DONATION_ADDRESS environment variable not set")
 		log.Error(err)
-		return err
+		_, cerr := getError(110, "", err)
+		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
 	dd.ReceivingAddress = ra
 	// if we failed to fetch an ETH price, the status should be set to "paused"
