@@ -22,6 +22,7 @@ func main() {
 	delphiKey := flag.String("delphi-key", "0xb938F65DfE303EdF96A511F1e7E3190f69036860", "eth address")
 	timeoutSeconds := flag.Int("timeout", 5, "request timeout in seconds")
 	simulateStaleTS := flag.Bool("old-ts", false, "simulate stale auth timestamp")
+	msg := flag.String("msg", "affiliate code", "message to sign")
 	flag.Parse()
 
 	if *privateKey == "" {
@@ -52,7 +53,7 @@ func main() {
 	}
 	req.Header.Set("delphi-ts", fmt.Sprintf("%d", ts.Unix()))
 
-	signature, err := signMessage(pk, ts)
+	signature, err := signMessage(*msg, pk, ts)
 	if err != nil {
 		log.Fatalf("error signing message: %v", err)
 		return
@@ -89,10 +90,10 @@ func main() {
 	log.Info(data)
 }
 
-func signMessage(pk *ecdsa.PrivateKey, ts time.Time) (string, error) {
-	msg := fmt.Sprintf("get affiliate code, %s", ts.Format("2006-01-02 15:04:05-07:00"))
-	log.Info(msg)
-	msgHash := accounts.TextHash([]byte(msg))
+func signMessage(msg string, pk *ecdsa.PrivateKey, ts time.Time) (string, error) {
+	tmsg := fmt.Sprintf("%s, %s", msg, ts.Format("2006-01-02 15:04:05-07:00"))
+	log.Info(tmsg)
+	msgHash := accounts.TextHash([]byte(tmsg))
 	signature, err := crypto.Sign(msgHash, pk)
 	if err != nil {
 		return "", err

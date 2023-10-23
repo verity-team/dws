@@ -44,13 +44,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/error'
-        "401":
-          description: |
-            Client lacks valid authentication credentials
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/error'
         "404":
           description: no data found for address
         "5XX":
@@ -77,13 +70,6 @@ paths:
         "400":
           description: |
             Bad input parameter; error message provides details.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/error'
-        "401":
-          description: |
-            Client lacks valid authentication credentials
           content:
             application/json:
               schema:
@@ -122,13 +108,6 @@ paths:
         "400":
           description: |
             Bad input parameter; error message provides details.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/error'
-        "401":
-          description: |
-            Client lacks valid authentication credentials
           content:
             application/json:
               schema:
@@ -188,10 +167,6 @@ paths:
         "401":
           description: |
             Client lacks valid authentication credentials
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/error'
         "5XX":
           description: |
             Servers are not working as expected. The request is probably valid
@@ -213,7 +188,7 @@ components:
           example: 115
         message:
           type: string
-          maxLength: 128
+          maxLength: 1024
           description: error message
           example: all your bytes are wrong
     donation_data:
@@ -488,7 +463,11 @@ components:
       schema:
         type: string
       required: true
-      description: signature over the path, timestamp and body
+      description: |
+        signature over a string like: `affiliate code, 2023-10-23
+        18:45:19+00:00`.  The message is constructed from the words that make
+        up the path of the REST API endpoint called. *Important*: please use
+        UTC timestamps only.
     delphi_ts:
       in: header
       name: delphi-ts
