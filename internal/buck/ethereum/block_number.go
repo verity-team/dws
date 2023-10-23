@@ -34,14 +34,14 @@ func GetBlockNumber(apiURL string) (uint64, error) {
 
 	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(requestBody))
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to prepare eth_blockNumber request, %v", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to make the eth_blockNumber request, %v", err)
 	}
 	defer resp.Body.Close()
 
@@ -197,7 +197,7 @@ func GetMaxFinalizedBlockNumber(apiURL string) (uint64, error) {
 
 	resp, err := client.Post(apiURL, "application/json", bytes.NewBuffer(requestBytes))
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to make the eth_getBlockByNumber request, %v", err)
 	}
 	defer resp.Body.Close()
 
