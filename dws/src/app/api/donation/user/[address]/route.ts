@@ -27,19 +27,17 @@ async function getUserDonation(walletAddr: string): Promise<NextResponse> {
     return getDefaultErrResponse();
   }
 
+  // Redirect response to frontend with their respective statusCode
+  if (!response.ok) {
+    return new NextResponse(undefined, { status: response.status });
+  }
+
   // Should exist a response body whether the request fail or not
   let responseBody = null;
   try {
     responseBody = await response.json();
   } catch {
     return getDefaultErrResponse();
-  }
-
-  // Redirect response to frontend with their respective statusCode
-  if (!response.ok) {
-    return NextResponse.json<FailedResponse>(responseBody ?? {}, {
-      status: response.status,
-    });
   }
 
   return NextResponse.json<UserDonationData>(responseBody ?? {}, {

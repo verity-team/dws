@@ -14,6 +14,12 @@ export interface WalletAffiliateResponse {
   error: Maybe<CustomError>;
 }
 
+export interface GenAffiliateRequest {
+  address: string;
+  timestamp: number;
+  signature: string;
+}
+
 // Interface for /affliate/code response, return generated code to user
 export interface GenAffliateResponse {
   address: string;

@@ -1,35 +1,41 @@
 import { donate, exchangeToReward } from "@/utils/metamask/donate";
 import ConnectButton from "./ConnectBtn";
 import TokenSelector from "./TokenSelector";
-import {
-  connectWalletWithAffliate,
-  getUserDonationDataKey,
-  useDonationData,
-} from "@/utils/api/clientAPI";
+import { getUserDonationDataKey, useDonationData } from "@/utils/api/clientAPI";
 import { AvailableToken, stableCoinPrice } from "@/utils/token";
 import { Nullable } from "@/utils/types";
-import { useSDK } from "@metamask/sdk-react";
-import { useState, useCallback, useEffect, useMemo, useContext } from "react";
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  ReactElement,
+  useContext,
+} from "react";
 import { useForm } from "react-hook-form";
 import toast from "react-hot-toast";
 import { mutate } from "swr";
 import TextError from "@/components/common/TextError";
-import { ClientAFC } from "@/components/ClientRoot";
-import { WalletAffliateRequest } from "@/utils/api/types/affliate.type";
 
 export interface DonateFormData {
   payAmount: number;
 }
 
-const DonateForm = () => {
-  const { sdk } = useSDK();
+interface DonateFormProps {
+  account: Nullable<string>;
+  handleConnect: (event: React.MouseEvent<HTMLButtonElement>) => void;
+}
+
+const DonateForm = ({
+  account,
+  handleConnect,
+}: DonateFormProps): ReactElement<DonateFormProps> => {
   const { tokenPrices } = useDonationData();
 
-  const affliateCode = useContext(ClientAFC);
-
-  const [account, setAccount] = useState<Nullable<string>>(null);
   const [selectedToken, setSelectedToken] = useState<AvailableToken>("ETH");
   const [receiveAmount, setReceiveAmount] = useState<number | "N/A">(0);
+
+  const [isLoading, setLoading] = useState(false);
 
   const {
     register,
@@ -71,47 +77,22 @@ const DonateForm = () => {
     handleSwapTokenToReward();
   }, [selectedToken]);
 
-  const handleConnect = async (
-    event: React.MouseEvent<HTMLButtonElement>
-  ): Promise<void> => {
-    event.preventDefault();
-
-    try {
-      if (sdk == null) {
-        return;
-      }
-      const accounts = await sdk.connect();
-
-      if (accounts == null || !Array.isArray(accounts)) {
-        return;
-      }
-      setAccount(accounts[0]);
-      toast("Welcome to TruthMemes", { icon: "👋" });
-
-      // TODO: Need to test this endpoint when new server is ready
-      // Send request to track affliate code
-      const payload: WalletAffliateRequest = {
-        address: accounts[0],
-        code: affliateCode ?? "none",
-      };
-      await connectWalletWithAffliate(payload);
-    } catch (err) {
-      console.warn({ err });
-    }
-  };
-
   const handleDonate = async (data: DonateFormData) => {
+    setLoading(true);
+
     if (account == null) {
       return;
     }
 
     const txHash = await donate(account, data.payAmount, selectedToken);
     if (txHash == null) {
+      setLoading(false);
       toast.error("Donate failed");
       return;
     }
 
     toast.success("Donate success");
+    setLoading(false);
 
     // Revalidate user donations
     await mutate(getUserDonationDataKey(account));
@@ -195,6 +176,7 @@ const DonateForm = () => {
           <ConnectButton
             disabled={receiveAmount === "N/A" || receiveAmount <= 0}
             account={account}
+            loading={isLoading}
             onConnect={handleConnect}
             onDonate={handleSubmit(handleDonate)}
           />

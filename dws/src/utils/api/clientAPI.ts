@@ -15,11 +15,17 @@ import { getExponentialWaitTime, sleep } from "../utils";
 import { Maybe, Nullable } from "../types";
 import useSWRImmutable from "swr/immutable";
 import {
+  GenAffiliateRequest,
+  GenAffliateResponse,
   WalletAffiliateResponse,
   WalletAffliateRequest,
 } from "./types/affliate.type";
 
 const fetcher = async (url: string) => {
+  if (url == null || url.trim() === "") {
+    return null;
+  }
+
   const response = await clientBaseRequest(url, HttpMethod.GET);
 
   if (response == null) {
@@ -135,6 +141,8 @@ export const useDonationData = () => {
 export const getUserDonationDataKey = (account: string) =>
   `/api/donation/user/${account}`;
 
+// TODO: Add data refresh interval
+// For long-term use of data, have data refresh integrated
 export const useUserDonationData = (account: string) => {
   const { data, error, isLoading } = useSWR<UserDonationData, CustomError>(
     getUserDonationDataKey(account),
@@ -146,6 +154,18 @@ export const useUserDonationData = (account: string) => {
   );
 
   return { data, error, isLoading };
+};
+
+// For one-off request
+export const getUserDonationData = async (
+  account: string
+): Promise<Nullable<UserDonationData>> => {
+  try {
+    const response = await fetcher(getUserDonationDataKey(account));
+    return response;
+  } catch {
+    return null;
+  }
 };
 
 export const connectWalletWithAffliate = async (
@@ -178,6 +198,32 @@ export const connectWalletWithAffliate = async (
   }
 
   // TODO: Add extra logic to handle 404 logic if needed, or else just ignore
+  if (!response.ok) {
+    return null;
+  }
+
+  try {
+    // There should be a body in response
+    const result = await response.json();
+    return result;
+  } catch {
+    return null;
+  }
+};
+
+export const requestNewAffiliateCode = async (
+  request: GenAffiliateRequest
+): Promise<Maybe<GenAffliateResponse>> => {
+  const response = await clientBaseRequest(
+    "/api/affiliate/gen",
+    HttpMethod.POST,
+    request
+  );
+
+  if (response == null) {
+    return null;
+  }
+
   if (!response.ok) {
     return null;
   }

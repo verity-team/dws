@@ -1,7 +1,7 @@
 // Interface for /user/data/{address} response
 export interface UserDonationData {
   donations: Donation[];
-  stats: UserStats;
+  user_data: UserStats;
 }
 
 // Interface for a single donation entry
@@ -24,7 +24,7 @@ export interface UserStats {
   reward: string;
   status: UserRewardStatus;
   ts: string;
-  affliate_code: string | "none";
+  affiliate_code: string | "none";
 }
 
 // Status of a transaction
