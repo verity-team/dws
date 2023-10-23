@@ -91,6 +91,7 @@ func main() {
 
 func signMessage(pk *ecdsa.PrivateKey, ts time.Time) (string, error) {
 	msg := fmt.Sprintf("get affiliate code, %s", ts.Format("2006-01-02 15:04:05-07:00"))
+	log.Info(msg)
 	msgHash := accounts.TextHash([]byte(msg))
 	signature, err := crypto.Sign(msgHash, pk)
 	if err != nil {
