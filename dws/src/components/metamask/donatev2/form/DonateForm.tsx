@@ -35,6 +35,8 @@ const DonateForm = ({
   const [selectedToken, setSelectedToken] = useState<AvailableToken>("ETH");
   const [receiveAmount, setReceiveAmount] = useState<number | "N/A">(0);
 
+  const [isLoading, setLoading] = useState(false);
+
   const {
     register,
     handleSubmit,
@@ -76,17 +78,21 @@ const DonateForm = ({
   }, [selectedToken]);
 
   const handleDonate = async (data: DonateFormData) => {
+    setLoading(true);
+
     if (account == null) {
       return;
     }
 
     const txHash = await donate(account, data.payAmount, selectedToken);
     if (txHash == null) {
+      setLoading(false);
       toast.error("Donate failed");
       return;
     }
 
     toast.success("Donate success");
+    setLoading(false);
 
     // Revalidate user donations
     await mutate(getUserDonationDataKey(account));
@@ -170,6 +176,7 @@ const DonateForm = ({
           <ConnectButton
             disabled={receiveAmount === "N/A" || receiveAmount <= 0}
             account={account}
+            loading={isLoading}
             onConnect={handleConnect}
             onDonate={handleSubmit(handleDonate)}
           />

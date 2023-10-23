@@ -1,9 +1,11 @@
 import { Nullable } from "@/utils/types";
-import { MouseEvent, ReactElement } from "react";
+import { CircularProgress } from "@mui/material";
+import { MouseEvent, ReactElement, memo } from "react";
 
 interface ConnectButtonProps {
   account: Nullable<string>;
   disabled: boolean;
+  loading: boolean;
   onConnect: (event: MouseEvent<HTMLButtonElement>) => void;
   onDonate: (event: MouseEvent<HTMLButtonElement>) => void;
 }
@@ -11,6 +13,7 @@ interface ConnectButtonProps {
 const ConnectButton = ({
   account,
   disabled,
+  loading,
   onConnect,
   onDonate,
 }: ConnectButtonProps): ReactElement<ConnectButtonProps> => {
@@ -30,11 +33,15 @@ const ConnectButton = ({
         <button
           className="w-full bg-cred border-2 border-black rounded-2xl py-2 disabled:opacity-60 disabled:cursor-not-allowed"
           onClick={onDonate}
-          disabled={disabled}
+          disabled={disabled || loading}
         >
-          <div className="text-xl leading-loose tracking-wider text-gray-100">
-            Donate
-          </div>
+          {loading ? (
+            <CircularProgress size={24} />
+          ) : (
+            <div className="text-xl leading-loose tracking-wider text-gray-100">
+              Donate
+            </div>
+          )}
         </button>
       </>
     );
@@ -52,4 +59,4 @@ const ConnectButton = ({
   );
 };
 
-export default ConnectButton;
+export default memo(ConnectButton);
