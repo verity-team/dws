@@ -26,16 +26,17 @@ interface AFCFormProps {
 
 const AFCForm = ({ account }: AFCFormProps): ReactElement<AFCFormProps> => {
   const [isFormOpen, setFormOpen] = useState(false);
+  const [userCode, setUserCode] = useState("");
 
   const { sdk } = useSDK();
   const { data, error, isLoading } = useUserDonationData(account);
 
-  const userCode = useMemo(() => {
+  useEffect(() => {
     if (data == null || error != null) {
-      return "";
+      return;
     }
 
-    return data.stats.affliate_code;
+    setUserCode(data.stats.affliate_code);
   }, [data, error]);
 
   const sharableLink = useMemo(() => {
@@ -73,7 +74,7 @@ const AFCForm = ({ account }: AFCFormProps): ReactElement<AFCFormProps> => {
     const currentDate = new Date();
 
     // Timestamp in seconds
-    const timestamp = currentDate.getTime() / 1000;
+    const timestamp = Math.floor(currentDate.getTime() / 1000);
     const messageDate = getRFC3339String(currentDate);
     const message = `get affiliate code, ${messageDate}`;
 

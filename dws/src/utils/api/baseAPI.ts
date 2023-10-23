@@ -28,7 +28,11 @@ export const baseRequest = async (
 ): Promise<Nullable<Response>> => {
   const { host, timeout } = config;
 
-  const requestHeaders = headers ?? getDefaultHeaders();
+  headers = headers ?? getDefaultHeaders();
+  const requestHeaders: Record<string, string> = {};
+  for (let [key, value] of headers.entries()) {
+    requestHeaders[key] = value;
+  }
 
   // Use signal to avoid running the request for too long
   // Docs for canceling fetch API request
@@ -38,7 +42,7 @@ export const baseRequest = async (
 
   const requestConfig = {
     method,
-    headers,
+    headers: requestHeaders,
     body: body == null ? null : JSON.stringify(body),
     signal: controller.signal,
   };
@@ -82,7 +86,7 @@ export const serverBaseRequest = async (
     timeout = 10000;
   }
 
-  return baseRequest(url, method, { host: apiHost, timeout }, body);
+  return baseRequest(url, method, { host: apiHost, timeout }, body, headers);
 };
 
 export const clientBaseRequest = async (

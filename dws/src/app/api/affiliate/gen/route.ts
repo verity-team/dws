@@ -51,13 +51,13 @@ async function requestNewAffiliateCode(
 ): Promise<NextResponse> {
   const headers = getDefaultHeaders();
   headers.append("delphi-key", request.address);
-  headers.append("delphi-ts", request.timestamp);
+  headers.append("delphi-ts", request.timestamp.toString());
   headers.append("delphi-signature", request.signature);
 
   const response = await serverBaseRequest(
     "/affiliate/code",
     HttpMethod.POST,
-    {},
+    undefined,
     headers
   );
   if (response == null) {
@@ -68,8 +68,9 @@ async function requestNewAffiliateCode(
     let errorMessage = null;
     try {
       errorMessage = await response.json();
-    } catch {
+    } catch (err: any) {
       // ignore err, return failed response anyway
+      console.log(err);
     }
 
     return NextResponse.json<FailedResponse>(errorMessage ?? {}, {
