@@ -69,6 +69,13 @@ const AFCForm = ({ account }: AFCFormProps): ReactElement<AFCFormProps> => {
         return;
       }
       currentAccount = wallet;
+
+      const userDonationData = await getUserDonationData(currentAccount);
+
+      if (userDonationData?.user_data.affiliate_code != null) {
+        setUserCode(userDonationData.user_data.affiliate_code);
+        return;
+      }
     }
 
     const currentDate = new Date();
