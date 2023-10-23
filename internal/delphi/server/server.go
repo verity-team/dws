@@ -182,7 +182,8 @@ func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodePar
 		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
 
-	msg := fmt.Sprintf("get affiliate code, %s", ts.Format("2006-01-02 15:04:05-07:00"))
+	path := strings.Join(strings.Split(ctx.Path(), "/")[1:], " ")
+	msg := fmt.Sprintf("%s, %s", path, ts.Format("2006-01-02 15:04:05-07:00"))
 	authOK := verifySig(params.DelphiKey, msg, params.DelphiSignature)
 	if !authOK {
 		return ctx.NoContent(http.StatusUnauthorized)
