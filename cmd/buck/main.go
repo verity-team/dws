@@ -108,6 +108,11 @@ func main() {
 		os.Exit(0)
 	}
 
+	// nothing to do?
+	if !*monitorLatest && !*monitorFinal {
+		os.Exit(0)
+	}
+
 	s := gocron.NewScheduler(time.UTC)
 	s.SingletonModeAll()
 
@@ -125,9 +130,6 @@ func main() {
 		}
 	}
 
-	if !*monitorLatest && !*monitorFinal {
-		os.Exit(0)
-	}
 	// don't clash with the healthcheck port of the ETH/latest crawler
 	if *monitorFinal && (*port == defaultPort) {
 		*port = defaultPort + 1
@@ -139,7 +141,7 @@ func main() {
 		return c.String(http.StatusOK, "{}\n")
 	})
 	e.GET("/ready", func(c echo.Context) error {
-		err := dbh.Ping()
+		err := runReadyProbe(*ctxt, *monitorLatest)
 		if err != nil {
 			return c.String(http.StatusServiceUnavailable, "{}\n")
 		}
@@ -154,6 +156,19 @@ func main() {
 	}()
 
 	s.StartBlocking()
+}
+
+func runReadyProbe(ctxt common.Context, latest bool) error {
+	err := ctxt.DB.Ping()
+	if err != nil {
+		return err
+	}
+	if latest {
+		_, err = ethereum.GetBlockNumber(ctxt.ETHRPCURL)
+	} else {
+		_, err = ethereum.GetMaxFinalizedBlockNumber(ctxt.ETHRPCURL)
+	}
+	return err
 }
 
 func monitorFinalizedETH(ctxt common.Context) error {
