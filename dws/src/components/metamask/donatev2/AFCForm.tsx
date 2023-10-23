@@ -1,7 +1,12 @@
 "use client";
 
-import { getUserDonationData } from "@/utils/api/clientAPI";
+import {
+  getUserDonationData,
+  requestNewAffiliateCode,
+} from "@/utils/api/clientAPI";
 import { requestSignature } from "@/utils/metamask/sign";
+import { connectWallet } from "@/utils/metamask/wallet";
+import { Maybe } from "@/utils/types";
 import { getRFC3339String } from "@/utils/utils";
 import { useSDK } from "@metamask/sdk-react";
 import {
@@ -10,7 +15,7 @@ import {
   DialogContent,
   CircularProgress,
 } from "@mui/material";
-import { ReactElement, useEffect, useMemo, useState } from "react";
+import { ReactElement, memo, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
 interface AFCFormProps {
@@ -80,20 +85,12 @@ const AFCForm = ({ account }: AFCFormProps): ReactElement<AFCFormProps> => {
 
     // Try to (re)connect when there are no connected accounts
     let currentAccount = account;
-    if (currentAccount == null || currentAccount === "") {
-      try {
-        if (sdk == null) {
-          return;
-        }
-        const accounts = await sdk.connect();
-
-        if (accounts == null || !Array.isArray(accounts)) {
-          return;
-        }
-        currentAccount = accounts[0];
-      } catch (err) {
-        console.warn({ err });
+    if (!currentAccount) {
+      const wallet = await connectWallet(sdk);
+      if (wallet == null) {
+        return;
       }
+      currentAccount = wallet;
     }
 
     const currentDate = new Date();
@@ -104,13 +101,33 @@ const AFCForm = ({ account }: AFCFormProps): ReactElement<AFCFormProps> => {
 
     const message = `get affiliate code, ${messageDate}`;
 
+    let signature: Maybe<string> = null;
     try {
-      const signature = await requestSignature(currentAccount, message);
+      signature = await requestSignature(currentAccount, message);
       console.log(signature);
     } catch {
       toast.error("Transaction rejected");
-    } finally {
-      setLoading(false);
+      return;
+    }
+
+    if (signature == null) {
+      return;
+    }
+
+    try {
+      const affiliateResponse = await requestNewAffiliateCode({
+        address: currentAccount,
+        timestamp,
+        signature,
+      });
+      if (affiliateResponse == null) {
+        toast.error("Server fail to generate new affiliate code");
+        return;
+      }
+
+      setUserCode(affiliateResponse.code);
+    } catch {
+      toast.error("Server fail to generate new affiliate code");
     }
   };
 
@@ -180,4 +197,4 @@ const AFCForm = ({ account }: AFCFormProps): ReactElement<AFCFormProps> => {
   );
 };
 
-export default AFCForm;
+export default memo(AFCForm);

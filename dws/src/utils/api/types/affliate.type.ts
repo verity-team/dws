@@ -16,7 +16,7 @@ export interface WalletAffiliateResponse {
 
 export interface GenAffiliateRequest {
   address: string;
-  timestamp: string;
+  timestamp: number;
   signature: string;
 }
 

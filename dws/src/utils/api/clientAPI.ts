@@ -15,6 +15,8 @@ import { getExponentialWaitTime, sleep } from "../utils";
 import { Maybe, Nullable } from "../types";
 import useSWRImmutable from "swr/immutable";
 import {
+  GenAffiliateRequest,
+  GenAffliateResponse,
   WalletAffiliateResponse,
   WalletAffliateRequest,
 } from "./types/affliate.type";
@@ -196,6 +198,32 @@ export const connectWalletWithAffliate = async (
   }
 
   // TODO: Add extra logic to handle 404 logic if needed, or else just ignore
+  if (!response.ok) {
+    return null;
+  }
+
+  try {
+    // There should be a body in response
+    const result = await response.json();
+    return result;
+  } catch {
+    return null;
+  }
+};
+
+export const requestNewAffiliateCode = async (
+  request: GenAffiliateRequest
+): Promise<Maybe<GenAffliateResponse>> => {
+  const response = await clientBaseRequest(
+    "/api/affiliate/gen",
+    HttpMethod.POST,
+    request
+  );
+
+  if (response == null) {
+    return null;
+  }
+
   if (!response.ok) {
     return null;
   }
