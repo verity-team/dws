@@ -7,6 +7,7 @@ import { useSDK } from "@metamask/sdk-react";
 import { Nullable } from "@/utils/types";
 import { useState } from "react";
 import toast from "react-hot-toast";
+import { connectWallet } from "@/utils/metamask/wallet";
 
 const Donate = () => {
   const { sdk } = useSDK();
@@ -19,15 +20,11 @@ const Donate = () => {
     event.preventDefault();
 
     try {
-      if (sdk == null) {
+      const wallet = await connectWallet(sdk);
+      if (wallet == null) {
         return;
       }
-      const accounts = await sdk.connect();
-
-      if (accounts == null || !Array.isArray(accounts)) {
-        return;
-      }
-      setAccount(accounts[0]);
+      setAccount(wallet);
       toast("Welcome to TruthMemes", { icon: "👋" });
     } catch (err) {
       console.warn({ err });
