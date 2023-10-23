@@ -21,6 +21,7 @@ func main() {
 	url := flag.String("url", "http://localhost:8080/affiliate/code", "URL for the POST request")
 	delphiKey := flag.String("delphi-key", "0xb938F65DfE303EdF96A511F1e7E3190f69036860", "eth address")
 	timeoutSeconds := flag.Int("timeout", 5, "request timeout in seconds")
+	simulateStaleTS := flag.Bool("old-ts", false, "simulate stale auth timestamp")
 	flag.Parse()
 
 	if *privateKey == "" {
@@ -44,6 +45,11 @@ func main() {
 	req.Header.Set("delphi-key", *delphiKey)
 
 	ts := time.Now()
+
+	if *simulateStaleTS {
+		// -10 days
+		ts = ts.Add(-1 * time.Hour * 24 * 10)
+	}
 	req.Header.Set("delphi-ts", fmt.Sprintf("%d", ts.Unix()))
 
 	signature, err := signMessage(pk, ts)
@@ -62,7 +68,7 @@ func main() {
 
 	log.Info("Status Code:", resp.Status)
 	if resp.StatusCode != http.StatusOK {
-		log.Fatalf("failed to request affiliate code with status: %s", resp.Status)
+		log.Errorf("failed to request affiliate code with status: %s", resp.Status)
 	}
 
 	// Read the response body
@@ -71,6 +77,7 @@ func main() {
 		log.Fatal(err)
 	}
 
+	log.Info(string(responseBody))
 	// Define a struct to unmarshal the JSON response
 	var data api.AffiliateCode
 

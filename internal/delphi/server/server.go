@@ -153,7 +153,11 @@ func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodePar
 	if olderThan(ts, MAX_TIMESTAMP_AGE) {
 		err = fmt.Errorf("/affiliate/code delphi-ts ('%s') is not recent enough for address '%s'", params.DelphiTs, params.DelphiKey)
 		log.Error(err)
-		return err
+		cerr := api.Error{
+			Code:    100,
+			Message: "timestamp is not recent enough",
+		}
+		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
 
 	msg := fmt.Sprintf("get affiliate code, %s", ts.Format("2006-01-02 15:04:05-07:00"))
