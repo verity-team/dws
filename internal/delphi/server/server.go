@@ -136,7 +136,7 @@ func getTS(tss string) (time.Time, error) {
 		return time.Unix(0, 0), err
 	}
 	ts := time.Unix(int64(seconds), 0)
-	return ts, nil
+	return ts.UTC(), nil
 }
 
 func olderThan(ts time.Time, seconds int) bool {

@@ -44,7 +44,7 @@ func main() {
 	}
 	req.Header.Set("delphi-key", *delphiKey)
 
-	ts := time.Now()
+	ts := time.Now().UTC()
 
 	if *simulateStaleTS {
 		// -10 days
