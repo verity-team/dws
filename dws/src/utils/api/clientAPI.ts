@@ -16,10 +16,10 @@ import { Maybe, Nullable } from "../types";
 import useSWRImmutable from "swr/immutable";
 import {
   GenAffiliateRequest,
-  GenAffliateResponse,
+  GenAffiliateResponse,
   WalletAffiliateResponse,
-  WalletAffliateRequest,
-} from "./types/affliate.type";
+  WalletAffiliateRequest,
+} from "./types/affiliate.type";
 
 const fetcher = async (url: string) => {
   if (url == null || url.trim() === "") {
@@ -168,15 +168,15 @@ export const getUserDonationData = async (
   }
 };
 
-export const connectWalletWithAffliate = async (
-  walletAffliateRequest: WalletAffliateRequest
+export const connectWalletWithAffiliate = async (
+  walletAffiliateRequest: WalletAffiliateRequest
 ): Promise<Nullable<UserDonationData>> => {
   const response = await withErrorRetry(
     async () => {
       return await clientBaseRequest(
-        "/api/donation/affliate",
+        "/api/affiliate/connect",
         HttpMethod.POST,
-        walletAffliateRequest
+        walletAffiliateRequest
       );
     },
     (response: Maybe<Response>) => {
@@ -213,7 +213,7 @@ export const connectWalletWithAffliate = async (
 
 export const requestNewAffiliateCode = async (
   request: GenAffiliateRequest
-): Promise<Maybe<GenAffliateResponse>> => {
+): Promise<Maybe<GenAffiliateResponse>> => {
   const response = await clientBaseRequest(
     "/api/affiliate/gen",
     HttpMethod.POST,

@@ -6,8 +6,8 @@ import {
 import { FailedResponse } from "@/utils/api/types";
 import {
   GenAffiliateRequest,
-  GenAffliateResponse,
-} from "@/utils/api/types/affliate.type";
+  GenAffiliateResponse,
+} from "@/utils/api/types/affiliate.type";
 import { Nullable } from "@/utils/types";
 import { timeStamp } from "console";
 import { NextResponse } from "next/server";

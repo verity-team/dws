@@ -4,11 +4,15 @@ import Image from "next/image";
 import DonateForm from "./form/DonateForm";
 import AFCForm from "./AFCForm";
 import { Nullable } from "@/utils/types";
-import { useState } from "react";
+import { useContext, useState } from "react";
 import toast from "react-hot-toast";
 import { connectWallet } from "@/utils/metamask/wallet";
+import { connectWalletWithAffiliate } from "@/utils/api/clientAPI";
+import { ClientAFC } from "@/components/ClientRoot";
 
 const Donate = () => {
+  const affiliateCode = useContext(ClientAFC);
+
   const [account, setAccount] = useState<Nullable<string>>(null);
 
   const handleConnect = async (
@@ -23,6 +27,12 @@ const Donate = () => {
       }
       setAccount(wallet);
       toast("Welcome to TruthMemes", { icon: "👋" });
+
+      // Record wallet connection to server
+      await connectWalletWithAffiliate({
+        address: wallet,
+        code: affiliateCode ?? "none",
+      });
     } catch (err) {
       console.warn({ err });
     }
