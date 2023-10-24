@@ -10,7 +10,7 @@ import {
   TokenPrice,
   UserDonationData,
 } from "./types";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getExponentialWaitTime, sleep } from "../utils";
 import { Maybe, Nullable } from "../types";
 import useSWRImmutable from "swr/immutable";
@@ -143,13 +143,53 @@ export const getUserDonationDataKey = (account: string) =>
 // TODO: Add data refresh interval
 // For long-term use of data, have data refresh integrated
 export const useUserDonationData = (account: string) => {
+  const defaultWaitTime = useMemo(() => {
+    const time = Number(process.env.NEXT_PUBLIC_UDATA_REFRESH_TIME_DEFAULT);
+
+    if (isNaN(time)) {
+      // 5 minutes
+      return 5 * 60 * 1000;
+    }
+
+    return time;
+  }, []);
+
+  const unconfirmWaitTime = useMemo(() => {
+    const time = Number(process.env.NEXT_PUBLIC_UDATA_REFRESH_TIME_UNCONFIRMED);
+
+    if (isNaN(time)) {
+      return 60 * 1000;
+    }
+
+    return time;
+  }, []);
+
+  const [waitTime, setWaitTime] = useState(defaultWaitTime);
+
   const { data, error, isLoading } = useSWRImmutable<
     UserDonationData,
     CustomError
   >(getUserDonationDataKey(account), fetcher, {
-    refreshInterval: 120000,
+    refreshInterval: waitTime,
     onErrorRetry: handleErrorRetry,
   });
+
+  useEffect(() => {
+    if (data == null || data.donations == null) {
+      return;
+    }
+
+    // If there are any unconfirmed donation, reduce the wait time
+    if (data.donations.some((donation) => donation.status === "unconfirmed")) {
+      setWaitTime(unconfirmWaitTime);
+      return;
+    }
+
+    // If none are unconfirmed, revert back to default wait time
+    if (waitTime !== defaultWaitTime) {
+      setWaitTime(defaultWaitTime);
+    }
+  }, [data]);
 
   return { data, error, isLoading };
 };

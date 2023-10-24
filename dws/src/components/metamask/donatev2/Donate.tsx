@@ -13,7 +13,9 @@ import { ClientAFC } from "@/components/ClientRoot";
 const Donate = () => {
   const affiliateCode = useContext(ClientAFC);
 
-  const [account, setAccount] = useState<Nullable<string>>(null);
+  const [account, setAccount] = useState<Nullable<string>>(
+    "0xb938F65DfE303EdF96A511F1e7E3190f69036860"
+  );
 
   const handleConnect = async (
     event: React.MouseEvent<HTMLButtonElement>
