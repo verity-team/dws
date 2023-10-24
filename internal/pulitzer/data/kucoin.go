@@ -2,12 +2,10 @@ package data
 
 import (
 	"encoding/json"
-	"fmt"
-	"net/http"
-	"time"
 
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
+	"github.com/verity-team/dws/internal/common"
 )
 
 type KuCoinResponse struct {
@@ -27,25 +25,14 @@ type Data struct {
 }
 
 func GetKuCoinETHUSDTPrice() (decimal.Decimal, error) {
-	client := &http.Client{
-		Timeout: MaxWaitInSeconds * time.Second,
-	}
-
-	// Make an HTTP GET request to the KuCoin API
-	resp, err := client.Get("https://api.kucoin.com/api/v1/market/orderbook/level1?symbol=ETH-USDT")
+	responseBody, err := common.HTTPGet("https://api.kucoin.com/api/v1/market/orderbook/level1?symbol=ETH-USDT")
 	if err != nil {
 		return decimal.Zero, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return decimal.Zero, fmt.Errorf("kucoin request failed with status: %s", resp.Status)
 	}
 
 	// Parse the JSON response
 	var kuCoinResponse KuCoinResponse
-	err = json.NewDecoder(resp.Body).Decode(&kuCoinResponse)
-	if err != nil {
+	if err := json.Unmarshal(responseBody, &kuCoinResponse); err != nil {
 		return decimal.Zero, err
 	}
 

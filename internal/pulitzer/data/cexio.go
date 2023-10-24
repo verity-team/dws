@@ -2,12 +2,10 @@ package data
 
 import (
 	"encoding/json"
-	"fmt"
-	"net/http"
-	"time"
 
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
+	"github.com/verity-team/dws/internal/common"
 )
 
 type CexIOResponse struct {
@@ -25,26 +23,14 @@ type CexIOResponse struct {
 }
 
 func GetCexIOETHUSDLastPrice() (decimal.Decimal, error) {
-	// Create an HTTP client with a custom timeout
-	client := &http.Client{
-		Timeout: MaxWaitInSeconds * time.Second,
-	}
-
-	// Make an HTTP GET request to the Cex.io API
-	resp, err := client.Get("https://cex.io/api/ticker/ETH/USD")
+	responseBody, err := common.HTTPGet("https://cex.io/api/ticker/ETH/USD")
 	if err != nil {
 		return decimal.Zero, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return decimal.Zero, fmt.Errorf("cexio request failed with status: %s", resp.Status)
 	}
 
 	// Parse the JSON response
 	var data CexIOResponse
-	err = json.NewDecoder(resp.Body).Decode(&data)
-	if err != nil {
+	if err = json.Unmarshal(responseBody, &data); err != nil {
 		return decimal.Zero, err
 	}
 

@@ -2,13 +2,10 @@ package data
 
 import (
 	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"time"
 
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
+	"github.com/verity-team/dws/internal/common"
 )
 
 type BitfinexTickerResponse struct {
@@ -16,29 +13,7 @@ type BitfinexTickerResponse struct {
 }
 
 func GetBitfinexETHPrice() (decimal.Decimal, error) {
-	client := &http.Client{
-		Timeout: MaxWaitInSeconds * time.Second,
-	}
-
-	bitfinexAPIURL := "https://api.bitfinex.com/v1/pubticker/ETHUSD"
-	req, err := http.NewRequest("GET", bitfinexAPIURL, nil)
-	if err != nil {
-		return decimal.Zero, err
-	}
-
-	// Send the HTTP request
-	response, err := client.Do(req)
-	if err != nil {
-		return decimal.Zero, err
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		return decimal.Zero, fmt.Errorf("bitfinex request failed with status: %s", response.Status)
-	}
-
-	// Read the response body
-	responseBody, err := io.ReadAll(response.Body)
+	responseBody, err := common.HTTPGet("https://api.bitfinex.com/v1/pubticker/ETHUSD")
 	if err != nil {
 		return decimal.Zero, err
 	}

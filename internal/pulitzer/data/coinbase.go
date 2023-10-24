@@ -2,12 +2,10 @@ package data
 
 import (
 	"encoding/json"
-	"fmt"
-	"net/http"
-	"time"
 
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
+	"github.com/verity-team/dws/internal/common"
 )
 
 type CoinbaseResponse struct {
@@ -19,25 +17,14 @@ type CoinbaseResponse struct {
 }
 
 func GetCoinbaseETHPrice() (decimal.Decimal, error) {
-	client := &http.Client{
-		Timeout: MaxWaitInSeconds * time.Second,
-	}
-
-	// Make an HTTP GET request to the Coinbase API
-	resp, err := client.Get("https://api.coinbase.com/v2/prices/ETH-USD/spot")
+	responseBody, err := common.HTTPGet("https://api.coinbase.com/v2/prices/ETH-USD/spot")
 	if err != nil {
 		return decimal.Zero, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return decimal.Zero, fmt.Errorf("coinbase request failed with status: %s", resp.Status)
 	}
 
 	// Parse the JSON response
 	var data CoinbaseResponse
-	err = json.NewDecoder(resp.Body).Decode(&data)
-	if err != nil {
+	if err = json.Unmarshal(responseBody, &data); err != nil {
 		return decimal.Zero, err
 	}
 
