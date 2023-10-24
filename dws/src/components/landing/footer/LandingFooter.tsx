@@ -7,9 +7,9 @@ const LandingFooter = () => {
         <Image
           src="/images/logo.png"
           alt="truth meme eye logo"
-          width={20}
+          width={15}
           height={0}
-          className="max-w-[15px] h-auto object-contain"
+          className="h-auto object-contain"
         />
         <div className="text-sm uppercase leading-5 font-sans opacity-70 pl-2">
           TRUTH-MEMES BY verity.team ©2023

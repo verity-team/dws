@@ -47,7 +47,7 @@ const Navbar = (): ReactElement => {
             alt="truth memes logo"
             width={388}
             height={0}
-            className="w-full h-auto"
+            className="h-auto"
           />
         </div>
         <nav className="hidden items-center space-x-2 lg:flex">

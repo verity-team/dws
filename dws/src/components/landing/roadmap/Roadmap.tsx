@@ -11,7 +11,7 @@ const Roadmap = () => {
           alt="roadmap"
           width={500}
           height={0}
-          sizes="100vw"
+          className="h-auto"
         />
         <p className="text-xl">
           If you want to go fast, go alone, if you want to go far, go together.

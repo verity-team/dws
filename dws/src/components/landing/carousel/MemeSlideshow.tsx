@@ -49,7 +49,7 @@ const MemeSlideshow = () => {
                   alt={`meme number ${index + 1}`}
                   width={0}
                   height={0}
-                  sizes="100vw"
+                  sizes="100vw 100vh"
                   className="border-4 border-black box-border rounded-lg w-auto h-auto max-h-full object-contain"
                 />
               </SlideshowItem>
