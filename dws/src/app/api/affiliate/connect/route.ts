@@ -1,6 +1,6 @@
 import { HttpMethod, serverBaseRequest } from "@/utils/api/baseAPI";
 import { FailedResponse } from "@/utils/api/types";
-import { WalletAffliateRequest } from "@/utils/api/types/affliate.type";
+import { WalletAffiliateRequest } from "@/utils/api/types/affiliate.type";
 import { Nullable } from "@/utils/types";
 import { NextResponse } from "next/server";
 import { isAddress } from "web3-validator";
@@ -8,7 +8,7 @@ import { isAddress } from "web3-validator";
 export const runtime = "edge";
 
 export async function POST(request: Request): Promise<Response> {
-  let requestBody: Nullable<WalletAffliateRequest> = null;
+  let requestBody: Nullable<WalletAffiliateRequest> = null;
   try {
     requestBody = await request.json();
   } catch {
@@ -35,7 +35,7 @@ export async function POST(request: Request): Promise<Response> {
 }
 
 async function requestWalletConnection(
-  donationInfo: WalletAffliateRequest
+  donationInfo: WalletAffiliateRequest
 ): Promise<NextResponse> {
   const response = await serverBaseRequest(
     "/wallet/connection",

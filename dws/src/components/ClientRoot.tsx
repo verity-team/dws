@@ -26,11 +26,11 @@ const ClientRoot = ({
   children,
 }: ClientRootProps): ReactElement<ClientRootProps> => {
   const searchParams = useSearchParams();
-  const affliateCode = searchParams.get("afc");
+  const affiliateCode = searchParams.get("afc");
 
   return (
     <>
-      <ClientAFC.Provider value={affliateCode}>{children}</ClientAFC.Provider>
+      <ClientAFC.Provider value={affiliateCode}>{children}</ClientAFC.Provider>
       <Toaster />
     </>
   );
