@@ -3,15 +3,12 @@
 import Image from "next/image";
 import DonateForm from "./form/DonateForm";
 import AFCForm from "./AFCForm";
-import { useSDK } from "@metamask/sdk-react";
 import { Nullable } from "@/utils/types";
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { connectWallet } from "@/utils/metamask/wallet";
 
 const Donate = () => {
-  const { sdk } = useSDK();
-
   const [account, setAccount] = useState<Nullable<string>>(null);
 
   const handleConnect = async (
@@ -20,7 +17,7 @@ const Donate = () => {
     event.preventDefault();
 
     try {
-      const wallet = await connectWallet(sdk);
+      const wallet = await connectWallet();
       if (wallet == null) {
         return;
       }
@@ -40,8 +37,7 @@ const Donate = () => {
             src="/images/givememoney.jpeg"
             alt="shut up and take my money"
             fill={true}
-            objectFit="cover"
-            className="rounded-t-xl"
+            className="rounded-t-xl object-cover"
           />
         </div>
 

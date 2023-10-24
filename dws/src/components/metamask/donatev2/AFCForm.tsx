@@ -9,7 +9,6 @@ import { requestSignature } from "@/utils/metamask/sign";
 import { connectWallet } from "@/utils/metamask/wallet";
 import { Maybe } from "@/utils/types";
 import { getRFC3339String } from "@/utils/utils";
-import { useSDK } from "@metamask/sdk-react";
 import {
   Dialog,
   DialogTitle,
@@ -26,10 +25,10 @@ interface AFCFormProps {
 
 const AFCForm = ({ account }: AFCFormProps): ReactElement<AFCFormProps> => {
   const [isFormOpen, setFormOpen] = useState(false);
+  const [isLoading, setLoading] = useState(false);
   const [userCode, setUserCode] = useState("");
 
-  const { sdk } = useSDK();
-  const { data, error, isLoading } = useUserDonationData(account);
+  const { data, error } = useUserDonationData(account);
 
   useEffect(() => {
     if (data == null || error != null) {
@@ -61,10 +60,12 @@ const AFCForm = ({ account }: AFCFormProps): ReactElement<AFCFormProps> => {
   };
 
   const handleGenAffiliateCode = async () => {
+    setLoading(true);
+
     // Try to (re)connect when there are no connected accounts
     let currentAccount = account;
     if (!currentAccount) {
-      const wallet = await connectWallet(sdk);
+      const wallet = await connectWallet();
       if (wallet == null) {
         return;
       }
@@ -91,10 +92,12 @@ const AFCForm = ({ account }: AFCFormProps): ReactElement<AFCFormProps> => {
       console.log(signature);
     } catch {
       toast.error("Transaction rejected");
+      setLoading(false);
       return;
     }
 
     if (signature == null) {
+      setLoading(false);
       return;
     }
 
@@ -112,6 +115,8 @@ const AFCForm = ({ account }: AFCFormProps): ReactElement<AFCFormProps> => {
       setUserCode(affiliateResponse.code);
     } catch {
       toast.error("Server fail to generate new affiliate code");
+    } finally {
+      setLoading(false);
     }
   };
 

@@ -1,26 +1,21 @@
 "use client";
 
+import { connectWallet } from "@/utils/metamask/wallet";
 import { Nullable } from "@/utils/types";
-import { useSDK } from "@metamask/sdk-react";
 import { useState } from "react";
 import toast from "react-hot-toast";
 
 const ConnectButton = () => {
-  const { sdk } = useSDK();
-
   const [account, setAccount] = useState<Nullable<string>>(null);
 
   const handleWalletConnect = async (): Promise<void> => {
     try {
-      if (sdk == null) {
+      const userWallet = await connectWallet();
+      if (userWallet == null) {
         return;
       }
-      const accounts = await sdk.connect();
 
-      if (accounts == null || !Array.isArray(accounts)) {
-        return;
-      }
-      setAccount(accounts[0]);
+      setAccount(userWallet);
       toast("Welcome to TruthMemes", { icon: "👋" });
     } catch (err) {
       console.warn({ err });

@@ -1,15 +1,13 @@
-import { Maybe, Undefinable } from "../types";
-import { MetaMaskSDK } from "@metamask/sdk/dist/browser/es/src";
+import { Maybe } from "../types";
 
-export const connectWallet = async (
-  sdk: Undefinable<MetaMaskSDK>
-): Promise<Maybe<string>> => {
+export const connectWallet = async (): Promise<Maybe<string>> => {
+  const ethereum = window?.ethereum;
+  if (ethereum == null) {
+    return;
+  }
+
   try {
-    if (sdk == null) {
-      return null;
-    }
-    const accounts = await sdk.connect();
-
+    const accounts = await ethereum.request({ method: "eth_requestAccounts" });
     if (accounts == null || !Array.isArray(accounts)) {
       return null;
     }
