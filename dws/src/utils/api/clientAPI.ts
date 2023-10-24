@@ -1,6 +1,6 @@
 "use client";
 
-import useSWR, { Revalidator } from "swr";
+import { Revalidator } from "swr";
 import { HttpMethod, clientBaseRequest } from "./baseAPI";
 import {
   CampaignStatus,
@@ -17,7 +17,6 @@ import useSWRImmutable from "swr/immutable";
 import {
   GenAffiliateRequest,
   GenAffiliateResponse,
-  WalletAffiliateResponse,
   WalletAffiliateRequest,
 } from "./types/affiliate.type";
 
@@ -144,14 +143,13 @@ export const getUserDonationDataKey = (account: string) =>
 // TODO: Add data refresh interval
 // For long-term use of data, have data refresh integrated
 export const useUserDonationData = (account: string) => {
-  const { data, error, isLoading } = useSWR<UserDonationData, CustomError>(
-    getUserDonationDataKey(account),
-    fetcher,
-    {
-      revalidateOnFocus: false,
-      onErrorRetry: handleErrorRetry,
-    }
-  );
+  const { data, error, isLoading } = useSWRImmutable<
+    UserDonationData,
+    CustomError
+  >(getUserDonationDataKey(account), fetcher, {
+    refreshInterval: 120000,
+    onErrorRetry: handleErrorRetry,
+  });
 
   return { data, error, isLoading };
 };
