@@ -13,33 +13,24 @@ interface ClientRootProps {
 // Affiliate code
 export const ClientAFC = createContext<Nullable<string>>(null);
 
+const metamaskSettings = {
+  dappMetadata: {
+    // TODO: Change these later
+    name: "DWS",
+    url: "http://localhost:3000",
+  },
+};
+
 // For importing provider and all kind of wrapper for client components
 const ClientRoot = ({
   children,
 }: ClientRootProps): ReactElement<ClientRootProps> => {
-  const metamaskSettings = useMemo(
-    () => ({
-      logging: {
-        developerMode: true,
-      },
-      checkInstallationImmediately: false,
-      dappMetadata: {
-        // TODO: Change these later
-        name: "DWS",
-        url: "http://localhost:3000",
-      },
-    }),
-    []
-  );
-
   const searchParams = useSearchParams();
   const affliateCode = searchParams.get("afc");
 
   return (
     <>
-      <MetaMaskProvider debug={true} sdkOptions={metamaskSettings}>
-        <ClientAFC.Provider value={affliateCode}>{children}</ClientAFC.Provider>
-      </MetaMaskProvider>
+      <ClientAFC.Provider value={affliateCode}>{children}</ClientAFC.Provider>
       <Toaster />
     </>
   );
