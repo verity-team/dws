@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { isAddress } from "web3-validator";
 
 export const runtime = "edge";
+export const revalidate = 60; // seconds
 
 export async function GET(
   request: Request,
