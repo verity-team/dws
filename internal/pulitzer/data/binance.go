@@ -24,7 +24,7 @@ func GetWeightedAvgPriceFromBinance() (decimal.Decimal, error) {
 		Timeout: MaxWaitInSeconds * time.Second,
 	}
 
-	binanceAPIURL := "https://api.binance.com/api/v3/ticker?symbol=ETHUSDT"
+	binanceAPIURL := "https://api.binance.com/api/v3/ticker?symbol=ETHUSDT&windowSize=1m"
 	req, err := http.NewRequest("GET", binanceAPIURL, nil)
 	if err != nil {
 		return decimal.Zero, err
