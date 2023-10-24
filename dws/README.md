@@ -23,6 +23,8 @@ yarn set version classic
     - `NEXT_PUBLIC_MIN_USDT`: Minimum value for USDT token donations (WIP)
     - `NEXT_PUBLIC_API_TIMEOUT`: Maximum waiting time for a response (before the request get cancelled)
     - `NEXT_PUBLIC_LAUNCH_TIME`: Timestamp of launch date in milliseconds
+    - `NEXT_PUBLIC_UDATA_REFRESH_TIME_DEFAULT`: Default refresh interval for user's donation data
+    - `NEXT_PUBLIC_UDATA_REFRESH_TIME_UNCONFIRMED`: Refresh interval for user's donation data when there are any `unconfirmed` transactions
 
   - Private environment variables, use on the backend side
     - `API_URL`: Specify real backend APIs host
