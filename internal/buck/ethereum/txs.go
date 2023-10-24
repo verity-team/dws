@@ -1,11 +1,8 @@
 package ethereum
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -37,29 +34,8 @@ func GetTransactions(ctxt common.Context, blockNumber uint64) ([]common.Transact
 		return nil, err
 	}
 
-	client := &http.Client{
-		Timeout: MaxWaitInSeconds * time.Second,
-	}
-
-	log.Infof("** getting transactions for block %d", blockNumber)
-	resp, err := client.Post(ctxt.ETHRPCURL, "application/json", bytes.NewBuffer(requestBytes))
+	body, err := common.HTTPPost(ctxt.ETHRPCURL, requestBytes)
 	if err != nil {
-		err = fmt.Errorf("failed to request block #%d, %v", blockNumber, err)
-		log.Error(err)
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		err = fmt.Errorf("failed to fetch block #%d, status code: %d, %v", blockNumber, resp.StatusCode, err)
-		log.Error(err)
-		return nil, err
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		err = fmt.Errorf("failed to read block #%d, %v", blockNumber, err)
-		log.Error(err)
 		return nil, err
 	}
 

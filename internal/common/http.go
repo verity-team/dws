@@ -1,6 +1,7 @@
 package common
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -40,7 +41,37 @@ func HTTPGet(url string) ([]byte, error) {
 	}
 
 	if response.StatusCode != http.StatusOK {
-		err = fmt.Errorf("%d status code for GET request with url ('%s'), %v", response.StatusCode, url, err)
+		err = fmt.Errorf("%d status code for GET request with url ('%s')", response.StatusCode, url)
+		log.Error(err)
+		log.Infof("response: '%s'", string(responseBody))
+		return nil, err
+	}
+
+	return responseBody, nil
+}
+
+func HTTPPost(url string, body []byte) ([]byte, error) {
+	client := &http.Client{
+		Timeout: MaxWaitInSeconds * time.Second,
+	}
+	response, err := client.Post(url, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		err = fmt.Errorf("post request for url ('%s') failed, %v", url, err)
+		log.Error(err)
+		return nil, err
+	}
+	defer response.Body.Close()
+
+	// Read the response body
+	responseBody, err := io.ReadAll(response.Body)
+	if err != nil {
+		err = fmt.Errorf("failed to read response for POST request with url ('%s'), %v", url, err)
+		log.Error(err)
+		return nil, err
+	}
+
+	if response.StatusCode != http.StatusOK {
+		err = fmt.Errorf("%d status code for POST request with url ('%s')", response.StatusCode, url)
 		log.Error(err)
 		log.Infof("response: '%s'", string(responseBody))
 		return nil, err

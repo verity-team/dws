@@ -1,11 +1,8 @@
 package ethereum
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"strconv"
 	"time"
@@ -17,10 +14,6 @@ import (
 const MaxWaitInSeconds = 5
 
 func GetBlockNumber(apiURL string) (uint64, error) {
-	client := &http.Client{
-		Timeout: MaxWaitInSeconds * time.Second,
-	}
-
 	requestData := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"method":  "eth_blockNumber",
@@ -32,27 +25,11 @@ func GetBlockNumber(apiURL string) (uint64, error) {
 		return 0, err
 	}
 
-	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(requestBody))
-	if err != nil {
-		return 0, fmt.Errorf("failed to prepare eth_blockNumber request, %v", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return 0, fmt.Errorf("failed to make the eth_blockNumber request, %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("eth_blockNumber request failed with status: %s", resp.Status)
-	}
-
-	body, err := io.ReadAll(resp.Body)
+	body, err := common.HTTPPost(apiURL, requestBody)
 	if err != nil {
 		return 0, err
 	}
+
 	blockNumber, err := parseLatestBlock(body)
 	if err != nil {
 		return 0, err
@@ -88,34 +65,13 @@ func GetFinalizedBlock(ctxt common.Context, blockNumber uint64) (*common.Finaliz
 		Params:  []interface{}{fmt.Sprintf("0x%x", blockNumber), false},
 		ID:      1,
 	}
-
 	requestBytes, err := json.Marshal(request)
 	if err != nil {
 		return nil, err
 	}
 
-	client := &http.Client{
-		Timeout: MaxWaitInSeconds * time.Second,
-	}
-
-	resp, err := client.Post(ctxt.ETHRPCURL, "application/json", bytes.NewBuffer(requestBytes))
+	body, err := common.HTTPPost(ctxt.ETHRPCURL, requestBytes)
 	if err != nil {
-		err = fmt.Errorf("failed to request finalized block #%d, %v", blockNumber, err)
-		log.Error(err)
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		err = fmt.Errorf("failed to fetch finalized block #%d, status code: %d, %v", blockNumber, resp.StatusCode, err)
-		log.Error(err)
-		return nil, err
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		err = fmt.Errorf("failed to read finalized block #%d, %v", blockNumber, err)
-		log.Error(err)
 		return nil, err
 	}
 
@@ -185,27 +141,12 @@ func GetMaxFinalizedBlockNumber(apiURL string) (uint64, error) {
 		Params:  []interface{}{"finalized", false},
 		ID:      1,
 	}
-
 	requestBytes, err := json.Marshal(request)
 	if err != nil {
 		return 0, err
 	}
 
-	client := &http.Client{
-		Timeout: MaxWaitInSeconds * time.Second,
-	}
-
-	resp, err := client.Post(apiURL, "application/json", bytes.NewBuffer(requestBytes))
-	if err != nil {
-		return 0, fmt.Errorf("failed to make the eth_getBlockByNumber request, %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("request failed with status: %s", resp.Status)
-	}
-
-	body, err := io.ReadAll(resp.Body)
+	body, err := common.HTTPPost(apiURL, requestBytes)
 	if err != nil {
 		return 0, err
 	}
