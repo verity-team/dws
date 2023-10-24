@@ -83,7 +83,7 @@ const AFCForm = ({ account }: AFCFormProps): ReactElement<AFCFormProps> => {
     // Timestamp in seconds
     const timestamp = Math.floor(currentDate.getTime() / 1000);
     const messageDate = getRFC3339String(currentDate);
-    const message = `get affiliate code, ${messageDate}`;
+    const message = `affiliate code, ${messageDate}`;
 
     let signature: Maybe<string> = null;
     try {
