@@ -71,7 +71,6 @@ const ClientRoot = ({
       const accounts = await ethereum.request({
         method: "eth_requestAccounts",
       });
-      console.log(accounts);
       if (accounts == null || !Array.isArray(accounts)) {
         return;
       }
@@ -91,11 +90,14 @@ const ClientRoot = ({
 
   const handleClose = (): void => {
     setSelectWalletOpen(false);
-    setAccounts([]);
   };
 
   const handleSelectAccount = (selected: string): void => {
     if (selected === "") {
+      return;
+    }
+
+    if (selected === account) {
       return;
     }
 
@@ -117,6 +119,7 @@ const ClientRoot = ({
       <Toaster />
       <ConnectModal
         isOpen={selectWalletOpen}
+        account={account}
         accounts={accounts}
         onClose={handleClose}
         onSelect={handleSelectAccount}

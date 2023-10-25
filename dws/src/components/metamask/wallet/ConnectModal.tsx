@@ -1,8 +1,15 @@
 import { getWalletShorthand } from "@/utils/metamask/wallet";
 import { Dialog, DialogTitle, DialogContent } from "@mui/material";
-import { FormEvent, ReactElement, useCallback, useState } from "react";
+import {
+  FormEvent,
+  ReactElement,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 
 interface ConnectModalProps {
+  account: string;
   accounts: string[];
   isOpen: boolean;
   onClose: () => void;
@@ -14,12 +21,21 @@ interface ConnectModalProps {
 }
 
 const ConnectModal = ({
+  account,
   accounts,
   isOpen,
   onClose,
   onSelect,
 }: ConnectModalProps): ReactElement<ConnectModalProps> => {
   const [selected, setSelected] = useState("");
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    setSelected(account);
+  }, [isOpen, account]);
 
   const handleSelectChange = useCallback(
     (event: FormEvent<HTMLInputElement>) => {
@@ -69,7 +85,7 @@ const ConnectModal = ({
           <div className="flex items-center justify-end space-x-4">
             <button
               className="px-4 py-2 rounded-lg border-2 border-black text-white bg-red-500 hover:bg-red-600"
-              onClick={handleSubmit}
+              onClick={onClose}
             >
               Cancel
             </button>

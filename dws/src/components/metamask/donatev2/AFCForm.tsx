@@ -95,7 +95,6 @@ const AFCForm = (): ReactElement => {
     let signature: Maybe<string> = null;
     try {
       signature = await requestSignature(currentAccount, message);
-      console.log(signature);
     } catch {
       toast.error("Transaction rejected");
       setLoading(false);

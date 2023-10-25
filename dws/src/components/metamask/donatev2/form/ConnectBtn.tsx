@@ -24,7 +24,6 @@ const ConnectButton = ({
   };
 
   const handleChangeAccount = async () => {
-    disconnect();
     await connect();
   };
 
