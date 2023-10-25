@@ -17,6 +17,7 @@ const ConnectModal = ({
   accounts,
   isOpen,
   onClose,
+  onSelect,
 }: ConnectModalProps): ReactElement<ConnectModalProps> => {
   const [selected, setSelected] = useState("");
 
@@ -26,6 +27,13 @@ const ConnectModal = ({
     },
     []
   );
+
+  const handleSubmit = () => {
+    if (selected !== "") {
+      onSelect(selected);
+    }
+    onClose();
+  };
 
   return (
     <Dialog
@@ -57,6 +65,21 @@ const ConnectModal = ({
                 </label>
               </div>
             ))}
+          </div>
+          <div className="flex items-center justify-end space-x-4">
+            <button
+              className="px-4 py-2 rounded-lg border-2 border-black text-white bg-red-500 hover:bg-red-600"
+              onClick={handleSubmit}
+            >
+              Cancel
+            </button>
+            <button
+              className="px-4 py-2 rounded-lg border-2 border-black text-white bg-blue-500 hover:bg-blue-600 disabled:opacity-60 disabled:cursor-not-allowed"
+              disabled={selected === ""}
+              onClick={handleSubmit}
+            >
+              Continue
+            </button>
           </div>
         </div>
       </DialogContent>

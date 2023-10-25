@@ -16,10 +16,15 @@ const ConnectButton = ({
   loading,
   onDonate,
 }: ConnectButtonProps): ReactElement<ConnectButtonProps> => {
-  const { connect } = useContext(WalletUtils);
+  const { connect, disconnect } = useContext(WalletUtils);
 
   const handleConnect = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
+    await connect();
+  };
+
+  const handleChangeAccount = async () => {
+    disconnect();
     await connect();
   };
 
@@ -28,12 +33,12 @@ const ConnectButton = ({
       <>
         <div className="font-sans text-sm text-center">
           Connected to {getWalletShorthand(account)}
-          {/* <span
+          <span
             className="text-blue-500 underline hover:text-blue-700 cursor-pointer ml-2"
-            onClick={onChangeAccount}
+            onClick={handleChangeAccount}
           >
             Change account?
-          </span> */}
+          </span>
         </div>
 
         <button

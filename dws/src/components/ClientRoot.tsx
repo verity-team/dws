@@ -13,6 +13,7 @@ import React, {
 import toast, { Toaster } from "react-hot-toast";
 import ConnectModal from "./metamask/wallet/ConnectModal";
 import { connectWalletWithAffiliate } from "@/utils/api/clientAPI";
+import { getWalletShorthand } from "@/utils/metamask/wallet";
 
 interface ClientRootProps {
   children: ReactNode;
@@ -51,6 +52,7 @@ const ClientRoot = ({
       return;
     }
 
+    toast.success(`Connected to ${getWalletShorthand(account)}`);
     toast("Welcome to TruthMemes", { icon: "👋" });
     connectWalletWithAffiliate({
       address: account,
@@ -61,6 +63,7 @@ const ClientRoot = ({
   const connectWallet = useCallback(async (): Promise<void> => {
     const ethereum = window.ethereum;
     if (ethereum == null) {
+      toast.error("No Ethereum wallet installed");
       return;
     }
 
