@@ -35,23 +35,37 @@ func main() {
 	dsn := common.GetDSN()
 	dbh, err := sqlx.Open("postgres", dsn)
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err)
+		return
 	}
 	defer dbh.Close()
 
 	port := flag.Uint("port", 8081, "Port for the healthcheck server")
+	fetchRegular := flag.Bool("fetch-regular", false, "fetch regular prices, on a minute by minute basis")
+	fetchMissing := flag.Bool("fetch-missing", false, "fetch missing prices, requested by buck")
 	flag.Parse()
 
+	if !*fetchRegular && !*fetchMissing {
+		log.Info("nothing to do, exiting")
+		flag.Usage()
+		return
+	}
 	s := gocron.NewScheduler(time.UTC)
 	s.SingletonModeAll()
 
-	_, err = s.Every("1m").Do(getETHPrice, dbh)
-	if err != nil {
-		log.Fatal(err)
+	if *fetchRegular {
+		_, err = s.Every("1m").Do(getETHPrice, dbh)
+		if err != nil {
+			log.Error(err)
+			return
+		}
 	}
-	_, err = s.Every("1m").Do(servePriceRequests, dbh)
-	if err != nil {
-		log.Fatal(err)
+	if *fetchMissing {
+		_, err = s.Every("1m").Do(servePriceRequests, dbh)
+		if err != nil {
+			log.Error(err)
+			return
+		}
 	}
 
 	// healthcheck endpoints
@@ -70,7 +84,8 @@ func main() {
 		err := e.Start(fmt.Sprintf(":%d", *port))
 		if err != http.ErrServerClosed {
 
-			log.Fatal(err)
+			log.Error(err)
+			return
 		}
 	}()
 	s.StartBlocking()

@@ -24,9 +24,11 @@ var (
 	bts, rev, version string
 )
 
-const defaultPort = 8082
+const defaultPort = 8083
 
-func main() {
+func main() { os.Exit(mainReturnWithCode()) }
+
+func mainReturnWithCode() int {
 	err := godotenv.Overload()
 	if err != nil {
 		log.Warn("Error loading .env file")
@@ -38,25 +40,30 @@ func main() {
 	daddr, present := os.LookupEnv("DWS_DONATION_ADDRESS")
 	if !present {
 		log.Fatal("DWS_DONATION_ADDRESS variable not set")
+		return 1
 	}
 	url, present := os.LookupEnv("ETH_RPC_URL")
 	if !present {
 		log.Fatal("ETH_RPC_URL variable not set")
+		return 2
 	}
 	saleParamJson, present := os.LookupEnv("DWS_SALE_PARAMS")
 	if !present {
 		err := errors.New("DWS_SALE_PARAMS environment variable not set")
 		log.Fatal(err)
+		return 3
 	}
 	erc20Json, present := os.LookupEnv("DWS_STABLE_COINS")
 	if !present {
 		err := errors.New("DWS_STABLE_COINS environment variable not set")
 		log.Fatal(err)
+		return 4
 	}
 
 	ctxt, err := common.GetContext(erc20Json, saleParamJson)
 	if err != nil {
 		log.Fatal(err)
+		return 5
 	}
 	ctxt.ReceivingAddr = strings.ToLower(daddr)
 	ctxt.ETHRPCURL = url
@@ -69,6 +76,7 @@ func main() {
 	dbh, err := sqlx.Open("postgres", dsn)
 	if err != nil {
 		log.Fatal(err)
+		return 6
 	}
 	defer dbh.Close()
 
@@ -96,32 +104,36 @@ func main() {
 	}
 
 	if (*lbn > -1) && (*fbn > -1) {
-		log.Fatal("pick either -set-latest XOR -set-final but not both")
+		log.Error("pick either -set-latest XOR -set-final but not both")
+		return 7
 	}
 
 	if *lbn >= 0 {
 		err = db.SetLastBlock(*ctxt, "eth", db.Latest, uint64(*lbn))
 		if err != nil {
-			log.Fatal(err)
+			log.Error(err)
+			return 8
 		}
-		os.Exit(0)
+		return 0
 	}
 	if *fbn >= 0 {
 		err = db.SetLastBlock(*ctxt, "eth", db.Finalized, uint64(*fbn))
 		if err != nil {
-			log.Fatal(err)
+			log.Error(err)
+			return 9
 		}
-		os.Exit(0)
+		return 0
 	}
 
 	numberOfModes, err := checkFlags(modes)
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err)
+		return 10
 	}
 	// nothing to do?
 	if numberOfModes == 0 {
 		log.Info("nothing to do, exiting")
-		os.Exit(0)
+		return 0
 	}
 
 	if *singleBlock > 0 {
@@ -133,9 +145,9 @@ func main() {
 		}
 		if err != nil {
 			log.Errorf("failed to process single block %d, %v", *singleBlock, err)
-			os.Exit(1)
+			return 11
 		}
-		os.Exit(0)
+		return 0
 	}
 
 	s := gocron.NewScheduler(time.UTC)
@@ -144,7 +156,8 @@ func main() {
 	if *monitorLatest {
 		_, err = s.Every("1m").Do(monitorLatestETH, *ctxt)
 		if err != nil {
-			log.Fatal(err)
+			log.Error(err)
+			return 12
 		}
 	}
 
@@ -155,7 +168,8 @@ func main() {
 		}
 		_, err = s.Every("1m").Do(monitorFinalizedETH, *ctxt)
 		if err != nil {
-			log.Fatal(err)
+			log.Error(err)
+			return 13
 		}
 	}
 
@@ -167,7 +181,8 @@ func main() {
 		ctxt.UpdateLastBlock = false
 		_, err = s.Every("30m").Do(monitorOldUnconfirmed, *ctxt)
 		if err != nil {
-			log.Fatal(err)
+			log.Error(err)
+			return 14
 		}
 	}
 
@@ -183,15 +198,20 @@ func main() {
 		}
 		return c.String(http.StatusOK, "{}\n")
 	})
-	go func() {
+	srv := make(chan int, 1)
+	go func(rv chan int) {
 		err := e.Start(fmt.Sprintf(":%d", *port))
 		if err != http.ErrServerClosed {
 
-			log.Fatal(err)
+			log.Error(err)
+			rv <- 15
 		}
-	}()
+		rv <- 0
+	}(srv)
 
 	s.StartBlocking()
+	code := <-srv
+	return code
 }
 
 func runReadyProbe(ctxt common.Context, latest bool) error {
