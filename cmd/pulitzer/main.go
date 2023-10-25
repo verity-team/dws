@@ -209,9 +209,8 @@ func getETHPrice(dbh *sqlx.DB) (decimal.Decimal, error) {
 	if err != nil {
 		log.Error(err)
 		return decimal.Zero, err
-	} else {
-		log.Infof("average price: $%s", av.StringFixed(2))
 	}
+	log.Infof("average price: $%s", av.StringFixed(2))
 
 	err = db.PersistETHPrice(dbh, av)
 	if err != nil {
