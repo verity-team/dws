@@ -71,7 +71,6 @@ const ClientRoot = ({
       const accounts = await ethereum.request({
         method: "eth_requestAccounts",
       });
-      console.log(accounts);
       if (accounts == null || !Array.isArray(accounts)) {
         return;
       }
@@ -94,7 +93,6 @@ const ClientRoot = ({
   };
 
   const handleSelectAccount = (selected: string): void => {
-    console.log("selected", selected, "account", account);
     if (selected === "") {
       return;
     }
