@@ -73,6 +73,7 @@ func main() {
 	defer dbh.Close()
 
 	ctxt.DB = dbh
+	ctxt.UpdateLastBlock = true
 
 	log.Infof("receiving address: %v", ctxt.ReceivingAddr)
 	log.Infof("ETH rpc url: %v", ctxt.ETHRPCURL)
@@ -95,14 +96,14 @@ func main() {
 	}
 
 	if *lbn >= 0 {
-		err = db.SetLastBlock(dbh, "eth", db.Latest, uint64(*lbn))
+		err = db.SetLastBlock(*ctxt, "eth", db.Latest, uint64(*lbn))
 		if err != nil {
 			log.Fatal(err)
 		}
 		os.Exit(0)
 	}
 	if *fbn >= 0 {
-		err = db.SetLastBlock(dbh, "eth", db.Finalized, uint64(*fbn))
+		err = db.SetLastBlock(*ctxt, "eth", db.Finalized, uint64(*fbn))
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -115,6 +116,7 @@ func main() {
 	}
 
 	if *singleBlock > 0 {
+		ctxt.UpdateLastBlock = false
 		if *monitorFinal {
 			err = processFinalized(*ctxt, uint64(*singleBlock))
 		} else {
@@ -239,7 +241,7 @@ func processFinalized(ctxt common.Context, bn uint64) error {
 	}
 	log.Infof("finalized block %d: %d transaction hashes", bn, len(fb.Transactions))
 	if len(fb.Transactions) == 0 {
-		err = db.SetLastBlock(ctxt.DB, "eth", db.Finalized, bn)
+		err = db.SetLastBlock(ctxt, "eth", db.Finalized, bn)
 		if err != nil {
 			return err
 		}
@@ -296,7 +298,7 @@ func processLatest(ctxt common.Context, bn uint64) error {
 	}
 	log.Infof("block %d: %d filtered transactions", bn, len(txs))
 	if len(txs) == 0 {
-		err = db.SetLastBlock(ctxt.DB, "eth", db.Latest, bn)
+		err = db.SetLastBlock(ctxt, "eth", db.Latest, bn)
 		if err != nil {
 			return err
 		}
