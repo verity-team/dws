@@ -91,11 +91,15 @@ const ClientRoot = ({
 
   const handleClose = (): void => {
     setSelectWalletOpen(false);
-    setAccounts([]);
   };
 
   const handleSelectAccount = (selected: string): void => {
+    console.log("selected", selected, "account", account);
     if (selected === "") {
+      return;
+    }
+
+    if (selected === account) {
       return;
     }
 
@@ -117,6 +121,7 @@ const ClientRoot = ({
       <Toaster />
       <ConnectModal
         isOpen={selectWalletOpen}
+        account={account}
         accounts={accounts}
         onClose={handleClose}
         onSelect={handleSelectAccount}
