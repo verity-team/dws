@@ -1,12 +1,12 @@
+import { ClientAFC, WalletUtils } from "@/components/ClientRoot";
 import { Nullable } from "@/utils/types";
 import { CircularProgress } from "@mui/material";
-import { MouseEvent, ReactElement, memo } from "react";
+import { MouseEvent, ReactElement, memo, useContext } from "react";
 
 interface ConnectButtonProps {
   account: Nullable<string>;
   disabled: boolean;
   loading: boolean;
-  onConnect: (event: MouseEvent<HTMLButtonElement>) => void;
   onDonate: (event: MouseEvent<HTMLButtonElement>) => void;
 }
 
@@ -14,9 +14,15 @@ const ConnectButton = ({
   account,
   disabled,
   loading,
-  onConnect,
   onDonate,
 }: ConnectButtonProps): ReactElement<ConnectButtonProps> => {
+  const { connect } = useContext(WalletUtils);
+
+  const handleConnect = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    await connect();
+  };
+
   if (account != null) {
     return (
       <>
@@ -50,7 +56,7 @@ const ConnectButton = ({
   return (
     <button
       className="w-full bg-cred border-2 border-black rounded-2xl py-2"
-      onClick={onConnect}
+      onClick={handleConnect}
     >
       <div className="text-xl leading-loose tracking-wider text-gray-100">
         Connect Wallet
