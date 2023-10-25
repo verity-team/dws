@@ -8,9 +8,10 @@ The backend used by the donation web site frontend is called `delphi` and it wil
 
 ## how to run the dws backend
 
-The dws backend consists of a `postgres` database and 4 services
+The `dws` backend consists of a `postgres` database and 5 services
 - `buck`: ETH/latest crawler, checks the latest blocks for donation transactions and inserts these into the database (in state `unconfirmed`)
 - `buck`: ETH/finalized crawler, checks the finalized blocks for donation transactions and confrm them, also updates the donation campaign statistics and the token price (if/as needed)
+- `buck`: ETH/old-unconfirmed crawler, checks for donations that are older than 30 minutes but still unconfirmed, attempts to fetch the respective finalized blocks and confirm these donation transactions
 - `pulitzer`: pulls the ETH price from 6 exchanges and inserts an average price into the database every minute
 - `delphi`: [REST API](https://app.swaggerhub.com/apis/MUHAREM_1/delphi/) server -- only serves data from the database
 
@@ -24,6 +25,7 @@ Once you have these in place you can simply run
 1. `make run_delphi` in a separate terminal
 1. `make run_buck_latest` in a separate terminal
 1. `make run_buck_final` in a separate terminal
+1. `make run_buck_old_unconfirmed` in a separate terminal
 
 All services support the `-p` command-line flag allowing you to set the port they are listening to. The default ports are as follows
 

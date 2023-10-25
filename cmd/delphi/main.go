@@ -14,6 +14,7 @@ import (
 	_ "github.com/lib/pq"
 	middleware "github.com/oapi-codegen/echo-middleware"
 	"github.com/verity-team/dws/api"
+	"github.com/verity-team/dws/internal/common"
 	"github.com/verity-team/dws/internal/delphi/server"
 )
 
@@ -52,7 +53,7 @@ func main() {
 	// that server names match. We don't know how this thing will be run.
 	swagger.Servers = nil
 
-	dsn := getDSN()
+	dsn := common.GetDSN()
 	db, err := sqlx.Open("postgres", dsn)
 	if err != nil {
 		log.Fatal(err)
@@ -82,37 +83,4 @@ func main() {
 
 	// And we serve HTTP until the world ends.
 	e.Logger.Fatal(e.Start(net.JoinHostPort("0.0.0.0", *port)))
-}
-
-func getDSN() string {
-	var (
-		host, port, user, passwd, database string
-		present                            bool
-	)
-
-	host, present = os.LookupEnv("DWS_DB_HOST")
-	if !present {
-		log.Fatal("DWS_DB_HOST variable not set")
-	}
-	port, present = os.LookupEnv("DWS_DB_PORT")
-	if !present {
-		log.Fatal("DWS_DB_PORT variable not set")
-	}
-	user, present = os.LookupEnv("DWS_DB_USER")
-	if !present {
-		log.Fatal("DWS_DB_USER variable not set")
-	}
-	passwd, present = os.LookupEnv("DWS_DB_PASSWORD")
-	if !present {
-		log.Fatal("DWS_DB_PASSWORD variable not set")
-	}
-	database, present = os.LookupEnv("DWS_DB_DATABASE")
-	if !present {
-		log.Fatal("DWS_DB_DATABASE variable not set")
-	}
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", host, port, user, passwd, database)
-
-	log.Infof("host: '%s'", host)
-	log.Infof("database: '%s'", database)
-	return dsn
 }

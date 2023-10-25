@@ -57,3 +57,6 @@ run_buck_latest:
 
 run_buck_final:
 	bin/buck --monitor-final 2>&1 | tee /tmp/buck-final-`date +'%Y-%m-%d_%H-%M-%S'`.log
+
+run_buck_old_unconfirmed:
+	bin/buck --monitor-old-unconfirmed 2>&1 | tee /tmp/buck-old_unconfirmed-`date +'%Y-%m-%d_%H-%M-%S'`.log

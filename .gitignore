@@ -64,3 +64,5 @@ next-env.d.ts
 
 **/yarn.lock
 
+bin/**
+go.sum

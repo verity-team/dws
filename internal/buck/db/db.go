@@ -242,7 +242,7 @@ func PersistFailedTx(dbh *sqlx.DB, b common.Block, tx common.Transaction) error 
 			$1, $2, $3, $4)
 		ON CONFLICT (tx_hash) DO NOTHING
 		`
-	_, err := dbh.Exec(q, b.Number, b.Hash, b.Timestamp, tx.Hash)
+	_, err := dbh.Exec(q, b.Number, b.Hash, b.Timestamp.UTC(), tx.Hash)
 	if err != nil {
 		err = fmt.Errorf("failed to insert failed tx '%s', %v", tx.Hash, err)
 		log.Error(err)
@@ -288,7 +288,7 @@ func persistFinalizedBlock(dtx *sqlx.Tx, fb common.FinalizedBlock) error {
 		"receipts_root":    fb.ReceiptsRoot,
 		"block_size":       fb.Size,
 		"state_root":       fb.StateRoot,
-		"block_time":       fb.Timestamp,
+		"block_time":       fb.Timestamp.UTC(),
 		"transactions":     txs,
 	}
 	_, err := dtx.NamedExec(q, qd)
@@ -522,4 +522,28 @@ func RequestPrice(ctxt common.Context, asset string, ts time.Time) error {
 	}
 
 	return nil
+}
+
+func GetOldUnconfirmed(dbh *sqlx.DB) ([]uint64, error) {
+	var (
+		err    error
+		q      string
+		result []uint64
+	)
+	q = `
+		SELECT DISTINCT block_number
+		FROM donation
+		WHERE
+			status = 'unconfirmed'
+			AND timezone('utc', block_time) < timezone('utc', NOW()) - INTERVAL '30 minutes'
+		ORDER BY 1
+		`
+	err = dbh.Select(&result, q)
+	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
+		err = fmt.Errorf("failed to fetch oldest unconfirmed block number, %v", err)
+		log.Error(err)
+		return nil, err
+	}
+
+	return result, nil
 }
