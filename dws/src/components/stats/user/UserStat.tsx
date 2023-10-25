@@ -10,7 +10,6 @@ const UserStat = ({ account }: UserStatProps): ReactElement<UserStatProps> => {
   const { data: userDonationData, error } = useUserDonationData(account);
 
   if (userDonationData == null || error != null) {
-    console.log(error?.info);
     return <div className="mt-4 text-xl">User data not available</div>;
   }
 

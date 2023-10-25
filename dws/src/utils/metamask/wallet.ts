@@ -18,3 +18,7 @@ export const connectWallet = async (): Promise<Maybe<string>> => {
     return null;
   }
 };
+
+export const getWalletShorthand = (wallet: string): string => {
+  return `${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
+};

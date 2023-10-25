@@ -1,12 +1,12 @@
-import { Nullable } from "@/utils/types";
+import { WalletUtils } from "@/components/ClientRoot";
+import { getWalletShorthand } from "@/utils/metamask/wallet";
 import { CircularProgress } from "@mui/material";
-import { MouseEvent, ReactElement, memo } from "react";
+import { MouseEvent, ReactElement, memo, useContext } from "react";
 
 interface ConnectButtonProps {
-  account: Nullable<string>;
+  account: string;
   disabled: boolean;
   loading: boolean;
-  onConnect: (event: MouseEvent<HTMLButtonElement>) => void;
   onDonate: (event: MouseEvent<HTMLButtonElement>) => void;
 }
 
@@ -14,20 +14,30 @@ const ConnectButton = ({
   account,
   disabled,
   loading,
-  onConnect,
   onDonate,
 }: ConnectButtonProps): ReactElement<ConnectButtonProps> => {
-  if (account != null) {
+  const { connect, disconnect } = useContext(WalletUtils);
+
+  const handleConnect = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    await connect();
+  };
+
+  const handleChangeAccount = async () => {
+    await connect();
+  };
+
+  if (account) {
     return (
       <>
         <div className="font-sans text-sm text-center">
-          Connected to {`${account.slice(0, 6)}...${account.slice(-4)}`}
-          {/* <span
+          Connected to {getWalletShorthand(account)}
+          <span
             className="text-blue-500 underline hover:text-blue-700 cursor-pointer ml-2"
-            onClick={onChangeAccount}
+            onClick={handleChangeAccount}
           >
             Change account?
-          </span> */}
+          </span>
         </div>
 
         <button
@@ -50,7 +60,7 @@ const ConnectButton = ({
   return (
     <button
       className="w-full bg-cred border-2 border-black rounded-2xl py-2"
-      onClick={onConnect}
+      onClick={handleConnect}
     >
       <div className="text-xl leading-loose tracking-wider text-gray-100">
         Connect Wallet

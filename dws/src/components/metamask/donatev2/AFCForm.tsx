@@ -16,14 +16,20 @@ import {
   CircularProgress,
 } from "@mui/material";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import { ReactElement, memo, useEffect, useMemo, useState } from "react";
+import {
+  ReactElement,
+  memo,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import toast from "react-hot-toast";
+import { ClientWallet } from "@/components/ClientRoot";
 
-interface AFCFormProps {
-  account: string;
-}
+const AFCForm = (): ReactElement => {
+  const account = useContext(ClientWallet);
 
-const AFCForm = ({ account }: AFCFormProps): ReactElement<AFCFormProps> => {
   const [isFormOpen, setFormOpen] = useState(false);
   const [isLoading, setLoading] = useState(false);
   const [userCode, setUserCode] = useState("");
@@ -89,7 +95,6 @@ const AFCForm = ({ account }: AFCFormProps): ReactElement<AFCFormProps> => {
     let signature: Maybe<string> = null;
     try {
       signature = await requestSignature(currentAccount, message);
-      console.log(signature);
     } catch {
       toast.error("Transaction rejected");
       setLoading(false);

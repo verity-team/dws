@@ -16,20 +16,15 @@ import { useForm } from "react-hook-form";
 import toast from "react-hot-toast";
 import { mutate } from "swr";
 import TextError from "@/components/common/TextError";
+import { ClientWallet } from "@/components/ClientRoot";
 
 export interface DonateFormData {
   payAmount: number;
 }
 
-interface DonateFormProps {
-  account: Nullable<string>;
-  handleConnect: (event: React.MouseEvent<HTMLButtonElement>) => void;
-}
+const DonateForm = (): ReactElement => {
+  const account = useContext(ClientWallet);
 
-const DonateForm = ({
-  account,
-  handleConnect,
-}: DonateFormProps): ReactElement<DonateFormProps> => {
   const { tokenPrices } = useDonationData();
 
   const [selectedToken, setSelectedToken] = useState<AvailableToken>("ETH");
@@ -80,7 +75,7 @@ const DonateForm = ({
   const handleDonate = async (data: DonateFormData) => {
     setLoading(true);
 
-    if (account == null) {
+    if (!account) {
       return;
     }
 
@@ -177,7 +172,6 @@ const DonateForm = ({
             disabled={receiveAmount === "N/A" || receiveAmount <= 0}
             account={account}
             loading={isLoading}
-            onConnect={handleConnect}
             onDonate={handleSubmit(handleDonate)}
           />
         </div>
