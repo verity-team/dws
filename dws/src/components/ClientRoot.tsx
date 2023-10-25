@@ -70,6 +70,7 @@ const ClientRoot = ({
       const accounts = await ethereum.request({
         method: "eth_requestAccounts",
       });
+      console.log(accounts);
       if (accounts == null || !Array.isArray(accounts)) {
         return;
       }

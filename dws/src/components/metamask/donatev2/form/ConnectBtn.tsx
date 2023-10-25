@@ -1,10 +1,10 @@
-import { ClientAFC, WalletUtils } from "@/components/ClientRoot";
-import { Nullable } from "@/utils/types";
+import { WalletUtils } from "@/components/ClientRoot";
+import { getWalletShorthand } from "@/utils/metamask/wallet";
 import { CircularProgress } from "@mui/material";
 import { MouseEvent, ReactElement, memo, useContext } from "react";
 
 interface ConnectButtonProps {
-  account: Nullable<string>;
+  account: string;
   disabled: boolean;
   loading: boolean;
   onDonate: (event: MouseEvent<HTMLButtonElement>) => void;
@@ -23,11 +23,11 @@ const ConnectButton = ({
     await connect();
   };
 
-  if (account != null) {
+  if (account) {
     return (
       <>
         <div className="font-sans text-sm text-center">
-          Connected to {`${account.slice(0, 6)}...${account.slice(-4)}`}
+          Connected to {getWalletShorthand(account)}
           {/* <span
             className="text-blue-500 underline hover:text-blue-700 cursor-pointer ml-2"
             onClick={onChangeAccount}

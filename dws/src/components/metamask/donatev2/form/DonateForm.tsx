@@ -75,7 +75,7 @@ const DonateForm = (): ReactElement => {
   const handleDonate = async (data: DonateFormData) => {
     setLoading(true);
 
-    if (account == null) {
+    if (!account) {
       return;
     }
 
