@@ -121,8 +121,7 @@ func main() {
 			err = processLatest(*ctxt, uint64(*singleBlock))
 		}
 		if err != nil {
-			err = fmt.Errorf("failed to process single block %d, %v", *singleBlock, err)
-			log.Error(err)
+			log.Errorf("failed to process single block %d, %v", *singleBlock, err)
 			os.Exit(1)
 		}
 		os.Exit(0)
