@@ -84,13 +84,17 @@ func main() {
 	lbn := flag.Int("set-latest", -1, "set latest ETH block number")
 	monitorFinal := flag.Bool("monitor-final", false, "monitor finalized ETH blocks")
 	monitorLatest := flag.Bool("monitor-latest", false, "monitor latest ETH blocks")
+	monitorOld := flag.Bool("monitor-old-unconfirmed", false, "check for old finalized ETH blocks with unconfirmed txs")
 	port := flag.Uint("port", defaultPort, "Port for the healthcheck server")
 	singleBlock := flag.Int("single-block", -1, "process the specified block number and terminate")
 	flag.Parse()
 
-	if *monitorLatest && *monitorFinal {
-		log.Fatal("pick either -monitor-latest XOR -monitor-final but not both")
+	modes := map[string]bool{
+		"--monitor-latest":          *monitorLatest,
+		"--monitor-final":           *monitorFinal,
+		"--monitor-old-unconfirmed": *monitorOld,
 	}
+
 	if (*lbn > -1) && (*fbn > -1) {
 		log.Fatal("pick either -set-latest XOR -set-final but not both")
 	}
@@ -110,8 +114,13 @@ func main() {
 		os.Exit(0)
 	}
 
+	numberOfModes, err := checkFlags(modes)
+	if err != nil {
+		log.Fatal(err)
+	}
 	// nothing to do?
-	if !*monitorLatest && !*monitorFinal {
+	if numberOfModes == 0 {
+		log.Info("nothing to do, exiting")
 		os.Exit(0)
 	}
 
@@ -140,15 +149,26 @@ func main() {
 	}
 
 	if *monitorFinal {
+		// don't clash with the healthcheck port of the other crawlers
+		if *port == defaultPort {
+			*port = defaultPort + 1
+		}
 		_, err = s.Every("1m").Do(monitorFinalizedETH, *ctxt)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 
-	// don't clash with the healthcheck port of the ETH/latest crawler
-	if *monitorFinal && (*port == defaultPort) {
-		*port = defaultPort + 1
+	if *monitorOld {
+		// don't clash with the healthcheck port of the other crawlers
+		if *port == defaultPort {
+			*port = defaultPort + 2
+		}
+		ctxt.UpdateLastBlock = false
+		_, err = s.Every("30m").Do(monitorOldUnconfirmed, *ctxt)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	// healthcheck endpoints
@@ -326,4 +346,43 @@ func processLatest(ctxt common.Context, bn uint64) error {
 		return err
 	}
 	return nil
+}
+
+func monitorOldUnconfirmed(ctxt common.Context) error {
+	bns, err := db.GetOldUnconfirmed(ctxt.DB)
+	if err != nil {
+		return err
+	}
+	if len(bns) == 0 {
+		log.Info("##### *no* unconfirmed txs older than 30 minutes")
+		return nil
+	}
+	log.Infof("##### finalized ETH blocks with old unconfirmed txs: %v", bns)
+
+	for _, bn := range bns {
+		log.Infof("##### processing old finalized block %d", bn)
+		err = processFinalized(ctxt, bn)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkFlags(fm map[string]bool) (int, error) {
+	var on []string
+	for k, v := range fm {
+		if v {
+			on = append(on, k)
+		}
+	}
+	switch len(on) {
+	case 0:
+		return 0, nil
+	case 1:
+		return 1, nil
+	default:
+		err := fmt.Errorf("please pick only *one* of these: %s", strings.Join(on, ", "))
+		return len(on), err
+	}
 }
