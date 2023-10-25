@@ -1,7 +1,6 @@
 "use client";
 
 import { Nullable } from "@/utils/types";
-import { MetaMaskProvider, useSDK } from "@metamask/sdk-react";
 import { useSearchParams } from "next/navigation";
 import React, {
   ReactElement,
@@ -9,7 +8,6 @@ import React, {
   createContext,
   useCallback,
   useEffect,
-  useMemo,
   useState,
 } from "react";
 import toast, { Toaster } from "react-hot-toast";
@@ -61,7 +59,7 @@ const ClientRoot = ({
   }, [account]);
 
   const connectWallet = useCallback(async (): Promise<void> => {
-    const ethereum = window?.ethereum;
+    const ethereum = window.ethereum;
     if (ethereum == null) {
       return;
     }
