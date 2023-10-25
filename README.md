@@ -36,6 +36,7 @@ All services support the `-p` command-line flag allowing you to set the port the
 |pulitzer      | 8081  | /live and /ready healtcheck endpoints |
 |buck/latest      | 8082  | /live and /ready healtcheck endpoints |
 |buck/final      | 8083  | /live and /ready healtcheck endpoints |
+|buck/old-unconfirmed      | 8084  | /live and /ready healtcheck endpoints |
 
 ## requirements & rules
 1. all amounts are passed as strings and should be decoded to a `decimal` type to preserve precision
