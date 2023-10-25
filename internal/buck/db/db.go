@@ -336,7 +336,7 @@ func FinalizeTxs(ctxt common.Context, fb common.FinalizedBlock) error {
 			dtx.Commit() // nolint:errcheck
 		}
 	}()
-	// whatever happens -- try and update the last block at the end
+	// try and update the last block at the end if no errors occurred
 	defer func() {
 		// only update last block if all went well
 		if err == nil {

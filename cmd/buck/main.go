@@ -79,11 +79,12 @@ func main() {
 	log.Infof("erc-20 data: %v", ctxt.StableCoins)
 	log.Infof("sale params: %v", ctxt.SaleParams)
 
-	lbn := flag.Int("set-latest", -1, "set latest ETH block number")
 	fbn := flag.Int("set-final", -1, "set last finalized ETH block number")
-	monitorLatest := flag.Bool("monitor-latest", false, "monitor latest ETH blocks")
+	lbn := flag.Int("set-latest", -1, "set latest ETH block number")
 	monitorFinal := flag.Bool("monitor-final", false, "monitor finalized ETH blocks")
+	monitorLatest := flag.Bool("monitor-latest", false, "monitor latest ETH blocks")
 	port := flag.Uint("port", defaultPort, "Port for the healthcheck server")
+	singleBlock := flag.Int("single-block", -1, "process the specified block number and terminate")
 	flag.Parse()
 
 	if *monitorLatest && *monitorFinal {
@@ -110,6 +111,20 @@ func main() {
 
 	// nothing to do?
 	if !*monitorLatest && !*monitorFinal {
+		os.Exit(0)
+	}
+
+	if *singleBlock > 0 {
+		if *monitorFinal {
+			err = processFinalized(*ctxt, uint64(*singleBlock))
+		} else {
+			err = processLatest(*ctxt, uint64(*singleBlock))
+		}
+		if err != nil {
+			err = fmt.Errorf("failed to process single block %d, %v", *singleBlock, err)
+			log.Error(err)
+			os.Exit(1)
+		}
 		os.Exit(0)
 	}
 
@@ -210,27 +225,36 @@ func monitorFinalizedETH(ctxt common.Context) error {
 	}
 
 	for i := startBlock; i <= fbn; i++ {
-		fb, err := ethereum.GetFinalizedBlock(ctxt, i)
+		err = processFinalized(ctxt, i)
 		if err != nil {
-			return err
-		}
-		log.Infof("finalized block %d: %d transaction hashes", i, len(fb.Transactions))
-		if len(fb.Transactions) == 0 {
-			err = db.SetLastBlock(ctxt.DB, "eth", db.Finalized, i)
-			if err != nil {
-				return err
-			}
-			continue
-		}
-
-		err = db.FinalizeTxs(ctxt, *fb)
-		if err != nil {
-			log.Errorf("failed to confirm transactions for finalized block #%d", i)
 			return err
 		}
 	}
 	return nil
 }
+
+func processFinalized(ctxt common.Context, bn uint64) error {
+	fb, err := ethereum.GetFinalizedBlock(ctxt, bn)
+	if err != nil {
+		return err
+	}
+	log.Infof("finalized block %d: %d transaction hashes", bn, len(fb.Transactions))
+	if len(fb.Transactions) == 0 {
+		err = db.SetLastBlock(ctxt.DB, "eth", db.Finalized, bn)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	err = db.FinalizeTxs(ctxt, *fb)
+	if err != nil {
+		log.Errorf("failed to confirm transactions for finalized block #%d", bn)
+		return err
+	}
+	return nil
+}
+
 func monitorLatestETH(ctxt common.Context) error {
 	// most recent ETH block published
 	lbn, err := ethereum.GetBlockNumber(ctxt.ETHRPCURL)
@@ -257,40 +281,48 @@ func monitorLatestETH(ctxt common.Context) error {
 	}
 
 	for i := startBlock; i <= lbn; i++ {
-		txs, err := ethereum.GetTransactions(ctxt, i)
+		err = processLatest(ctxt, i)
 		if err != nil {
-			log.Error(err)
 			return err
 		}
-		log.Infof("block %d: %d filtered transactions", i, len(txs))
-		if len(txs) == 0 {
-			err = db.SetLastBlock(ctxt.DB, "eth", db.Latest, i)
-			if err != nil {
-				return err
-			}
-			continue
-		}
+	}
+	return nil
+}
 
-		// we only get the ETH price if we need to persist transactions
-		// get ETH price at the time the block was published
-		blockTime := txs[0].BlockTime
-		ethPrice, err := common.GetETHPrice(ctxt.DB, blockTime)
+func processLatest(ctxt common.Context, bn uint64) error {
+	txs, err := ethereum.GetTransactions(ctxt, bn)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	log.Infof("block %d: %d filtered transactions", bn, len(txs))
+	if len(txs) == 0 {
+		err = db.SetLastBlock(ctxt.DB, "eth", db.Latest, bn)
 		if err != nil {
-			// request the missing price -- let's hope it is avaiable next time
-			// we wake up
-			log.Infof("requesting price for ETH/%s", blockTime)
-			err2 := db.RequestPrice(ctxt, "eth", blockTime)
-			if err2 != nil {
-				log.Errorf("failed to request price for ETH/%s, %v", blockTime, err2)
-			}
 			return err
 		}
-		log.Infof("eth price: %s", ethPrice)
-		err = db.PersistTxs(ctxt, i, ethPrice, txs)
-		if err != nil {
-			log.Error(err)
-			return err
+		return nil
+	}
+
+	// we only get the ETH price if we need to persist transactions
+	// get ETH price at the time the block was published
+	blockTime := txs[0].BlockTime
+	ethPrice, err := common.GetETHPrice(ctxt.DB, blockTime)
+	if err != nil {
+		// request the missing price and let's hope it is avaiable next time we
+		// need it
+		log.Infof("requesting price for ETH/%s", blockTime)
+		err2 := db.RequestPrice(ctxt, "eth", blockTime)
+		if err2 != nil {
+			log.Errorf("failed to request price for ETH/%s, %v", blockTime, err2)
 		}
+		return err
+	}
+	log.Infof("eth price: %s", ethPrice)
+	err = db.PersistTxs(ctxt, bn, ethPrice, txs)
+	if err != nil {
+		log.Error(err)
+		return err
 	}
 	return nil
 }
