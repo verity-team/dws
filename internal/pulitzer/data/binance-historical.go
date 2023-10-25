@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/shopspring/decimal"
+	log "github.com/sirupsen/logrus"
 	"github.com/verity-team/dws/internal/common"
 )
 
@@ -30,7 +31,7 @@ func GetHistoricalPriceFromBinance(ts time.Time) ([]Kline, error) {
 
 	for _, kline := range klineData {
 		if len(kline) != 12 {
-			fmt.Println("Invalid data format")
+			log.Error("binance: klines: invalid data format")
 			continue
 		}
 
