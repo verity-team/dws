@@ -65,7 +65,7 @@ func main() {
 		ctxt.BlockStorage = blockStorage
 	}
 
-	dsn := getDSN()
+	dsn := common.GetDSN()
 	dbh, err := sqlx.Open("postgres", dsn)
 	if err != nil {
 		log.Fatal(err)
@@ -324,37 +324,4 @@ func processLatest(ctxt common.Context, bn uint64) error {
 		return err
 	}
 	return nil
-}
-
-func getDSN() string {
-	var (
-		host, port, user, passwd, database string
-		present                            bool
-	)
-
-	host, present = os.LookupEnv("DWS_DB_HOST")
-	if !present {
-		log.Fatal("DWS_DB_HOST variable not set")
-	}
-	port, present = os.LookupEnv("DWS_DB_PORT")
-	if !present {
-		log.Fatal("DWS_DB_PORT variable not set")
-	}
-	user, present = os.LookupEnv("DWS_DB_USER")
-	if !present {
-		log.Fatal("DWS_DB_USER variable not set")
-	}
-	passwd, present = os.LookupEnv("DWS_DB_PASSWORD")
-	if !present {
-		log.Fatal("DWS_DB_PASSWORD variable not set")
-	}
-	database, present = os.LookupEnv("DWS_DB_DATABASE")
-	if !present {
-		log.Fatal("DWS_DB_DATABASE variable not set")
-	}
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", host, port, user, passwd, database)
-
-	log.Infof("host: '%s'", host)
-	log.Infof("database: '%s'", database)
-	return dsn
 }

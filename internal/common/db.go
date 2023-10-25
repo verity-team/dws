@@ -2,6 +2,7 @@ package common
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -80,4 +81,37 @@ func GetDonationStats(db *sqlx.DB) (decimal.Decimal, decimal.Decimal, error) {
 	}
 
 	return total, tokens, nil
+}
+
+func GetDSN() string {
+	var (
+		host, port, user, passwd, database string
+		present                            bool
+	)
+
+	host, present = os.LookupEnv("DWS_DB_HOST")
+	if !present {
+		log.Fatal("DWS_DB_HOST variable not set")
+	}
+	port, present = os.LookupEnv("DWS_DB_PORT")
+	if !present {
+		log.Fatal("DWS_DB_PORT variable not set")
+	}
+	user, present = os.LookupEnv("DWS_DB_USER")
+	if !present {
+		log.Fatal("DWS_DB_USER variable not set")
+	}
+	passwd, present = os.LookupEnv("DWS_DB_PASSWORD")
+	if !present {
+		log.Fatal("DWS_DB_PASSWORD variable not set")
+	}
+	database, present = os.LookupEnv("DWS_DB_DATABASE")
+	if !present {
+		log.Fatal("DWS_DB_DATABASE variable not set")
+	}
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable TimeZone=UTC", host, port, user, passwd, database)
+
+	log.Infof("host: '%s'", host)
+	log.Infof("database: '%s'", database)
+	return dsn
 }
