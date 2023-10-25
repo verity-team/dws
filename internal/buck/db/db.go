@@ -49,7 +49,10 @@ func GetLastBlock(dbh *sqlx.DB, chain string, l Label) (uint64, error) {
 	return result, nil
 }
 
-func SetLastBlock(dbh *sqlx.DB, chain string, l Label, lbn uint64) error {
+func SetLastBlock(ctxt common.Context, chain string, l Label, lbn uint64) error {
+	if !ctxt.UpdateLastBlock {
+		return nil
+	}
 	var (
 		err error
 		q   string
@@ -60,7 +63,7 @@ func SetLastBlock(dbh *sqlx.DB, chain string, l Label, lbn uint64) error {
 		DO UPDATE SET value = $3
 		WHERE last_block.chain=$1 and last_block.label = $2
 	`
-	_, err = dbh.Exec(q, chain, l.String(), lbn)
+	_, err = ctxt.DB.Exec(q, chain, l.String(), lbn)
 	if err != nil {
 		err = fmt.Errorf("failed to set last block for %s/%s, %v", l.String(), chain, err)
 		log.Error(err)
@@ -109,11 +112,13 @@ func PersistTxs(ctxt common.Context, bn uint64, ethPrice decimal.Decimal, txs []
 		}
 	}
 
-	err = updateLastBlock(dtx, "eth", Latest, bn)
-	if err != nil {
-		return err
+	if ctxt.UpdateLastBlock {
+		err = updateLastBlock(dtx, "eth", Latest, bn)
+		if err != nil {
+			return err
+		}
+		log.Infof("updated latest eth block to %d", bn)
 	}
-	log.Infof("updated latest eth block to %d", bn)
 
 	return nil
 }
@@ -340,9 +345,11 @@ func FinalizeTxs(ctxt common.Context, fb common.FinalizedBlock) error {
 	defer func() {
 		// only update last block if all went well
 		if err == nil {
-			err = updateLastBlock(dtx, "eth", Finalized, fb.Number)
-			if err != nil {
-				log.Infof("updated last finalized eth block to %d", fb.Number)
+			if ctxt.UpdateLastBlock {
+				err = updateLastBlock(dtx, "eth", Finalized, fb.Number)
+				if err != nil {
+					log.Infof("updated last finalized eth block to %d", fb.Number)
+				}
 			}
 		}
 	}()
