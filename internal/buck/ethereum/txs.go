@@ -3,7 +3,6 @@ package ethereum
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -41,13 +40,9 @@ func GetTransactions(ctxt common.Context, blockNumber uint64) ([]common.Transact
 
 	log.Infof("fetched block %d", blockNumber)
 
-	if ctxt.BlockStorage != "" {
-		fp := ctxt.BlockStorage + "/" + fmt.Sprintf("%d.json", blockNumber)
-		err = os.WriteFile(fp, body, 0644)
-		if err != nil {
-			log.Error(err)
-			return nil, err
-		}
+	err = writeBlockToFile(ctxt, blockNumber, body, false)
+	if err != nil {
+		return nil, err
 	}
 	block, err := parseBlock(body)
 	if err != nil {

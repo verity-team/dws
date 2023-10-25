@@ -3,7 +3,6 @@ package ethereum
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strconv"
 	"time"
 
@@ -75,13 +74,9 @@ func GetFinalizedBlock(ctxt common.Context, blockNumber uint64) (*common.Finaliz
 		return nil, err
 	}
 
-	if ctxt.BlockStorage != "" {
-		fp := ctxt.BlockStorage + "/" + fmt.Sprintf("fb-%d.json", blockNumber)
-		err = os.WriteFile(fp, body, 0644)
-		if err != nil {
-			log.Error(err)
-			return nil, err
-		}
+	err = writeBlockToFile(ctxt, blockNumber, body, true)
+	if err != nil {
+		return nil, err
 	}
 
 	fb, err := parseFinalizedBlock(body)
