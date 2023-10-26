@@ -1,4 +1,4 @@
-import { useUserDonationData } from "@/utils/api/clientAPI";
+import { useUserDonationData } from "@/utils/api/client/clientAPI";
 import { ReactElement, useEffect } from "react";
 
 interface UserStatProps {

@@ -1,10 +1,5 @@
 "use client";
 
-import {
-  getUserDonationData,
-  requestNewAffiliateCode,
-  useUserDonationData,
-} from "@/utils/api/clientAPI";
 import { requestSignature } from "@/utils/metamask/sign";
 import { connectWallet } from "@/utils/metamask/wallet";
 import { Maybe } from "@/utils/types";
@@ -26,6 +21,11 @@ import {
 } from "react";
 import toast from "react-hot-toast";
 import { ClientWallet } from "@/components/ClientRoot";
+import { requestNewAffiliateCode } from "@/utils/api/client/affiliateAPI";
+import {
+  useUserDonationData,
+  getUserDonationData,
+} from "@/utils/api/client/donationAPI";
 
 const AFCForm = (): ReactElement => {
   const account = useContext(ClientWallet);

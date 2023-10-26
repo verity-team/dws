@@ -4,12 +4,8 @@ import {
   serverBaseRequest,
 } from "@/utils/api/baseAPI";
 import { FailedResponse } from "@/utils/api/types";
-import {
-  GenAffiliateRequest,
-  GenAffiliateResponse,
-} from "@/utils/api/types/affiliate.type";
+import { GenAffiliateRequest } from "@/utils/api/types/affiliate.type";
 import { Nullable } from "@/utils/types";
-import { timeStamp } from "console";
 import { NextResponse } from "next/server";
 import { isAddress } from "web3-validator";
 

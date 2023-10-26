@@ -12,8 +12,8 @@ import React, {
 } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import ConnectModal from "./metamask/wallet/ConnectModal";
-import { connectWalletWithAffiliate } from "@/utils/api/clientAPI";
 import { getWalletShorthand } from "@/utils/metamask/wallet";
+import { connectWalletWithAffiliate } from "@/utils/api/client/affiliateAPI";
 
 interface ClientRootProps {
   children: ReactNode;
