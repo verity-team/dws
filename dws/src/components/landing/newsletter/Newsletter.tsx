@@ -1,15 +1,26 @@
 "use client";
 
+import { subscribeEmail } from "@/utils/api/client/emailAPI";
+import { useRef, useState } from "react";
 import toast from "react-hot-toast";
 
 const Newsletter = () => {
-  const handleSubmit = () => {
-    toast("Email subscription will be available soon", {
-      icon: "⚠️",
-      style: {
-        fontSize: "1rem",
-      },
-    });
+  const emailRef = useRef<HTMLInputElement>(null);
+
+  const handleSubmit = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+
+    const email = emailRef.current?.value;
+    if (email == null || email.trim() === "") {
+      toast.error("Please input email before subscribe");
+      return;
+    }
+
+    try {
+      await subscribeEmail(email);
+    } catch (error: any) {
+      toast.error(error.message);
+    }
   };
 
   return (
@@ -28,6 +39,7 @@ const Newsletter = () => {
             className="p-4 w-1/3 border-2 border-gray-400"
             placeholder="Enter your email"
             required
+            ref={emailRef}
           />
           <button
             type="button"
