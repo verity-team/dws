@@ -25,6 +25,7 @@ yarn set version classic
     - `NEXT_PUBLIC_LAUNCH_TIME`: Timestamp of launch date in milliseconds
     - `NEXT_PUBLIC_UDATA_REFRESH_TIME_DEFAULT`: Default refresh interval for user's donation data
     - `NEXT_PUBLIC_UDATA_REFRESH_TIME_UNCONFIRMED`: Refresh interval for user's donation data when there are any `unconfirmed` transactions
+    - `NEXT_PUBLIC_EMAIL_API_URL`: Host URL for email subscription. Web application will request to `NEXT_PUBLIC_EMAIL_API_URL/subscribe.php`
 
   - Private environment variables, use on the backend side
     - `API_URL`: Specify real backend APIs host

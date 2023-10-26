@@ -8,6 +8,7 @@ export const subscribeEmail = async (email: string): Promise<void> => {
   }
 
   const payload = { email };
+
   const response = await baseRequest(
     "/subscribe.php",
     HttpMethod.POST,
