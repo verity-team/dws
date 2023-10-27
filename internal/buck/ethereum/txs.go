@@ -51,7 +51,7 @@ func GetTransactions(ctxt common.Context, blockNumber uint64) ([]common.Transact
 	}
 	block, err := parseBlock(body)
 	if err != nil {
-		err = fmt.Errorf("failed to parse block #%d, %v", blockNumber, err)
+		err = fmt.Errorf("failed to parse block #%d, %w", blockNumber, err)
 		log.Error(err)
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func filterTransactions(ctxt common.Context, b common.Block) ([]common.Transacti
 			tx.Asset = "eth"
 			amount, err := common.HexStringToDecimal(tx.Value)
 			if err != nil {
-				err = fmt.Errorf("failed to process ETH tx '%s', %v", tx.Hash, err)
+				err = fmt.Errorf("failed to process ETH tx '%s', %w", tx.Hash, err)
 				log.Error(err)
 				err = db.PersistFailedTx(ctxt.DB, b, tx)
 				if err != nil {
@@ -102,7 +102,7 @@ func filterTransactions(ctxt common.Context, b common.Block) ([]common.Transacti
 				// yes, actual receiver and amount are encoded in the input string
 				receiver, amount, err := parseInputData(tx.Input)
 				if err != nil {
-					err = fmt.Errorf("failed to process ERC-20 tx '%s', %v", tx.Hash, err)
+					err = fmt.Errorf("failed to process ERC-20 tx '%s', %w", tx.Hash, err)
 					log.Error(err)
 					err = db.PersistFailedTx(ctxt.DB, b, tx)
 					if err != nil {
@@ -147,12 +147,12 @@ func parseBlock(body []byte) (*common.Block, error) {
 	}
 	seconds, err := common.HexStringToDecimal(resp.Block.HexSeconds)
 	if err != nil {
-		err = fmt.Errorf("failed to convert block timestamp, %v", err)
+		err = fmt.Errorf("failed to convert block timestamp, %w", err)
 		return nil, err
 	}
 	number, err := common.HexStringToDecimal(resp.Block.HexNumber)
 	if err != nil {
-		err = fmt.Errorf("failed to convert block number, %v", err)
+		err = fmt.Errorf("failed to convert block number, %w", err)
 		return nil, err
 	}
 	ts := time.Unix(seconds.IntPart(), 0)
@@ -171,7 +171,7 @@ func markFailedTxs(ctxt common.Context, txs []common.Transaction) error {
 	for _, tx := range txs {
 		rcpt, err := GetTransactionReceipt(ctxt.ETHRPCURL, tx.Hash)
 		if err != nil {
-			err = fmt.Errorf("failed to get tx receipt for %s, %v", tx.Hash, err)
+			err = fmt.Errorf("failed to get tx receipt for %s, %w", tx.Hash, err)
 			log.Error(err)
 			return err
 		}

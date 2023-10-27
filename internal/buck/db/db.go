@@ -43,7 +43,7 @@ func GetLastBlock(dbh *sqlx.DB, chain string, l Label) (uint64, error) {
 		`
 	err = dbh.Get(&result, q, chain, l.String())
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		err = fmt.Errorf("failed to fetch last block for %s/%s, %v", chain, l.String(), err)
+		err = fmt.Errorf("failed to fetch last block for %s/%s, %w", chain, l.String(), err)
 		log.Error(err)
 		return 0, err
 	}
@@ -67,7 +67,7 @@ func SetLastBlock(ctxt common.Context, chain string, l Label, lbn uint64) error 
 	`
 	_, err = ctxt.DB.Exec(q, chain, l.String(), lbn)
 	if err != nil {
-		err = fmt.Errorf("failed to set last block for %s/%s, %v", l.String(), chain, err)
+		err = fmt.Errorf("failed to set last block for %s/%s, %w", l.String(), chain, err)
 		log.Error(err)
 		return err
 	}
@@ -138,7 +138,7 @@ func updateLastBlock(dbt *sqlx.Tx, chain string, l Label, lbn uint64) error {
 	`
 	_, err = dbt.Exec(q, chain, l.String(), lbn)
 	if err != nil {
-		err = fmt.Errorf("failed to set last block for %s/%s, %v", l.String(), chain, err)
+		err = fmt.Errorf("failed to set last block for %s/%s, %w", l.String(), chain, err)
 		log.Error(err)
 		return err
 	}
@@ -158,7 +158,7 @@ func persistTx(dtx *sqlx.Tx, tx common.Transaction) error {
 		`
 	_, err := dtx.NamedExec(q, tx)
 	if err != nil {
-		err = fmt.Errorf("failed to insert donation for %s, %v", tx.Hash, err)
+		err = fmt.Errorf("failed to insert donation for %s, %w", tx.Hash, err)
 		log.Error(err)
 		return err
 	}
@@ -170,7 +170,7 @@ func calcTokens(tx common.Transaction, tokenPrice, ethPrice decimal.Decimal) (de
 	var amount decimal.Decimal
 	amount, err := decimal.NewFromString(tx.Value)
 	if err != nil {
-		err = fmt.Errorf("invalid amount for tx %s, %v", tx.Hash, err)
+		err = fmt.Errorf("invalid amount for tx %s, %w", tx.Hash, err)
 		log.Error(err)
 		return decimal.Zero, decimal.Zero, err
 	}
@@ -210,7 +210,7 @@ func getTokenPrice(ctxt common.Context) (decimal.Decimal, error) {
 			return ctxt.SaleParams[0].Price, nil
 		}
 		// db error -> connection? is borked?
-		err = fmt.Errorf("failed to fetch current token price, %v", err)
+		err = fmt.Errorf("failed to fetch current token price, %w", err)
 		log.Error(err)
 		return decimal.Zero, err
 	}
@@ -228,7 +228,7 @@ func PersistFailedBlock(dbh *sqlx.DB, b common.Block) error {
 		`
 	_, err := dbh.NamedExec(q, b)
 	if err != nil {
-		err = fmt.Errorf("failed to insert failed block with number %d, %v", b.Number, err)
+		err = fmt.Errorf("failed to insert failed block with number %d, %w", b.Number, err)
 		log.Error(err)
 		return err
 	}
@@ -246,7 +246,7 @@ func PersistFailedTx(dbh *sqlx.DB, b common.Block, tx common.Transaction) error 
 		`
 	_, err := dbh.Exec(q, b.Number, b.Hash, b.Timestamp.UTC(), tx.Hash)
 	if err != nil {
-		err = fmt.Errorf("failed to insert failed tx '%s', %v", tx.Hash, err)
+		err = fmt.Errorf("failed to insert failed tx '%s', %w", tx.Hash, err)
 		log.Error(err)
 		return err
 	}
@@ -295,7 +295,7 @@ func persistFinalizedBlock(dtx *sqlx.Tx, fb common.FinalizedBlock) error {
 	}
 	_, err := dtx.NamedExec(q, qd)
 	if err != nil {
-		err = fmt.Errorf("failed to insert finalized block #%d ('%s'), %v", fb.Number, fb.Hash, err)
+		err = fmt.Errorf("failed to insert finalized block #%d ('%s'), %w", fb.Number, fb.Hash, err)
 		log.Error(err)
 		return err
 	}
@@ -318,7 +318,7 @@ func GetOldestUnconfirmed(dbh *sqlx.DB) (uint64, error) {
 		`
 	err = dbh.Get(&result, q)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		err = fmt.Errorf("failed to fetch oldest unconfirmed block number, %v", err)
+		err = fmt.Errorf("failed to fetch oldest unconfirmed block number, %w", err)
 		log.Error(err)
 		return 0, err
 	}
@@ -400,7 +400,7 @@ func unconfirmedTxsValue(dtx *sqlx.Tx, fb common.FinalizedBlock) (decimal.Decima
 	`
 	query, args, err := sqlx.In(q, fb.Transactions)
 	if err != nil {
-		err = fmt.Errorf("failed to prep query: get unconfirmed transactions stats for block %d (%s), %v", fb.Number, fb.Hash, err)
+		err = fmt.Errorf("failed to prep query: get unconfirmed transactions stats for block %d (%s), %w", fb.Number, fb.Hash, err)
 		log.Error(err)
 		return decimal.Zero, decimal.Zero, err
 	}
@@ -412,7 +412,7 @@ func unconfirmedTxsValue(dtx *sqlx.Tx, fb common.FinalizedBlock) (decimal.Decima
 	var stats statss
 	err = dtx.Get(&stats, query, args...)
 	if err != nil {
-		err = fmt.Errorf("failed to get unconfirmed transactions stats for block %d (%s), %v", fb.Number, fb.Hash, err)
+		err = fmt.Errorf("failed to get unconfirmed transactions stats for block %d (%s), %w", fb.Number, fb.Hash, err)
 		log.Error(err)
 		return decimal.Zero, decimal.Zero, err
 	}
@@ -427,20 +427,20 @@ func confirmTxs(dtx *sqlx.Tx, fb common.FinalizedBlock) (int64, error) {
 	`
 	query, args, err := sqlx.In(q, fb.Transactions)
 	if err != nil {
-		err = fmt.Errorf("failed to prep query: confirm transactions for block %d (%s), %v", fb.Number, fb.Hash, err)
+		err = fmt.Errorf("failed to prep query: confirm transactions for block %d (%s), %w", fb.Number, fb.Hash, err)
 		log.Error(err)
 		return -1, err
 	}
 	query = dtx.Rebind(query)
 	result, err := dtx.Exec(query, args...)
 	if err != nil {
-		err = fmt.Errorf("failed to confirm transactions for block %d (%s), %v", fb.Number, fb.Hash, err)
+		err = fmt.Errorf("failed to confirm transactions for block %d (%s), %w", fb.Number, fb.Hash, err)
 		log.Error(err)
 		return -1, err
 	}
 	ra, err := result.RowsAffected()
 	if err != nil {
-		err = fmt.Errorf("failed to get the count of confirmed transactions for block %d (%s), %v", fb.Number, fb.Hash, err)
+		err = fmt.Errorf("failed to get the count of confirmed transactions for block %d (%s), %w", fb.Number, fb.Hash, err)
 		log.Error(err)
 		return -1, nil
 	}
@@ -461,7 +461,7 @@ func updateDonationStats(dtx *sqlx.Tx, incTotal, incTokens decimal.Decimal) (dec
 	var newTotal, newTokens decimal.Decimal
 	err := dtx.QueryRowx(q1, incTotal, incTokens.IntPart()).Scan(&newTotal, &newTokens)
 	if err != nil {
-		err = fmt.Errorf("failed to update donation stats %v", err)
+		err = fmt.Errorf("failed to update donation stats %w", err)
 		log.Error(err)
 		return decimal.Zero, decimal.Zero, err
 	}
@@ -484,7 +484,7 @@ func updateTokenPrice(dtx *sqlx.Tx, ntp decimal.Decimal) error {
 		`
 	_, err := dtx.Exec(q1, ntp.StringFixed(5))
 	if err != nil {
-		err = fmt.Errorf("failed to update token price to '%s', %v", ntp.StringFixed(5), err)
+		err = fmt.Errorf("failed to update token price to '%s', %w", ntp.StringFixed(5), err)
 		log.Error(err)
 		return err
 	}
@@ -518,7 +518,7 @@ func RequestPrice(ctxt common.Context, asset string, ts time.Time) error {
 	`
 	_, err := ctxt.DB.Exec(q, asset, ts.Round(time.Minute))
 	if err != nil {
-		err = fmt.Errorf("failed to request price for %s/%s, %v", asset, ts, err)
+		err = fmt.Errorf("failed to request price for %s/%s, %w", asset, ts, err)
 		log.Error(err)
 		return err
 	}
@@ -542,7 +542,7 @@ func GetOldUnconfirmed(dbh *sqlx.DB) ([]uint64, error) {
 		`
 	err = dbh.Select(&result, q)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		err = fmt.Errorf("failed to fetch oldest unconfirmed block number, %v", err)
+		err = fmt.Errorf("failed to fetch oldest unconfirmed block number, %w", err)
 		log.Error(err)
 		return nil, err
 	}

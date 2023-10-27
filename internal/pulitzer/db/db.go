@@ -49,7 +49,7 @@ func GetOpenPriceRequests(dbh *sqlx.DB) ([]PriceReq, error) {
 		`
 	err = dbh.Select(&result, q)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		err = fmt.Errorf("failed to open price requests, %v", err)
+		err = fmt.Errorf("failed to open price requests, %w", err)
 		log.Error(err)
 		return nil, err
 	}
@@ -100,7 +100,7 @@ func persistKline(dbt *sqlx.Tx, asset string, kl data.Kline) error {
 	}
 	_, err := dbt.NamedExec(q, qd)
 	if err != nil {
-		err = fmt.Errorf("failed to insert historical ETH price for %s, %v", kl.CloseTime, err)
+		err = fmt.Errorf("failed to insert historical ETH price for %s, %w", kl.CloseTime, err)
 		log.Error(err)
 		return err
 	}
@@ -114,7 +114,7 @@ func closeRequest(dbt *sqlx.Tx, id uint64) error {
 		`
 	_, err := dbt.Exec(q, id)
 	if err != nil {
-		err = fmt.Errorf("failed to close price request #%d, %v", id, err)
+		err = fmt.Errorf("failed to close price request #%d, %w", id, err)
 		log.Error(err)
 		return err
 	}

@@ -89,7 +89,7 @@ func GetFinalizedBlock(ctxt common.Context, blockNumber uint64) (*common.Finaliz
 
 	fb, err := parseFinalizedBlock(body)
 	if err != nil {
-		err = fmt.Errorf("failed to parse finalized block #%d, %v", blockNumber, err)
+		err = fmt.Errorf("failed to parse finalized block #%d, %w", blockNumber, err)
 		log.Error(err)
 		return nil, err
 	}
@@ -113,12 +113,12 @@ func parseFinalizedBlock(body []byte) (*common.FinalizedBlock, error) {
 	}
 	seconds, err := common.HexStringToDecimal(resp.Block.HexSeconds)
 	if err != nil {
-		err = fmt.Errorf("failed to convert block timestamp, %v", err)
+		err = fmt.Errorf("failed to convert block timestamp, %w", err)
 		return nil, err
 	}
 	number, err := common.HexStringToDecimal(resp.Block.HexNumber)
 	if err != nil {
-		err = fmt.Errorf("failed to convert block number, %v", err)
+		err = fmt.Errorf("failed to convert block number, %w", err)
 		return nil, err
 	}
 	ts := time.Unix(seconds.IntPart(), 0)

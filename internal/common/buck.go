@@ -95,7 +95,7 @@ func getStableCoins(erc20Json string) (map[string]ERC20, error) {
 	var scs []ERC20
 	err := json.Unmarshal([]byte(erc20Json), &scs)
 	if err != nil {
-		err = fmt.Errorf("error decoding erc-20 JSON data, %v", err)
+		err = fmt.Errorf("error decoding erc-20 JSON data, %w", err)
 		log.Error(err)
 		return nil, err
 	}
@@ -116,7 +116,7 @@ func getSaleParams(saleParamJson string) ([]SaleParam, error) {
 	var sps []SaleParam
 	err := json.Unmarshal([]byte(saleParamJson), &sps)
 	if err != nil {
-		err = fmt.Errorf("error decoding sale param JSON data, %v", err)
+		err = fmt.Errorf("error decoding sale param JSON data, %w", err)
 		log.Error(err)
 		return nil, err
 	}

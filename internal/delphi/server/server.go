@@ -127,7 +127,7 @@ func (s *DelphiServer) Ready(ctx echo.Context) error {
 func verifySig(from, msg, sigHex string) bool {
 	sig, err := hexutil.Decode(sigHex)
 	if err != nil {
-		err = fmt.Errorf("invalid sig ('%s'), %v", sigHex, err)
+		err = fmt.Errorf("invalid sig ('%s'), %w", sigHex, err)
 		log.Error(err)
 		return false
 	}
@@ -140,7 +140,7 @@ func verifySig(from, msg, sigHex string) bool {
 
 	pk, err := crypto.SigToPub(msgHash, sig)
 	if err != nil {
-		err = fmt.Errorf("failed to recover public key from sig ('%s'), %v", sigHex, err)
+		err = fmt.Errorf("failed to recover public key from sig ('%s'), %w", sigHex, err)
 		log.Error(err)
 		return false
 	}
@@ -152,7 +152,7 @@ func verifySig(from, msg, sigHex string) bool {
 func getTS(tss string) (time.Time, error) {
 	seconds, err := strconv.Atoi(tss)
 	if err != nil {
-		err = fmt.Errorf("failed to parse string with seconds since epoch ('%s'), %v", tss, err)
+		err = fmt.Errorf("failed to parse string with seconds since epoch ('%s'), %w", tss, err)
 		log.Error(err)
 		return time.Unix(0, 0), err
 	}

@@ -40,12 +40,12 @@ func GetHistoricalPriceFromBinance(ts time.Time) ([]Kline, error) {
 
 		p, err := decimal.NewFromString(kline[4].(string))
 		if err != nil {
-			err = fmt.Errorf("error decoding close price ('%s') in JSON response, %v", kline[4].(string), err)
+			err = fmt.Errorf("error decoding close price ('%s') in JSON response, %w", kline[4].(string), err)
 			return nil, err
 		}
 		v, err := decimal.NewFromString(kline[5].(string))
 		if err != nil {
-			err = fmt.Errorf("error decoding Volume ('%s') in JSON response, %v", kline[5].(string), err)
+			err = fmt.Errorf("error decoding Volume ('%s') in JSON response, %w", kline[5].(string), err)
 			return nil, err
 		}
 		ct := time.Unix(int64(kline[6].(float64)/1000), 0)

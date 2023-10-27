@@ -161,13 +161,13 @@ func servePriceRequests(dbh *sqlx.DB, ctx context.Context) error {
 	for _, rq := range rqs {
 		klines, err := data.GetHistoricalPriceFromBinance(rq.Time)
 		if err != nil {
-			err = fmt.Errorf("failed to obtain historical prices for %s, %v", rq.Time, err)
+			err = fmt.Errorf("failed to obtain historical prices for %s, %w", rq.Time, err)
 			log.Error(err)
 			return err
 		}
 		err = db.CloseRequest(dbh, rq.ID, klines)
 		if err != nil {
-			err = fmt.Errorf("failed to persist historical prices for request #%d/%s, %v", rq.ID, rq.Time, err)
+			err = fmt.Errorf("failed to persist historical prices for request #%d/%s, %w", rq.ID, rq.Time, err)
 			log.Error(err)
 			return err
 		}

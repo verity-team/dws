@@ -32,14 +32,14 @@ func HTTPGet(params HTTPParams) ([]byte, error) {
 
 	req, err := http.NewRequest("GET", params.URL, nil)
 	if err != nil {
-		err = fmt.Errorf("failed to prep request for url ('%s'), %v", params.URL, err)
+		err = fmt.Errorf("failed to prep request for url ('%s'), %w", params.URL, err)
 		log.Error(err)
 		return nil, err
 	}
 
 	response, err := client.Do(req)
 	if err != nil {
-		err = fmt.Errorf("failed to execute GET request for url ('%s'), %v", params.URL, err)
+		err = fmt.Errorf("failed to execute GET request for url ('%s'), %w", params.URL, err)
 		log.Error(err)
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func HTTPGet(params HTTPParams) ([]byte, error) {
 	// Read the response body
 	responseBody, err := io.ReadAll(response.Body)
 	if err != nil {
-		err = fmt.Errorf("failed to read response for GET request with url ('%s'), %v", params.URL, err)
+		err = fmt.Errorf("failed to read response for GET request with url ('%s'), %w", params.URL, err)
 		log.Error(err)
 		return nil, err
 	}
@@ -69,7 +69,7 @@ func HTTPPost(params HTTPParams) ([]byte, error) {
 	}
 	response, err := client.Post(params.URL, "application/json", bytes.NewBuffer(params.RequestBody))
 	if err != nil {
-		err = fmt.Errorf("post request for url ('%s') failed, %v", params.URL, err)
+		err = fmt.Errorf("post request for url ('%s') failed, %w", params.URL, err)
 		log.Error(err)
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func HTTPPost(params HTTPParams) ([]byte, error) {
 	// Read the response body
 	responseBody, err := io.ReadAll(response.Body)
 	if err != nil {
-		err = fmt.Errorf("failed to read response for POST request with url ('%s'), %v", params.URL, err)
+		err = fmt.Errorf("failed to read response for POST request with url ('%s'), %w", params.URL, err)
 		log.Error(err)
 		return nil, err
 	}

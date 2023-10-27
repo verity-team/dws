@@ -24,7 +24,7 @@ func GetLatestETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 	var ethp decimal.Decimal
 	err := db.Get(&ethp, q1)
 	if err != nil {
-		err = fmt.Errorf("failed to fetch an ETH price that is newer than 3 minutes, %v", err)
+		err = fmt.Errorf("failed to fetch an ETH price that is newer than 3 minutes, %w", err)
 		log.Error(err)
 		return decimal.Zero, err
 	}
@@ -46,7 +46,7 @@ func GetETHPrice(db *sqlx.DB, ts time.Time) (decimal.Decimal, error) {
 	var ethp decimal.Decimal
 	err := db.Get(&ethp, q, ts)
 	if err != nil {
-		err = fmt.Errorf("failed to fetch ETH price for time %v, %v", ts, err)
+		err = fmt.Errorf("failed to fetch ETH price for time %v, %w", ts, err)
 		log.Error(err)
 		return decimal.Zero, err
 	}
@@ -63,19 +63,19 @@ func GetDonationStats(db *sqlx.DB) (decimal.Decimal, decimal.Decimal, error) {
 	var ds api.DonationStats
 	err := db.Get(&ds, q3)
 	if err != nil {
-		err = fmt.Errorf("failed to fetch donation stats, %v", err)
+		err = fmt.Errorf("failed to fetch donation stats, %w", err)
 		log.Error(err)
 		return decimal.Zero, decimal.Zero, err
 	}
 	total, err := decimal.NewFromString(ds.Total)
 	if err != nil {
-		err = fmt.Errorf("invalid total, %v", err)
+		err = fmt.Errorf("invalid total, %w", err)
 		log.Error(err)
 		return decimal.Zero, decimal.Zero, err
 	}
 	tokens, err := decimal.NewFromString(ds.Tokens)
 	if err != nil {
-		err = fmt.Errorf("invalid tokens, %v", err)
+		err = fmt.Errorf("invalid tokens, %w", err)
 		log.Error(err)
 		return decimal.Zero, decimal.Zero, err
 	}

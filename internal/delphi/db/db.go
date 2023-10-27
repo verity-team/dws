@@ -53,7 +53,7 @@ func GetDonationData(db *sqlx.DB) (*api.DonationData, error) {
 	var ethp api.Price
 	err := db.Get(&ethp, q1)
 	if err != nil {
-		err = fmt.Errorf("failed to fetch an ETH price that is newer than 3 minutes, %v", err)
+		err = fmt.Errorf("failed to fetch an ETH price that is newer than 3 minutes, %w", err)
 		log.Error(err)
 	}
 
@@ -68,7 +68,7 @@ func GetDonationData(db *sqlx.DB) (*api.DonationData, error) {
 	var truthp api.Price
 	err = db.Get(&truthp, q2)
 	if err != nil {
-		err = fmt.Errorf("failed to fetch the TRUTH price, %v", err)
+		err = fmt.Errorf("failed to fetch the TRUTH price, %w", err)
 		log.Error(err)
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func GetDonationData(db *sqlx.DB) (*api.DonationData, error) {
 	var ds dstats
 	err = db.Get(&ds, q3)
 	if err != nil {
-		err = fmt.Errorf("failed to fetch donation stats, %v", err)
+		err = fmt.Errorf("failed to fetch donation stats, %w", err)
 		log.Error(err)
 		return nil, err
 	}
@@ -118,7 +118,7 @@ func GetUserDonationData(db *sqlx.DB, address string) ([]api.Donation, error) {
 	var result []api.Donation
 	err := db.Select(&result, q1, address)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		err = fmt.Errorf("failed to fetch donation records for %s, %v", address, err)
+		err = fmt.Errorf("failed to fetch donation records for %s, %w", address, err)
 		log.Error(err)
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func GetUserData(db *sqlx.DB, address string) (*api.UserData, error) {
 			// not found
 			return nil, nil
 		}
-		err = fmt.Errorf("failed to fetch user data for %s, %v", address, err)
+		err = fmt.Errorf("failed to fetch user data for %s, %w", address, err)
 		log.Error(err)
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func GetAffiliateCode(db *sqlx.DB, address string) (*api.AffiliateCode, error) {
 			// not found
 			return nil, nil
 		}
-		err = fmt.Errorf("failed to fetch affiliate code for %s, %v", address, err)
+		err = fmt.Errorf("failed to fetch affiliate code for %s, %w", address, err)
 		log.Error(err)
 		return nil, err
 	}
@@ -181,7 +181,7 @@ func genAFC() (string, error) {
 	buff := make([]byte, 8)
 	_, err := rand.Read(buff)
 	if err != nil {
-		err = fmt.Errorf("failed to generate an affiliate code, %v", err)
+		err = fmt.Errorf("failed to generate an affiliate code, %w", err)
 		log.Error(err)
 		return "", err
 	}
@@ -207,7 +207,7 @@ func GenerateAffiliateCode(db *sqlx.DB, address string) (*api.AffiliateCode, err
 	}
 	err = db.QueryRowx(q1, address, afc).StructScan(&result)
 	if err != nil {
-		err = fmt.Errorf("failed to set affiliate code for '%s', %v", address, err)
+		err = fmt.Errorf("failed to set affiliate code for '%s', %w", address, err)
 		log.Error(err)
 		return nil, err
 	}
