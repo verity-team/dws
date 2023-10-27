@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"github.com/verity-team/dws/internal/common"
 	"github.com/verity-team/dws/internal/pulitzer/data"
 	"github.com/verity-team/dws/internal/pulitzer/db"
+	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -44,14 +46,17 @@ func main() {
 
 	s := gocron.NewScheduler(time.UTC)
 	s.SingletonModeAll()
+	g, ctx := errgroup.WithContext(context.Background())
 
-	_, err = s.Every("1m").Do(getETHPrice, dbh)
+	_, err = s.Every("1m").Do(getETHPrice, dbh, ctx)
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err)
+		return
 	}
-	_, err = s.Every("1m").Do(servePriceRequests, dbh)
+	_, err = s.Every("1m").Do(servePriceRequests, dbh, ctx)
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err)
+		return
 	}
 
 	// healthcheck endpoints
@@ -60,20 +65,39 @@ func main() {
 		return c.String(http.StatusOK, "{}\n")
 	})
 	e.GET("/ready", func(c echo.Context) error {
-		err := dbh.Ping()
-		if err != nil {
+		select {
+		case <-ctx.Done():
+			log.Info("pulitzer - context canceled")
 			return c.String(http.StatusServiceUnavailable, "{}\n")
+		default:
+			// all good, carry on
+			err := runReadyProbe(dbh)
+			if err != nil {
+				return c.String(http.StatusServiceUnavailable, "{}\n")
+			}
 		}
 		return c.String(http.StatusOK, "{}\n")
 	})
-	go func() {
+	g.Go(func() error {
+		defer func() {
+			s.StopBlockingChan()
+		}()
 		err := e.Start(fmt.Sprintf(":%d", *port))
 		if err != http.ErrServerClosed {
-
-			log.Fatal(err)
+			log.Error(err)
 		}
-	}()
-	s.StartBlocking()
+		return err
+	})
+
+	g.Go(func() error {
+		s.StartBlocking()
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		log.Errorf("errgroup.Wait(): %v", err)
+	}
+	log.Info("pulitzer shutting down")
 }
 
 func calculateAveragePrice(prices []decimal.Decimal) (decimal.Decimal, error) {
@@ -121,7 +145,14 @@ func checkPriceDeviation(prices []decimal.Decimal) error {
 	return nil
 }
 
-func servePriceRequests(dbh *sqlx.DB) error {
+func servePriceRequests(dbh *sqlx.DB, ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		log.Info("pulitzer/historic - context canceled")
+		return nil
+	default:
+		// keep going
+	}
 	rqs, err := db.GetOpenPriceRequests(dbh)
 	if err != nil {
 		return err
@@ -144,7 +175,14 @@ func servePriceRequests(dbh *sqlx.DB) error {
 	return nil
 }
 
-func getETHPrice(dbh *sqlx.DB) (decimal.Decimal, error) {
+func getETHPrice(dbh *sqlx.DB, ctx context.Context) (decimal.Decimal, error) {
+	select {
+	case <-ctx.Done():
+		log.Info("pulitzer/latest - context canceled")
+		return decimal.Zero, nil
+	default:
+		// keep going
+	}
 	// Create a wait group to synchronize the goroutines
 	var wg sync.WaitGroup
 
@@ -219,4 +257,18 @@ func getETHPrice(dbh *sqlx.DB) (decimal.Decimal, error) {
 	}
 
 	return av, nil
+}
+
+func runReadyProbe(dbh *sqlx.DB) error {
+	err := dbh.Ping()
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	_, err = data.GetWeightedAvgPriceFromBinance()
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	return err
 }

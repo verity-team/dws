@@ -18,6 +18,8 @@ import (
 	"github.com/verity-team/dws/internal/buck/db"
 	"github.com/verity-team/dws/internal/buck/ethereum"
 	"github.com/verity-team/dws/internal/common"
+	"golang.org/x/net/context"
+	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -96,32 +98,36 @@ func main() {
 	}
 
 	if (*lbn > -1) && (*fbn > -1) {
-		log.Fatal("pick either -set-latest XOR -set-final but not both")
+		log.Error("pick either -set-latest XOR -set-final but not both")
+		return
 	}
 
 	if *lbn >= 0 {
 		err = db.SetLastBlock(*ctxt, "eth", db.Latest, uint64(*lbn))
 		if err != nil {
-			log.Fatal(err)
+			log.Error(err)
+			return
 		}
-		os.Exit(0)
+		return
 	}
 	if *fbn >= 0 {
 		err = db.SetLastBlock(*ctxt, "eth", db.Finalized, uint64(*fbn))
 		if err != nil {
-			log.Fatal(err)
+			log.Error(err)
+			return
 		}
-		os.Exit(0)
+		return
 	}
 
 	numberOfModes, err := checkFlags(modes)
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err)
+		return
 	}
 	// nothing to do?
 	if numberOfModes == 0 {
 		log.Info("nothing to do, exiting")
-		os.Exit(0)
+		return
 	}
 
 	if *singleBlock > 0 {
@@ -133,16 +139,17 @@ func main() {
 		}
 		if err != nil {
 			log.Errorf("failed to process single block %d, %v", *singleBlock, err)
-			os.Exit(1)
+			return
 		}
-		os.Exit(0)
+		return
 	}
 
 	s := gocron.NewScheduler(time.UTC)
 	s.SingletonModeAll()
+	g, ctx := errgroup.WithContext(context.Background())
 
 	if *monitorLatest {
-		_, err = s.Every("1m").Do(monitorLatestETH, *ctxt)
+		_, err = s.Every("1m").Do(monitorLatestETH, *ctxt, ctx)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -153,9 +160,10 @@ func main() {
 		if *port == defaultPort {
 			*port = defaultPort + 1
 		}
-		_, err = s.Every("1m").Do(monitorFinalizedETH, *ctxt)
+		_, err = s.Every("1m").Do(monitorFinalizedETH, *ctxt, ctx)
 		if err != nil {
-			log.Fatal(err)
+			log.Error(err)
+			return
 		}
 	}
 
@@ -165,9 +173,10 @@ func main() {
 			*port = defaultPort + 2
 		}
 		ctxt.UpdateLastBlock = false
-		_, err = s.Every("30m").Do(monitorOldUnconfirmed, *ctxt)
+		_, err = s.Every("30m").Do(monitorOldUnconfirmed, *ctxt, ctx)
 		if err != nil {
-			log.Fatal(err)
+			log.Error(err)
+			return
 		}
 	}
 
@@ -177,21 +186,40 @@ func main() {
 		return c.String(http.StatusOK, "{}\n")
 	})
 	e.GET("/ready", func(c echo.Context) error {
-		err := runReadyProbe(*ctxt, *monitorLatest)
-		if err != nil {
+		select {
+		case <-ctx.Done():
+			log.Info("buck - context canceled")
 			return c.String(http.StatusServiceUnavailable, "{}\n")
+		default:
+			// all good, carry on
+			err := runReadyProbe(*ctxt, *monitorLatest)
+			if err != nil {
+				return c.String(http.StatusServiceUnavailable, "{}\n")
+			}
 		}
 		return c.String(http.StatusOK, "{}\n")
 	})
-	go func() {
+
+	g.Go(func() error {
+		defer func() {
+			s.StopBlockingChan()
+		}()
 		err := e.Start(fmt.Sprintf(":%d", *port))
 		if err != http.ErrServerClosed {
-
-			log.Fatal(err)
+			log.Error(err)
 		}
-	}()
+		return err
+	})
 
-	s.StartBlocking()
+	g.Go(func() error {
+		s.StartBlocking()
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		log.Errorf("errgroup.Wait(): %v", err)
+	}
+	log.Info("buck shutting down")
 }
 
 func runReadyProbe(ctxt common.Context, latest bool) error {
@@ -211,7 +239,7 @@ func runReadyProbe(ctxt common.Context, latest bool) error {
 	return err
 }
 
-func monitorFinalizedETH(ctxt common.Context) error {
+func monitorFinalizedETH(ctxt common.Context, ctx context.Context) error {
 	// most recent *finalized* ETH block published
 	fbn, err := ethereum.GetMaxFinalizedBlockNumber(ctxt.ETHRPCURL)
 	if err != nil {
@@ -245,6 +273,13 @@ func monitorFinalizedETH(ctxt common.Context) error {
 	}
 
 	for i := startBlock; i <= fbn; i++ {
+		select {
+		case <-ctx.Done():
+			log.Info("buck/final - context canceled")
+			return nil
+		default:
+			// keep going
+		}
 		err = processFinalized(ctxt, i)
 		if err != nil {
 			return err
@@ -275,7 +310,7 @@ func processFinalized(ctxt common.Context, bn uint64) error {
 	return nil
 }
 
-func monitorLatestETH(ctxt common.Context) error {
+func monitorLatestETH(ctxt common.Context, ctx context.Context) error {
 	// most recent ETH block published
 	lbn, err := ethereum.GetBlockNumber(ctxt.ETHRPCURL)
 	if err != nil {
@@ -301,6 +336,13 @@ func monitorLatestETH(ctxt common.Context) error {
 	}
 
 	for i := startBlock; i <= lbn; i++ {
+		select {
+		case <-ctx.Done():
+			log.Info("buck/latest - context canceled")
+			return nil
+		default:
+			// keep going
+		}
 		err = processLatest(ctxt, i)
 		if err != nil {
 			return err
@@ -347,7 +389,7 @@ func processLatest(ctxt common.Context, bn uint64) error {
 	return nil
 }
 
-func monitorOldUnconfirmed(ctxt common.Context) error {
+func monitorOldUnconfirmed(ctxt common.Context, ctx context.Context) error {
 	bns, err := db.GetOldUnconfirmed(ctxt.DB)
 	if err != nil {
 		return err
@@ -366,6 +408,13 @@ func monitorOldUnconfirmed(ctxt common.Context) error {
 	log.Infof("##### max finalized ETH block: %d", mfbn)
 
 	for _, bn := range bns {
+		select {
+		case <-ctx.Done():
+			log.Info("buck/old-unconfirmed - context canceled")
+			return nil
+		default:
+			// keep going
+		}
 		if bn <= mfbn {
 			log.Infof("##### processing old finalized block %d", bn)
 			err = processFinalized(ctxt, bn)
