@@ -49,7 +49,7 @@ func GetOpenPriceRequests(dbh *sqlx.DB) ([]PriceReq, error) {
 		`
 	err = dbh.Select(&result, q)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		err = fmt.Errorf("failed to open price requests, %w", err)
+		err = fmt.Errorf("failed to fetch open price requests, %w", err)
 		log.Error(err)
 		return nil, err
 	}

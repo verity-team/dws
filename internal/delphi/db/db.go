@@ -155,7 +155,7 @@ func GetUserData(db *sqlx.DB, address string) (*api.UserData, error) {
 }
 
 func GetAffiliateCode(db *sqlx.DB, address string) (*api.AffiliateCode, error) {
-	// fetch donations made by this user/address
+	// fetch the afiliate code for the given address
 	q1 := `
 		SELECT
 			address, COALESCE(affiliate_code, '') AS code, created_at
