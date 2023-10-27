@@ -80,6 +80,7 @@ func main() {
 	})
 	g.Go(func() error {
 		defer func() {
+			// stop any gocron jobs
 			s.StopBlockingChan()
 		}()
 		err := e.Start(fmt.Sprintf(":%d", *port))
@@ -265,7 +266,7 @@ func runReadyProbe(dbh *sqlx.DB) error {
 		log.Error(err)
 		return err
 	}
-	_, err = data.GetWeightedAvgPriceFromBinance()
+	_, err = data.PingBinance()
 	if err != nil {
 		log.Error(err)
 		return err

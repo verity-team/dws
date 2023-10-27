@@ -199,9 +199,9 @@ func main() {
 		}
 		return c.String(http.StatusOK, "{}\n")
 	})
-
 	g.Go(func() error {
 		defer func() {
+			// stop any gocron jobs
 			s.StopBlockingChan()
 		}()
 		err := e.Start(fmt.Sprintf(":%d", *port))
@@ -228,10 +228,11 @@ func runReadyProbe(ctxt common.Context, latest bool) error {
 		log.Error(err)
 		return err
 	}
+	ctxt.MaxWaitInSeconds = 1
 	if latest {
-		_, err = ethereum.GetBlockNumber(ctxt.ETHRPCURL)
+		_, err = ethereum.GetBlockNumber(ctxt)
 	} else {
-		_, err = ethereum.GetMaxFinalizedBlockNumber(ctxt.ETHRPCURL)
+		_, err = ethereum.GetMaxFinalizedBlockNumber(ctxt)
 	}
 	if err != nil {
 		log.Error(err)
@@ -241,7 +242,7 @@ func runReadyProbe(ctxt common.Context, latest bool) error {
 
 func monitorFinalizedETH(ctxt common.Context, ctx context.Context) error {
 	// most recent *finalized* ETH block published
-	fbn, err := ethereum.GetMaxFinalizedBlockNumber(ctxt.ETHRPCURL)
+	fbn, err := ethereum.GetMaxFinalizedBlockNumber(ctxt)
 	if err != nil {
 		return err
 	}
@@ -312,7 +313,7 @@ func processFinalized(ctxt common.Context, bn uint64) error {
 
 func monitorLatestETH(ctxt common.Context, ctx context.Context) error {
 	// most recent ETH block published
-	lbn, err := ethereum.GetBlockNumber(ctxt.ETHRPCURL)
+	lbn, err := ethereum.GetBlockNumber(ctxt)
 	if err != nil {
 		log.Error(err)
 		return err
@@ -401,7 +402,7 @@ func monitorOldUnconfirmed(ctxt common.Context, ctx context.Context) error {
 	log.Infof("##### ETH blocks with old unconfirmed txs: %v", bns)
 
 	// most recent *finalized* ETH block published
-	mfbn, err := ethereum.GetMaxFinalizedBlockNumber(ctxt.ETHRPCURL)
+	mfbn, err := ethereum.GetMaxFinalizedBlockNumber(ctxt)
 	if err != nil {
 		return err
 	}

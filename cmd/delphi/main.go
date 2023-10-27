@@ -86,4 +86,5 @@ func main() {
 	if err != nil {
 		log.Error(err)
 	}
+	log.Info("delphi shutting down")
 }

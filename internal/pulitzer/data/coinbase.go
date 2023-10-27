@@ -17,7 +17,10 @@ type CoinbaseResponse struct {
 }
 
 func GetCoinbaseETHPrice() (decimal.Decimal, error) {
-	responseBody, err := common.HTTPGet("https://api.coinbase.com/v2/prices/ETH-USD/spot")
+	params := common.HTTPParams{
+		URL: "https://api.coinbase.com/v2/prices/ETH-USD/spot",
+	}
+	responseBody, err := common.HTTPGet(params)
 	if err != nil {
 		return decimal.Zero, err
 	}
