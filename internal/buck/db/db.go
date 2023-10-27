@@ -1,6 +1,8 @@
 package db
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -40,7 +42,7 @@ func GetLastBlock(dbh *sqlx.DB, chain string, l Label) (uint64, error) {
 		WHERE chain=$1 AND label=$2
 		`
 	err = dbh.Get(&result, q, chain, l.String())
-	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		err = fmt.Errorf("failed to fetch last block for %s/%s, %v", chain, l.String(), err)
 		log.Error(err)
 		return 0, err
@@ -202,15 +204,15 @@ func getTokenPrice(ctxt common.Context) (decimal.Decimal, error) {
 		`
 	var result decimal.Decimal
 	err := ctxt.DB.Get(&result, q1)
-	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// no token price record in the database -> return cheapest price
+			return ctxt.SaleParams[0].Price, nil
+		}
 		// db error -> connection? is borked?
 		err = fmt.Errorf("failed to fetch current token price, %v", err)
 		log.Error(err)
 		return decimal.Zero, err
-	}
-	if err != nil && strings.Contains(err.Error(), "sql: no rows in result set") {
-		// no token price record in the database -> return cheapest price
-		return ctxt.SaleParams[0].Price, nil
 	}
 
 	return result, nil
@@ -315,7 +317,7 @@ func GetOldestUnconfirmed(dbh *sqlx.DB) (uint64, error) {
 		LIMIT 1
 		`
 	err = dbh.Get(&result, q)
-	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		err = fmt.Errorf("failed to fetch oldest unconfirmed block number, %v", err)
 		log.Error(err)
 		return 0, err
@@ -539,7 +541,7 @@ func GetOldUnconfirmed(dbh *sqlx.DB) ([]uint64, error) {
 		ORDER BY 1
 		`
 	err = dbh.Select(&result, q)
-	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		err = fmt.Errorf("failed to fetch oldest unconfirmed block number, %v", err)
 		log.Error(err)
 		return nil, err

@@ -1,10 +1,11 @@
 package db
 
 import (
+	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"crypto/rand"
 
@@ -116,7 +117,7 @@ func GetUserDonationData(db *sqlx.DB, address string) ([]api.Donation, error) {
 		`
 	var result []api.Donation
 	err := db.Select(&result, q1, address)
-	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		err = fmt.Errorf("failed to fetch donation records for %s, %v", address, err)
 		log.Error(err)
 		return nil, err
@@ -140,13 +141,14 @@ func GetUserData(db *sqlx.DB, address string) (*api.UserData, error) {
 		`
 	var result api.UserData
 	err := db.Get(&result, q1, address)
-	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// not found
+			return nil, nil
+		}
 		err = fmt.Errorf("failed to fetch user data for %s, %v", address, err)
 		log.Error(err)
 		return nil, err
-	}
-	if err != nil && strings.Contains(err.Error(), "sql: no rows in result set") {
-		return nil, nil
 	}
 
 	return &result, nil
@@ -162,13 +164,14 @@ func GetAffiliateCode(db *sqlx.DB, address string) (*api.AffiliateCode, error) {
 		`
 	var result api.AffiliateCode
 	err := db.Get(&result, q1, address)
-	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// not found
+			return nil, nil
+		}
 		err = fmt.Errorf("failed to fetch affiliate code for %s, %v", address, err)
 		log.Error(err)
 		return nil, err
-	}
-	if err != nil && strings.Contains(err.Error(), "sql: no rows in result set") {
-		return nil, nil
 	}
 
 	return &result, nil

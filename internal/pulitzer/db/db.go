@@ -1,8 +1,9 @@
 package db
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -47,7 +48,7 @@ func GetOpenPriceRequests(dbh *sqlx.DB) ([]PriceReq, error) {
 		ORDER BY created_at
 		`
 	err = dbh.Select(&result, q)
-	if err != nil && !strings.Contains(err.Error(), "sql: no rows in result set") {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		err = fmt.Errorf("failed to open price requests, %v", err)
 		log.Error(err)
 		return nil, err

@@ -254,7 +254,7 @@ func monitorFinalizedETH(ctxt common.Context, ctx context.Context) error {
 		log.Error(err)
 		return err
 	}
-	log.Infof("latest finalized block processed (from db): %d", lfdb)
+	log.Infof("last finalized block processed (from db): %d", lfdb)
 
 	var startBlock uint64
 	if lfdb <= 0 {
