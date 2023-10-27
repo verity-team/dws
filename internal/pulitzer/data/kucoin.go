@@ -25,7 +25,10 @@ type Data struct {
 }
 
 func GetKuCoinETHUSDTPrice() (decimal.Decimal, error) {
-	responseBody, err := common.HTTPGet("https://api.kucoin.com/api/v1/market/orderbook/level1?symbol=ETH-USDT")
+	params := common.HTTPParams{
+		URL: "https://api.kucoin.com/api/v1/market/orderbook/level1?symbol=ETH-USDT",
+	}
+	responseBody, err := common.HTTPGet(params)
 	if err != nil {
 		return decimal.Zero, err
 	}

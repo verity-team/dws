@@ -10,21 +10,24 @@ import (
 	"github.com/verity-team/dws/internal/common"
 )
 
-const MaxWaitInSeconds = 5
-
-func GetBlockNumber(apiURL string) (uint64, error) {
+func GetBlockNumber(ctxt common.Context) (uint64, error) {
 	requestData := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"method":  "eth_blockNumber",
 		"params":  []interface{}{},
 		"id":      1,
 	}
-	requestBody, err := json.Marshal(requestData)
+	requestBytes, err := json.Marshal(requestData)
 	if err != nil {
 		return 0, err
 	}
 
-	body, err := common.HTTPPost(apiURL, requestBody)
+	params := common.HTTPParams{
+		URL:              ctxt.ETHRPCURL,
+		RequestBody:      requestBytes,
+		MaxWaitInSeconds: ctxt.MaxWaitInSeconds,
+	}
+	body, err := common.HTTPPost(params)
 	if err != nil {
 		return 0, err
 	}
@@ -69,7 +72,12 @@ func GetFinalizedBlock(ctxt common.Context, blockNumber uint64) (*common.Finaliz
 		return nil, err
 	}
 
-	body, err := common.HTTPPost(ctxt.ETHRPCURL, requestBytes)
+	params := common.HTTPParams{
+		URL:              ctxt.ETHRPCURL,
+		RequestBody:      requestBytes,
+		MaxWaitInSeconds: ctxt.MaxWaitInSeconds,
+	}
+	body, err := common.HTTPPost(params)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +137,7 @@ func parseFinalizedBlock(body []byte) (*common.FinalizedBlock, error) {
 	return &result, nil
 }
 
-func GetMaxFinalizedBlockNumber(apiURL string) (uint64, error) {
+func GetMaxFinalizedBlockNumber(ctxt common.Context) (uint64, error) {
 	request := EthGetBlockByNumberRequest{
 		JsonRPC: "2.0",
 		Method:  "eth_getBlockByNumber",
@@ -141,7 +149,12 @@ func GetMaxFinalizedBlockNumber(apiURL string) (uint64, error) {
 		return 0, err
 	}
 
-	body, err := common.HTTPPost(apiURL, requestBytes)
+	params := common.HTTPParams{
+		URL:              ctxt.ETHRPCURL,
+		RequestBody:      requestBytes,
+		MaxWaitInSeconds: ctxt.MaxWaitInSeconds,
+	}
+	body, err := common.HTTPPost(params)
 	if err != nil {
 		return 0, err
 	}

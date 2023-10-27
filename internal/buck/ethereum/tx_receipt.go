@@ -34,12 +34,16 @@ func GetTransactionReceipt(url string, txHash string) (*TxReceipt, error) {
 		"params":  []interface{}{txHash},
 		"id":      1,
 	}
-	requestBody, err := json.Marshal(requestData)
+	requestBytes, err := json.Marshal(requestData)
 	if err != nil {
 		return nil, err
 	}
 
-	body, err := common.HTTPPost(url, requestBody)
+	params := common.HTTPParams{
+		URL:         url,
+		RequestBody: requestBytes,
+	}
+	body, err := common.HTTPPost(params)
 	if err != nil {
 		return nil, err
 	}

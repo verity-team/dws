@@ -23,7 +23,10 @@ type CexIOResponse struct {
 }
 
 func GetCexIOETHUSDLastPrice() (decimal.Decimal, error) {
-	responseBody, err := common.HTTPGet("https://cex.io/api/ticker/ETH/USD")
+	params := common.HTTPParams{
+		URL: "https://cex.io/api/ticker/ETH/USD",
+	}
+	responseBody, err := common.HTTPGet(params)
 	if err != nil {
 		return decimal.Zero, err
 	}

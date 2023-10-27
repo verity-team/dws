@@ -13,7 +13,10 @@ type BitfinexTickerResponse struct {
 }
 
 func GetBitfinexETHPrice() (decimal.Decimal, error) {
-	responseBody, err := common.HTTPGet("https://api.bitfinex.com/v1/pubticker/ETHUSD")
+	params := common.HTTPParams{
+		URL: "https://api.bitfinex.com/v1/pubticker/ETHUSD",
+	}
+	responseBody, err := common.HTTPGet(params)
 	if err != nil {
 		return decimal.Zero, err
 	}

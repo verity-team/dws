@@ -18,7 +18,10 @@ type Kline struct {
 
 func GetHistoricalPriceFromBinance(ts time.Time) ([]Kline, error) {
 	url := fmt.Sprintf("https://api.binance.com/api/v3/klines?symbol=ETHUSDT&interval=1m&limit=10&startTime=%d", ts.UnixMilli())
-	responseBody, err := common.HTTPGet(url)
+	params := common.HTTPParams{
+		URL: url,
+	}
+	responseBody, err := common.HTTPGet(params)
 	if err != nil {
 		return nil, err
 	}

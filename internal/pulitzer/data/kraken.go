@@ -16,7 +16,10 @@ type KrakenTickerResponse struct {
 }
 
 func GetKrakenETHPrice() (decimal.Decimal, error) {
-	responseBody, err := common.HTTPGet("https://api.kraken.com/0/public/Ticker?pair=ETHUSD")
+	params := common.HTTPParams{
+		URL: "https://api.kraken.com/0/public/Ticker?pair=ETHUSD",
+	}
+	responseBody, err := common.HTTPGet(params)
 	if err != nil {
 		return decimal.Zero, err
 	}

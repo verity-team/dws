@@ -24,13 +24,14 @@ type ERC20 struct {
 }
 
 type Context struct {
-	SaleParams      []SaleParam
-	StableCoins     map[string]ERC20
-	ReceivingAddr   string
-	ETHRPCURL       string
-	DB              *sqlx.DB
-	BlockStorage    string
-	UpdateLastBlock bool
+	SaleParams       []SaleParam
+	StableCoins      map[string]ERC20
+	ReceivingAddr    string
+	ETHRPCURL        string
+	DB               *sqlx.DB
+	BlockStorage     string
+	UpdateLastBlock  bool
+	MaxWaitInSeconds int
 }
 
 type Block struct {

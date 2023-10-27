@@ -33,7 +33,12 @@ func GetTransactions(ctxt common.Context, blockNumber uint64) ([]common.Transact
 		return nil, err
 	}
 
-	body, err := common.HTTPPost(ctxt.ETHRPCURL, requestBytes)
+	params := common.HTTPParams{
+		URL:              ctxt.ETHRPCURL,
+		RequestBody:      requestBytes,
+		MaxWaitInSeconds: ctxt.MaxWaitInSeconds,
+	}
+	body, err := common.HTTPPost(params)
 	if err != nil {
 		return nil, err
 	}

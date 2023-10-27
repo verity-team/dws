@@ -82,5 +82,9 @@ func main() {
 	api.RegisterHandlers(e, ds)
 
 	// And we serve HTTP until the world ends.
-	e.Logger.Fatal(e.Start(net.JoinHostPort("0.0.0.0", *port)))
+	err = e.Start(net.JoinHostPort("0.0.0.0", *port))
+	if err != nil {
+		log.Error(err)
+	}
+	log.Info("delphi shutting down")
 }
