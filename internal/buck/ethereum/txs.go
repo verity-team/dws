@@ -1,10 +1,11 @@
 package ethereum
 
 import (
-	"github.com/goccy/go-json"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/goccy/go-json"
 
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
@@ -55,7 +56,7 @@ func GetTransactions(ctxt common.Context, blockNumber uint64) ([]common.Transact
 		log.Error(err)
 		return nil, err
 	}
-	log.Infof("block %d: %d transactions in total", blockNumber, len(block.Transactions))
+	log.Infof("block %d (%v): %d transactions in total", blockNumber, block.Timestamp, len(block.Transactions))
 
 	result, err := filterTransactions(ctxt, *block)
 	if err != nil {
