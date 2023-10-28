@@ -2,7 +2,7 @@ package main
 
 import (
 	"crypto/ecdsa"
-	"encoding/json"
+	"github.com/goccy/go-json"
 	"flag"
 	"fmt"
 	"io"

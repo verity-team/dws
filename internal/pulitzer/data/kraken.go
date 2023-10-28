@@ -1,7 +1,7 @@
 package data
 
 import (
-	"encoding/json"
+	"github.com/goccy/go-json"
 
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
