@@ -8,12 +8,13 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/base64"
-	"github.com/goccy/go-json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"path"
 	"strings"
+
+	"github.com/goccy/go-json"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/labstack/echo/v4"

@@ -1,9 +1,10 @@
 package data
 
 import (
-	"github.com/goccy/go-json"
 	"fmt"
 	"time"
+
+	"github.com/goccy/go-json"
 
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
