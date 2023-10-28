@@ -23,11 +23,17 @@ func (suite *TxReceiptSuite) SetupTest() {
 }
 
 func (suite *TxReceiptSuite) TestSuccess() {
-	rcpt, err := parseTxReceipt(suite.body)
+	rcpts, err := parseTxReceipt(suite.body)
 	assert.Nil(suite.T(), err)
-	assert.Equal(suite.T(), "0x442cf6", rcpt.BlockNumber)
+	assert.Equal(suite.T(), 2, len(rcpts))
+	rcpt := rcpts[0]
+	assert.Equal(suite.T(), "0x44381b", rcpt.BlockNumber)
 	assert.Equal(suite.T(), "0x1", rcpt.Status)
-	assert.Equal(suite.T(), "0x631e9b031b16b18172a2b9d66c3668a68a668d20", rcpt.From)
+	assert.Equal(suite.T(), "0x379738c60f658601be79e267e79cc38cea07c8f2", rcpt.From)
+	rcpt = rcpts[1]
+	assert.Equal(suite.T(), "0x456d71", rcpt.BlockNumber)
+	assert.Equal(suite.T(), "0x1", rcpt.Status)
+	assert.Equal(suite.T(), "0x9a6394faa769f066b17bd329a9d5f028719bb0bc", rcpt.From)
 }
 
 func TestTxReceiptSuite(t *testing.T) {

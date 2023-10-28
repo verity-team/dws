@@ -3,6 +3,7 @@ package ethereum
 import (
 	"encoding/json"
 
+	"github.com/labstack/gommon/log"
 	"github.com/verity-team/dws/internal/common"
 )
 
@@ -27,20 +28,51 @@ type TxReceipt struct {
 	Type              string `json:"type"`
 }
 
-func GetTransactionReceipt(url string, txHash string) (*TxReceipt, error) {
-	requestData := map[string]interface{}{
-		"jsonrpc": "2.0",
-		"method":  "eth_getTransactionReceipt",
-		"params":  []interface{}{txHash},
-		"id":      1,
+func GetTxReceipts(ctxt common.Context, txs []common.Transaction) ([]TxReceipt, error) {
+	if len(txs) == 0 {
+		return nil, nil
 	}
-	requestBytes, err := json.Marshal(requestData)
+	var res []TxReceipt
+	batchSize := 127
+
+	for i := 0; i < len(txs); i += batchSize {
+		end := i + batchSize
+		if end > len(txs) {
+			end = len(txs)
+		}
+
+		batch := txs[i:end]
+
+		// Process the batch
+		br, err := doGetTxReceipts(ctxt, batch)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, br...)
+	}
+	return res, nil
+}
+func doGetTxReceipts(ctxt common.Context, txs []common.Transaction) ([]TxReceipt, error) {
+	if len(txs) == 0 {
+		return nil, nil
+	}
+	rd := make([]map[string]interface{}, len(txs))
+	for idx, tx := range txs {
+		rq := map[string]interface{}{
+			"jsonrpc": "2.0",
+			"method":  "eth_getTransactionReceipt",
+			"params":  []interface{}{tx.Hash},
+			"id":      idx + 1,
+		}
+		rd[idx] = rq
+	}
+	requestBytes, err := json.Marshal(rd)
 	if err != nil {
 		return nil, err
 	}
 
 	params := common.HTTPParams{
-		URL:         url,
+		URL:         ctxt.ETHRPCURL,
 		RequestBody: requestBytes,
 	}
 	body, err := common.HTTPPost(params)
@@ -51,15 +83,23 @@ func GetTransactionReceipt(url string, txHash string) (*TxReceipt, error) {
 	if err != nil {
 		return nil, err
 	}
+	err = writeTxReceiptsToFile(ctxt, txs[0].BlockNumber, body)
+	if err != nil {
+		log.Warnf("failed to persist tx receipts for block %d to disk", txs[0].BlockNumber)
+	}
 
 	return result, nil
 }
 
-func parseTxReceipt(body []byte) (*TxReceipt, error) {
-	var resp TxReceiptBody
+func parseTxReceipt(body []byte) ([]TxReceipt, error) {
+	var resp []TxReceiptBody
 	err := json.Unmarshal(body, &resp)
 	if err != nil {
 		return nil, err
 	}
-	return &resp.Result, nil
+	var res []TxReceipt = make([]TxReceipt, len(resp))
+	for i, d := range resp {
+		res[i] = d.Result
+	}
+	return res, nil
 }
