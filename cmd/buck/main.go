@@ -130,6 +130,12 @@ func main() {
 		return
 	}
 
+	abi, err := ethereum.InitABI()
+	if err != nil {
+		return
+	}
+	ctxt.ABI = abi
+
 	if *singleBlock > 0 {
 		ctxt.UpdateLastBlock = false
 		if *monitorFinal {

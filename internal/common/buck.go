@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/goccy/go-json"
 
 	"github.com/jmoiron/sqlx"
@@ -33,6 +34,7 @@ type Context struct {
 	BlockStorage     string
 	UpdateLastBlock  bool
 	MaxWaitInSeconds int
+	ABI              map[string]abi.ABI
 }
 
 type Block struct {
