@@ -2,12 +2,13 @@ package main
 
 import (
 	"crypto/ecdsa"
-	"github.com/goccy/go-json"
 	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/goccy/go-json"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common/hexutil"
