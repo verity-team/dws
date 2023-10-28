@@ -62,7 +62,7 @@ func GetTransactions(ctxt common.Context, blockNumber uint64) ([]common.Transact
 		return nil, err
 	}
 
-	err = markFailedTxs(ctxt, result)
+	err = markFailedTxs(ctxt, block.Number, result)
 	if err != nil {
 		return nil, err
 	}
@@ -166,16 +166,16 @@ func parseBlock(body []byte) (*common.Block, error) {
 	return &result, nil
 }
 
-func markFailedTxs(ctxt common.Context, txs []common.Transaction) error {
+func markFailedTxs(ctxt common.Context, bn uint64, txs []common.Transaction) error {
 	// check whether any of the _filtered_ transactions have failed
-	for _, tx := range txs {
-		rcpt, err := GetTransactionReceipt(ctxt.ETHRPCURL, tx.Hash)
-		if err != nil {
-			err = fmt.Errorf("failed to get tx receipt for %s, %w", tx.Hash, err)
-			log.Error(err)
-			return err
-		}
-		if strings.ToLower(rcpt.Status) != "0x1" {
+	rcpts, err := GetTxReceipts(ctxt, txs)
+	if err != nil {
+		err = fmt.Errorf("failed to get tx receipts for block %d, %w", bn, err)
+		log.Error(err)
+		return err
+	}
+	for i, tx := range txs {
+		if strings.ToLower(rcpts[i].Status) != "0x1" {
 			tx.Status = string(api.Failed)
 		}
 	}

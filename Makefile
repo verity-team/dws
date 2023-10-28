@@ -16,7 +16,7 @@ clean:
 	rm -f $(BIN_DIR)/pulitzer
 	rm -f $(BIN_DIR)/tt
 
-build: lint
+build: test
 	rm -f $(BIN_DIR)/buck
 	go build -o $(BIN_DIR)/buck -v -ldflags \
 		"-X main.rev=$(version) -X main.bts=$(timestamp)" cmd/buck/main.go
@@ -47,16 +47,24 @@ lint:
 	golangci-lint run
 
 run_delphi:
+	rm /tmp/delphi*.log
 	bin/delphi 2>&1 | tee /tmp/delphi-`date +'%Y-%m-%d_%H-%M-%S'`.log
 
 run_pulitzer:
+	rm /tmp/pulitzer*.log
 	bin/pulitzer 2>&1 | tee /tmp/pulitzer-`date +'%Y-%m-%d_%H-%M-%S'`.log
 	
 run_buck_latest:
+	rm /tmp/buck-latest*.log
 	bin/buck --monitor-latest 2>&1 | tee /tmp/buck-latest-`date +'%Y-%m-%d_%H-%M-%S'`.log
 
 run_buck_final:
+	rm /tmp/buck-final*.log
 	bin/buck --monitor-final 2>&1 | tee /tmp/buck-final-`date +'%Y-%m-%d_%H-%M-%S'`.log
 
 run_buck_old_unconfirmed:
+	rm /tmp/buck-old_unconfirmed*.log
 	bin/buck --monitor-old-unconfirmed 2>&1 | tee /tmp/buck-old_unconfirmed-`date +'%Y-%m-%d_%H-%M-%S'`.log
+
+test: lint
+	go test ./...

@@ -3,6 +3,7 @@ package ethereum
 import (
 	"fmt"
 	"os"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/verity-team/dws/internal/common"
@@ -16,7 +17,19 @@ func writeBlockToFile(ctxt common.Context, blockNumber uint64, json []byte, fina
 		} else {
 			fp = ctxt.BlockStorage + "/" + fmt.Sprintf("%d.json", blockNumber)
 		}
-		err := os.WriteFile(fp, json, 0600)
+		err := os.WriteFile(fp, json, 0400)
+		if err != nil {
+			log.Error(err)
+			return err
+		}
+	}
+	return nil
+}
+
+func writeTxReceiptsToFile(ctxt common.Context, blockNumber uint64, json []byte) error {
+	if ctxt.BlockStorage != "" {
+		fp := ctxt.BlockStorage + "/" + fmt.Sprintf("txr-%d-%d.json", blockNumber, time.Now().UnixMilli())
+		err := os.WriteFile(fp, json, 0400)
 		if err != nil {
 			log.Error(err)
 			return err
