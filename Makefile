@@ -16,7 +16,7 @@ clean:
 	rm -f $(BIN_DIR)/pulitzer
 	rm -f $(BIN_DIR)/tt
 
-build: test
+build: lint
 	rm -f $(BIN_DIR)/buck
 	go build -o $(BIN_DIR)/buck -v -ldflags \
 		"-X main.rev=$(version) -X main.bts=$(timestamp)" cmd/buck/main.go

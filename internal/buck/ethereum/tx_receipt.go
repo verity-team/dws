@@ -32,7 +32,7 @@ func GetTxReceipts(ctxt common.Context, txs []common.Transaction) ([]TxReceipt, 
 	if len(txs) == 0 {
 		return nil, nil
 	}
-	var res []TxReceipt = make([]TxReceipt, len(txs))
+	var res []TxReceipt
 	batchSize := 127
 
 	for i := 0; i < len(txs); i += batchSize {

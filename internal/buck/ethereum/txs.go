@@ -175,7 +175,12 @@ func markFailedTxs(ctxt common.Context, bn uint64, txs []common.Transaction) err
 		return err
 	}
 	for i, tx := range txs {
-		if strings.ToLower(rcpts[i].Status) != "0x1" {
+		rcpt := rcpts[i]
+		if tx.Hash != rcpt.TransactionHash {
+			err = fmt.Errorf("block: %d -- receipt hash ('%s') does not match tx hash ('%s')", bn, rcpt.TransactionHash, tx.Hash)
+			return err
+		}
+		if strings.ToLower(rcpt.Status) != "0x1" {
 			tx.Status = string(api.Failed)
 		}
 	}
