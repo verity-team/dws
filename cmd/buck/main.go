@@ -276,39 +276,34 @@ func runReadyProbe(ctxt common.Context, latest bool) error {
 }
 
 func monitorFinalizedETH(ctxt common.Context, ctx context.Context) error {
-	// most recent *finalized* ETH block published
-	fbn, err := ethereum.GetMaxFinalizedBlockNumber(ctxt)
+	// last *finalized* ETH block published
+	lfbn, err := ethereum.GetMaxFinalizedBlockNumber(ctxt)
 	if err != nil {
 		return err
 	}
-	log.Infof("##### max finalized ETH block: %d", fbn)
+	log.Infof("##### max finalized ETH block: %d", lfbn)
 
-	// number of last finalized block that was processed
+	// number of last finalized block in the db
 	lfdb, err := db.GetLastBlock(ctxt.DB, "eth", db.Finalized)
 	if err != nil {
-		log.Error(err)
 		return err
 	}
 	log.Infof("last finalized block processed (from db): %d", lfdb)
 
-	var startBlock uint64
-	if lfdb <= 0 {
-		// no valid latest finalized block value in the database?
-		// get the block number of the oldest unconfirmed transaction
-		startBlock, err = db.GetOldestUnconfirmed(ctxt.DB)
-		if err != nil {
-			return err
-		}
-		log.Infof("oldest unconfirmed tx block (from db): %d", startBlock)
-		if startBlock == 0 {
-			// no unconfirmed transactions -- nothing to do
-			return nil
-		}
-	} else {
-		startBlock = lfdb + 1
+	// block number of the oldest unconfirmed transaction
+	oubn, err := db.GetOldestUnconfirmed(ctxt.DB)
+	if err != nil {
+		return err
+	}
+	log.Infof("oldest unconfirmed tx block (from db): %d", oubn)
+
+	if oubn == 0 || oubn > lfbn {
+		// no unconfirmed transactions or transactions not finalized yet
+		log.Info("buck/final -- nothing to do")
+		return nil
 	}
 
-	for i := startBlock; i <= fbn; i++ {
+	for i := oubn; i <= lfbn; i++ {
 		select {
 		case <-ctx.Done():
 			log.Info("buck/final - context canceled")
