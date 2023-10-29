@@ -39,15 +39,16 @@ func (suite *TxsSuite) TestLatestBlockSuccess() {
 	assert.Equal(suite.T(), "2023-10-15T00:15:59Z", block.Timestamp.Format(time.RFC3339))
 }
 
-func (suite *TxsSuite) TestLinkTxSuccess() {
+func (suite *TxsSuite) TestUSDTTxSuccess() {
 	block, err := parseBlock(suite.body)
 	assert.Nil(suite.T(), err)
-	input := "0xa9059cbb000000000000000000000000ded1fe6b3f61c8f1d874bb86f086d10ffc3f015400000000000000000000000000000000000000000000000010cac896d2390000"
-	from := "0x379738c60f658601Be79e267e79cC38cEA07c8f2"
-	to := "0x779877A7B0D9E8603169DdbD7836e478b4624789"
-	txHash := "0xf270a01e1ffa619b5262df30dc93d5ea1cf4bff773d6494460a1755abae43989"
-	tx := block.Transactions[77]
+	input := "0xa9059cbb0000000000000000000000007c298d22e78ead0b20c6a32dec24c6d0b9f2074f000000000000000000000000000000000000000000000000000000007ac5f665"
+	from := "0x974caa59e49682cda0ad2bbe82983419a2ecc400"
+	to := "0xdac17f958d2ee523a2206206994597c13d831ec7"
+	txHash := "0x3c8273e0d522380ed5c1caf943ede820251581dc77cc6b80b68a47d926b586cc"
+	tx := block.Transactions[44]
 	assert.Equal(suite.T(), input, tx.Input)
+	assert.Equal(suite.T(), "0x0", tx.Value)
 	assert.Equal(suite.T(), strings.ToLower(from), strings.ToLower(tx.From))
 	assert.Equal(suite.T(), strings.ToLower(to), strings.ToLower(tx.To))
 	assert.Equal(suite.T(), strings.ToLower(txHash), strings.ToLower(tx.Hash))
@@ -59,7 +60,7 @@ func (suite *TxsSuite) TestInputDataUSDTLong() {
 	assert.Nil(suite.T(), err)
 	to := "0x99870DE8AE594e6e8705fc6689E89B4d039AF1e2"
 	assert.Equal(suite.T(), strings.ToLower(recipient), strings.ToLower(to))
-	assert.Equal(suite.T(), decimal.NewFromBigInt(big.NewInt(469152674), 1), amount)
+	assert.Equal(suite.T(), decimal.NewFromBigInt(big.NewInt(469152674), 0), amount)
 }
 
 func (suite *TxsSuite) TestInputDataUSDTShort() {
@@ -68,7 +69,7 @@ func (suite *TxsSuite) TestInputDataUSDTShort() {
 	assert.Nil(suite.T(), err)
 	to := "0x0D0707963952f2fBA59dD06f2b425ace40b492Fe"
 	assert.Equal(suite.T(), strings.ToLower(recipient), strings.ToLower(to))
-	assert.Equal(suite.T(), decimal.NewFromBigInt(big.NewInt(392876180), 1), amount)
+	assert.Equal(suite.T(), decimal.NewFromBigInt(big.NewInt(392876180), 0), amount)
 }
 
 func (suite *TxsSuite) TestInputDataUSDCShort() {
@@ -77,7 +78,7 @@ func (suite *TxsSuite) TestInputDataUSDCShort() {
 	assert.Nil(suite.T(), err)
 	to := "0x4667A044543e7f1B7D3a4b88396e024BE0E34F36"
 	assert.Equal(suite.T(), strings.ToLower(recipient), strings.ToLower(to))
-	assert.Equal(suite.T(), decimal.NewFromBigInt(big.NewInt(224990000), 1), amount)
+	assert.Equal(suite.T(), decimal.NewFromBigInt(big.NewInt(224990000), 0), amount)
 }
 
 func (suite *TxsSuite) TestERC20Tx() {
@@ -96,14 +97,16 @@ func (suite *TxsSuite) TestERC20Tx() {
 			},
 		},
 	}
+	ctxt.ABI, err = InitABI()
+	assert.Nil(suite.T(), err)
 	txs, err := filterTransactions(ctxt, *block)
 	assert.Nil(suite.T(), err)
 	assert.Equal(suite.T(), 1, len(txs))
 	assert.Equal(suite.T(), hash, txs[0].Hash)
 	assert.Equal(suite.T(), block.Hash, txs[0].BlockHash)
 	assert.Equal(suite.T(), block.Number, txs[0].BlockNumber)
-	assert.Equal(suite.T(), "1.210000", txs[0].Value)
-	assert.Equal(suite.T(), "2023-10-11T16:04:00Z", txs[0].BlockTime.Format(time.RFC3339))
+	assert.Equal(suite.T(), "224.990000", txs[0].Value)
+	assert.Equal(suite.T(), "2023-10-15T00:15:59Z", txs[0].BlockTime.Format(time.RFC3339))
 }
 
 func (suite *TxsSuite) TestETHTx() {
@@ -122,14 +125,16 @@ func (suite *TxsSuite) TestETHTx() {
 			},
 		},
 	}
+	ctxt.ABI, err = InitABI()
+	assert.Nil(suite.T(), err)
 	txs, err := filterTransactions(ctxt, *block)
 	assert.Nil(suite.T(), err)
 	assert.Equal(suite.T(), 1, len(txs))
 	assert.Equal(suite.T(), hash, txs[0].Hash)
 	assert.Equal(suite.T(), block.Hash, txs[0].BlockHash)
 	assert.Equal(suite.T(), block.Number, txs[0].BlockNumber)
-	assert.Equal(suite.T(), "0.10000000", txs[0].Value)
-	assert.Equal(suite.T(), "2023-10-11T16:04:00Z", txs[0].BlockTime.Format(time.RFC3339))
+	assert.Equal(suite.T(), "0.00003592", txs[0].Value)
+	assert.Equal(suite.T(), "2023-10-15T00:15:59Z", txs[0].BlockTime.Format(time.RFC3339))
 }
 
 func TestTxsSuite(t *testing.T) {

@@ -221,7 +221,7 @@ func parseInputData(abi abi.ABI, input string) (string, decimal.Decimal, error) 
 		return "", decimal.Zero, fmt.Errorf("failed to unpack input, '%s'", input)
 	}
 
-	value := decimal.NewFromBigInt(args["_value"].(*big.Int), 1)
+	value := decimal.NewFromBigInt(args["_value"].(*big.Int), 0)
 	to := args["_to"].(ethc.Address).String()
 	return to, value, nil
 }
