@@ -431,7 +431,7 @@ func monitorOldUnconfirmed(ctxt common.Context, ctx context.Context) error {
 		return err
 	}
 	if len(bns) == 0 {
-		log.Info("##### *no* unconfirmed txs older than 15 minutes")
+		log.Info("##### *no* unconfirmed txs older than 30 minutes")
 		return nil
 	}
 	log.Infof("##### ETH blocks with old unconfirmed txs: %v", bns)
