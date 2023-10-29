@@ -136,8 +136,8 @@ CREATE TABLE finalized_block (
     block_size VARCHAR(16) NOT NULL,
     state_root VARCHAR(66) NOT NULL,
     block_time TIMESTAMP NOT NULL,
-    -- enough to keep 800 tx hashes
-    transactions VARCHAR(53600) NOT NULL,
+    -- enough to keep 1600 tx hashes
+    transactions VARCHAR(107200) NOT NULL,
 
     modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
     created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())

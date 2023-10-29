@@ -183,11 +183,14 @@ type GenerateCodeParams struct {
 	// DelphiKey a key/address (public)
 	DelphiKey DelphiKey `json:"delphi-key"`
 
-	// DelphiTs caller timestamp (number of milliseconds since Unix epoch) -- included
+	// DelphiTs caller timestamp (number of seconds since Unix epoch) -- included
 	// to prevent replay attacks; must not be older than 5 seconds
 	DelphiTs DelphiTs `json:"delphi-ts"`
 
-	// DelphiSignature signature over the path, timestamp and body
+	// DelphiSignature signature over a string like: `affiliate code, 2023-10-23
+	// 18:45:19+00:00`.  The message is constructed from the words that make
+	// up the path of the REST API endpoint called. *Important*: please use
+	// UTC timestamps only.
 	DelphiSignature DelphiSignature `json:"delphi-signature"`
 }
 

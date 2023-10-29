@@ -130,6 +130,12 @@ func main() {
 		return
 	}
 
+	abi, err := ethereum.InitABI()
+	if err != nil {
+		return
+	}
+	ctxt.ABI = abi
+
 	if *singleBlock > 0 {
 		ctxt.UpdateLastBlock = false
 		if *monitorFinal {
@@ -173,7 +179,7 @@ func main() {
 			*port = defaultPort + 2
 		}
 		ctxt.UpdateLastBlock = false
-		_, err = s.Every("30m").Do(monitorOldUnconfirmed, *ctxt, ctx)
+		_, err = s.Every("10m").Do(monitorOldUnconfirmed, *ctxt, ctx)
 		if err != nil {
 			log.Error(err)
 			return
@@ -323,7 +329,7 @@ func processFinalized(ctxt common.Context, bn uint64) error {
 	if err != nil {
 		return err
 	}
-	log.Infof("finalized block %d: %d transaction hashes", bn, len(fb.Transactions))
+	log.Infof("finalized block %d (%v): %d transaction hashes", bn, fb.Timestamp.Format(time.RFC3339), len(fb.Transactions))
 	if len(fb.Transactions) == 0 {
 		err = db.SetLastBlock(ctxt, "eth", db.Finalized, bn)
 		if err != nil {
@@ -425,7 +431,7 @@ func monitorOldUnconfirmed(ctxt common.Context, ctx context.Context) error {
 		return err
 	}
 	if len(bns) == 0 {
-		log.Info("##### *no* unconfirmed txs older than 30 minutes")
+		log.Info("##### *no* unconfirmed txs older than 10 minutes")
 		return nil
 	}
 	log.Infof("##### ETH blocks with old unconfirmed txs: %v", bns)

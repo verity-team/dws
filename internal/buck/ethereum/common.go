@@ -19,8 +19,7 @@ func writeBlockToFile(ctxt common.Context, blockNumber uint64, json []byte, fina
 		}
 		err := os.WriteFile(fp, json, 0400)
 		if err != nil {
-			log.Error(err)
-			return err
+			log.Warn(err)
 		}
 	}
 	return nil
@@ -31,8 +30,7 @@ func writeTxReceiptsToFile(ctxt common.Context, blockNumber uint64, json []byte)
 		fp := ctxt.BlockStorage + "/" + fmt.Sprintf("txr-%d-%d.json", blockNumber, time.Now().UnixMilli())
 		err := os.WriteFile(fp, json, 0400)
 		if err != nil {
-			log.Error(err)
-			return err
+			log.Warn(err)
 		}
 	}
 	return nil
