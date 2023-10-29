@@ -179,7 +179,7 @@ func main() {
 			*port = defaultPort + 2
 		}
 		ctxt.UpdateLastBlock = false
-		_, err = s.Every("10m").Do(monitorOldUnconfirmed, *ctxt, ctx)
+		_, err = s.Every("15m").Do(monitorOldUnconfirmed, *ctxt, ctx)
 		if err != nil {
 			log.Error(err)
 			return
@@ -431,7 +431,7 @@ func monitorOldUnconfirmed(ctxt common.Context, ctx context.Context) error {
 		return err
 	}
 	if len(bns) == 0 {
-		log.Info("##### *no* unconfirmed txs older than 10 minutes")
+		log.Info("##### *no* unconfirmed txs older than 15 minutes")
 		return nil
 	}
 	log.Infof("##### ETH blocks with old unconfirmed txs: %v", bns)
