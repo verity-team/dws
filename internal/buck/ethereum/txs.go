@@ -101,6 +101,11 @@ func filterTransactions(ctxt common.Context, b common.Block) ([]common.Transacti
 		}
 		// ERC-20 transfer?
 		if strings.HasPrefix(tx.Input, "0xa9059cbb") {
+			if tx.Input == "0xa9059cbb" {
+				// tx with malformed input, ignore it
+				log.Warnf("malformed tx ('%s') with input '%s'", tx.Hash, tx.Input)
+				continue
+			}
 			// check that this is a stable coin tx
 			erc20, ok := ctxt.StableCoins[strings.ToLower(tx.To)]
 			if ok {
