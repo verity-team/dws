@@ -104,19 +104,8 @@ func filterTransactions(ctxt common.Context, b common.Block) ([]common.Transacti
 			// check that this is a stable coin tx
 			erc20, ok := ctxt.StableCoins[strings.ToLower(tx.To)]
 			if ok {
-				// look up ABI
-				abi, ok := ctxt.ABI[erc20.Asset]
-				if !ok {
-					err := fmt.Errorf("No ABI for ERC-20 '%s', tx '%s'", erc20.Asset, tx.Hash)
-					log.Error(err)
-					err = db.PersistFailedTx(ctxt.DB, b, tx)
-					if err != nil {
-						log.Error(err)
-					}
-					continue
-				}
 				// yes, actual receiver and amount are encoded in the input string
-				receiver, amount, err := parseInputData(abi, tx.Input)
+				receiver, amount, err := parseInputData(ctxt.ABI, erc20.Asset, tx.Input)
 				if err != nil {
 					err = fmt.Errorf("failed to process ERC-20 tx '%s', %w", tx.Hash, err)
 					log.Error(err)
@@ -203,7 +192,12 @@ func markFailedTxs(ctxt common.Context, bn uint64, txs []common.Transaction) err
 	return nil
 }
 
-func parseInputData(abi abi.ABI, input string) (string, decimal.Decimal, error) {
+func parseInputData(abis map[string]abi.ABI, erc20, input string) (string, decimal.Decimal, error) {
+	// look up ABI
+	abi, ok := abis[erc20]
+	if !ok {
+		return "", decimal.Zero, fmt.Errorf("No ABI for ERC-20 '%s'", erc20)
+	}
 	di, err := hex.DecodeString(input[2:])
 	if err != nil {
 		return "", decimal.Zero, fmt.Errorf("failed to decode input, '%s'", input)

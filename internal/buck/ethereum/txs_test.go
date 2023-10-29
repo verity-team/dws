@@ -56,7 +56,7 @@ func (suite *TxsSuite) TestUSDTTxSuccess() {
 
 func (suite *TxsSuite) TestInputDataUSDTLong() {
 	input := "0xa9059cbb00000000000000000000000099870de8ae594e6e8705fc6689e89b4d039af1e2000000000000000000000000000000000000000000000000000000001bf6b3a295c343657f5eb02e5b549f80caa5e270c71972aded06826284169bf492b5c658"
-	recipient, amount, err := parseInputData(suite.abi["usdt"], input)
+	recipient, amount, err := parseInputData(suite.abi, "usdt", input)
 	assert.Nil(suite.T(), err)
 	to := "0x99870DE8AE594e6e8705fc6689E89B4d039AF1e2"
 	assert.Equal(suite.T(), strings.ToLower(recipient), strings.ToLower(to))
@@ -65,7 +65,7 @@ func (suite *TxsSuite) TestInputDataUSDTLong() {
 
 func (suite *TxsSuite) TestInputDataUSDTShort() {
 	input := "0xa9059cbb0000000000000000000000000d0707963952f2fba59dd06f2b425ace40b492fe00000000000000000000000000000000000000000000000000000000176ad094"
-	recipient, amount, err := parseInputData(suite.abi["usdt"], input)
+	recipient, amount, err := parseInputData(suite.abi, "usdt", input)
 	assert.Nil(suite.T(), err)
 	to := "0x0D0707963952f2fBA59dD06f2b425ace40b492Fe"
 	assert.Equal(suite.T(), strings.ToLower(recipient), strings.ToLower(to))
@@ -74,7 +74,7 @@ func (suite *TxsSuite) TestInputDataUSDTShort() {
 
 func (suite *TxsSuite) TestInputDataUSDCShort() {
 	input := "0xa9059cbb0000000000000000000000004667a044543e7f1b7d3a4b88396e024be0e34f36000000000000000000000000000000000000000000000000000000000d691330"
-	recipient, amount, err := parseInputData(suite.abi["usdc"], input)
+	recipient, amount, err := parseInputData(suite.abi, "usdc", input)
 	assert.Nil(suite.T(), err)
 	to := "0x4667A044543e7f1B7D3a4b88396e024BE0E34F36"
 	assert.Equal(suite.T(), strings.ToLower(recipient), strings.ToLower(to))
