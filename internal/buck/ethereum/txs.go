@@ -60,7 +60,7 @@ func GetTransactions(ctxt common.Context, blockNumber uint64) ([]common.Transact
 		log.Error(err)
 		return nil, err
 	}
-	log.Infof("block %d (%v): %d transactions in total", blockNumber, block.Timestamp, len(block.Transactions))
+	log.Infof("block %d (%v): %d transactions in total", blockNumber, block.Timestamp.Format(time.RFC3339), len(block.Transactions))
 
 	result, err := filterTransactions(ctxt, *block)
 	if err != nil {

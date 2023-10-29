@@ -329,7 +329,7 @@ func processFinalized(ctxt common.Context, bn uint64) error {
 	if err != nil {
 		return err
 	}
-	log.Infof("finalized block %d (%v): %d transaction hashes", bn, fb.Timestamp, len(fb.Transactions))
+	log.Infof("finalized block %d (%v): %d transaction hashes", bn, fb.Timestamp.Format(time.RFC3339), len(fb.Transactions))
 	if len(fb.Transactions) == 0 {
 		err = db.SetLastBlock(ctxt, "eth", db.Finalized, bn)
 		if err != nil {
