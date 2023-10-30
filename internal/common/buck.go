@@ -44,6 +44,44 @@ type Block struct {
 	Transactions []Transaction `db:"-" json:"transactions"`
 }
 
+func (b *Block) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" || string(data) == `""` {
+		return nil
+	}
+
+	type block struct {
+		Hash         string        `json:"hash"`
+		HexNumber    string        `json:"number"`
+		HexSeconds   string        `json:"timestamp"`
+		Transactions []Transaction `json:"transactions"`
+	}
+
+	var pb block
+	if err := json.Unmarshal(data, &pb); err != nil {
+		return err
+	}
+
+	seconds, err := HexStringToDecimal(pb.HexSeconds)
+	if err != nil {
+		err = fmt.Errorf("failed to convert block timestamp, %w", err)
+		return err
+	}
+	ts := time.Unix(seconds.IntPart(), 0)
+	b.Timestamp = ts.UTC()
+
+	number, err := HexStringToDecimal(pb.HexNumber)
+	if err != nil {
+		err = fmt.Errorf("failed to convert block number, %w", err)
+		return err
+	}
+	b.Number = uint64(number.IntPart())
+
+	b.Hash = pb.Hash
+	b.Transactions = pb.Transactions
+
+	return nil
+}
+
 type Transaction struct {
 	Hash        string          `db:"tx_hash" json:"hash"`
 	From        string          `db:"address" json:"from"`

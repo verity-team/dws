@@ -141,13 +141,8 @@ func filterTransactions(ctxt common.Context, b common.Block) ([]common.Transacti
 }
 
 func parseBlock(body []byte) (*common.Block, error) {
-	type pblock struct {
-		common.Block
-		HexSeconds string `json:"timestamp"`
-		HexNumber  string `json:"number"`
-	}
 	type Response struct {
-		Block pblock `json:"result"`
+		Block common.Block `json:"result"`
 	}
 
 	var resp Response
@@ -155,25 +150,9 @@ func parseBlock(body []byte) (*common.Block, error) {
 	if err != nil {
 		return nil, err
 	}
-	seconds, err := common.HexStringToDecimal(resp.Block.HexSeconds)
-	if err != nil {
-		err = fmt.Errorf("failed to convert block timestamp, %w", err)
-		return nil, err
-	}
-	number, err := common.HexStringToDecimal(resp.Block.HexNumber)
-	if err != nil {
-		err = fmt.Errorf("failed to convert block number, %w", err)
-		return nil, err
-	}
-	ts := time.Unix(seconds.IntPart(), 0)
-	result := common.Block{
-		Hash:         resp.Block.Hash,
-		Number:       uint64(number.IntPart()),
-		Transactions: resp.Block.Transactions,
-		Timestamp:    ts.UTC(),
-	}
-	log.Infof("parsed block %d, %s -- %d transactions", result.Number, result.Hash, len(result.Transactions))
-	return &result, nil
+	b := resp.Block
+	log.Infof("parsed block %d, %s -- %d transactions", b.Number, b.Hash, len(b.Transactions))
+	return &b, nil
 }
 
 func markFailedTxs(ctxt common.Context, bn uint64, txs []common.Transaction) error {
