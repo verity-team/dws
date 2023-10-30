@@ -114,6 +114,56 @@ type FinalizedBlock struct {
 	Transactions  []string  `db:"transactions" json:"transactions"`
 }
 
+type TxByHash struct {
+	BlockHash        string `json:"blockHash"`
+	BlockNumber      uint64 `json:"blockNumber"`
+	From             string `json:"from"`
+	Hash             string `json:"hash"`
+	To               string `json:"to"`
+	TransactionIndex uint64 `json:"transactionIndex"`
+}
+
+func (t *TxByHash) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" || string(data) == `""` {
+		return nil
+	}
+
+	type tx struct {
+		BlockHash        string `json:"blockHash"`
+		BlockNumber      string `json:"blockNumber"`
+		From             string `json:"from"`
+		Hash             string `json:"hash"`
+		To               string `json:"to"`
+		TransactionIndex string `json:"transactionIndex"`
+	}
+
+	var pd tx
+	if err := json.Unmarshal(data, &pd); err != nil {
+		return err
+	}
+
+	bn, err := HexStringToDecimal(pd.BlockNumber)
+	if err != nil {
+		err = fmt.Errorf("failed to convert block number, %w", err)
+		return err
+	}
+	t.BlockNumber = uint64(bn.IntPart())
+
+	tidx, err := HexStringToDecimal(pd.TransactionIndex)
+	if err != nil {
+		err = fmt.Errorf("failed to convert transaction index, %w", err)
+		return err
+	}
+	t.TransactionIndex = uint64(tidx.IntPart())
+
+	t.BlockHash = pd.BlockHash
+	t.From = pd.From
+	t.Hash = pd.Hash
+	t.To = pd.To
+
+	return nil
+}
+
 func GetContext(erc20Json, saleParamJson string) (*Context, error) {
 	var (
 		err    error

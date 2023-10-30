@@ -526,26 +526,86 @@ func RequestPrice(ctxt common.Context, asset string, ts time.Time) error {
 	return nil
 }
 
-func GetOldUnconfirmed(dbh *sqlx.DB) ([]uint64, error) {
+func GetOldUnconfirmed(dbh *sqlx.DB) ([]string, error) {
 	var (
 		err    error
 		q      string
-		result []uint64
+		hashes []string
 	)
 	q = `
-		SELECT DISTINCT block_number
+		SELECT DISTINCT tx_hash
 		FROM donation
 		WHERE
 			status = 'unconfirmed'
 			AND timezone('utc', block_time) < timezone('utc', NOW()) - INTERVAL '30 minutes'
 		ORDER BY 1
 		`
-	err = dbh.Select(&result, q)
+	err = dbh.Select(&hashes, q)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		err = fmt.Errorf("failed to fetch oldest unconfirmed block number, %w", err)
 		log.Error(err)
 		return nil, err
 	}
 
-	return result, nil
+	return hashes, nil
+}
+
+func FinalizeTx(ctxt common.Context, tx common.TxByHash) error {
+	var err error
+	// start transaction
+	dtx, err := ctxt.DB.Beginx()
+	if err != nil {
+		return err
+	}
+
+	// at the end of the function: commit if there are no errors,
+	// roll back otherwise
+	defer func() {
+		if err != nil {
+			dtx.Rollback() // nolint:errcheck
+		} else {
+			dtx.Commit() // nolint:errcheck
+		}
+	}()
+
+	amount, tokens, err := confirmSingleTx(dtx, tx)
+	if err != nil {
+		return err
+	}
+	log.Infof("finalized tx '%s' confirms %s USD / %d tokens", tx.Hash, amount.StringFixed(2), tokens.IntPart())
+
+	if amount.IsZero() {
+		// nothing to do - return
+		return nil
+	}
+	_, newTokens, err := updateDonationStats(dtx, amount, tokens)
+	if err != nil {
+		return err
+	}
+	if doUpdate, newP := newTokenPrice(ctxt, tokens, newTokens); doUpdate {
+		err = updateTokenPrice(dtx, newP)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func confirmSingleTx(dtx *sqlx.Tx, tx common.TxByHash) (decimal.Decimal, decimal.Decimal, error) {
+	q := `
+		UPDATE donation SET
+			block_number=$1,
+			status='confirmed'
+		WHERE status='unconfirmed' AND tx_hash=$2
+		RETURNING usd_amount, tokens
+	`
+	var amount, tokens decimal.Decimal
+	err := dtx.QueryRowx(q, tx.BlockNumber, tx.Hash).Scan(&amount, &tokens)
+	if err != nil {
+		err = fmt.Errorf("failed to confirm transaction (%s), %w", tx.Hash, err)
+		log.Error(err)
+		return decimal.Zero, decimal.Zero, err
+	}
+	return amount, tokens, nil
 }

@@ -36,9 +36,9 @@ func writeTxReceiptsToFile(ctxt common.Context, bn uint64, json []byte) error {
 	return nil
 }
 
-func writeTxsToFile(ctxt common.Context, bn uint64, json []byte) error {
+func writeTxsToFile(ctxt common.Context, epoch int64, json []byte) error {
 	if ctxt.BlockStorage != "" {
-		fp := ctxt.BlockStorage + "/" + fmt.Sprintf("txs-%d-%d.json", bn, time.Now().UnixMilli())
+		fp := ctxt.BlockStorage + "/" + fmt.Sprintf("txs-%d-%d.json", epoch, time.Now().UnixMilli())
 		err := os.WriteFile(fp, json, 0400)
 		if err != nil {
 			log.Warn(err)
