@@ -276,19 +276,19 @@ func runReadyProbe(ctxt common.Context, latest bool) error {
 }
 
 func monitorFinalizedETH(ctxt common.Context, ctx context.Context) error {
-	// last *finalized* ETH block published
-	lfbn, err := ethereum.GetMaxFinalizedBlockNumber(ctxt)
-	if err != nil {
-		return err
-	}
-	log.Infof("##### max finalized ETH block: %d", lfbn)
-
 	// number of last finalized block in the db
 	lfdb, err := db.GetLastBlock(ctxt.DB, "eth", db.Finalized)
 	if err != nil {
 		return err
 	}
 	log.Infof("last finalized block processed (from db): %d", lfdb)
+
+	// last *finalized* ETH block published
+	lfbn, err := ethereum.GetMaxFinalizedBlockNumber(ctxt)
+	if err != nil {
+		return err
+	}
+	log.Infof("##### max finalized ETH block: %d", lfbn)
 
 	// block number of the oldest unconfirmed transaction
 	oubn, err := db.GetOldestUnconfirmed(ctxt.DB)
@@ -299,7 +299,12 @@ func monitorFinalizedETH(ctxt common.Context, ctx context.Context) error {
 
 	if oubn == 0 || oubn > lfbn {
 		// no unconfirmed transactions or transactions not finalized yet
-		log.Info("buck/final -- nothing to do")
+		if oubn == 0 {
+			log.Info("buck/final -- nothing to do")
+		}
+		if oubn > lfbn {
+			log.Info("buck/final -- tx block not finalized yet")
+		}
 		return nil
 	}
 
