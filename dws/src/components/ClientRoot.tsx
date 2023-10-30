@@ -12,7 +12,7 @@ import React, {
 } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import ConnectModal from "./metamask/wallet/ConnectModal";
-import { getWalletShorthand } from "@/utils/metamask/wallet";
+import { getWalletShorthand, requestAccounts } from "@/utils/metamask/wallet";
 import { connectWalletWithAffiliate } from "@/utils/api/client/affiliateAPI";
 
 interface ClientRootProps {
@@ -61,26 +61,12 @@ const ClientRoot = ({
   }, [account]);
 
   const connectWallet = useCallback(async (): Promise<void> => {
-    const ethereum = window.ethereum;
-    if (ethereum == null) {
-      toast.error("No Ethereum wallet installed");
+    const result = await requestAccounts();
+    if (result == null || result.length === 0) {
       return;
     }
 
-    try {
-      const accounts = await ethereum.request({
-        method: "eth_requestAccounts",
-      });
-      if (accounts == null || !Array.isArray(accounts)) {
-        return;
-      }
-
-      setAccounts(accounts);
-    } catch (err) {
-      console.warn({ err });
-      return;
-    }
-
+    setAccounts(result);
     setSelectWalletOpen(true);
   }, []);
 
