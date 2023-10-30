@@ -48,6 +48,21 @@ const ClientRoot = ({
   const [selectWalletOpen, setSelectWalletOpen] = useState(false);
 
   useEffect(() => {
+    const ethereum = window?.ethereum;
+    if (ethereum == null) {
+      return;
+    }
+
+    ethereum.on("chainChanged", (chainId: string) => {
+      if (chainId === "0x1") {
+        return;
+      }
+
+      window.location.reload();
+    });
+  }, []);
+
+  useEffect(() => {
     if (account === "") {
       return;
     }
