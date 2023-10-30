@@ -32,7 +32,7 @@ const AFCForm = (): ReactElement => {
 
   const [isFormOpen, setFormOpen] = useState(false);
   const [isLoading, setLoading] = useState(false);
-  const [userCode, setUserCode] = useState("TESTING");
+  const [userCode, setUserCode] = useState("");
 
   const { data, error } = useUserDonationData(account);
 
