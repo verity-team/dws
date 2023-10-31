@@ -97,13 +97,31 @@ func main() {
 		"--monitor-old-unconfirmed": *monitorOld,
 	}
 
+	abi, err := ethereum.InitABI()
+	if err != nil {
+		return
+	}
+	ctxt.ABI = abi
+
+	// latest blocks
+	latestCtxt := ctxt
+	latestCtxt.CrawlerType = common.Latest
+
+	// finalized blocks
+	finalCtxt := ctxt
+	finalCtxt.CrawlerType = common.Finalized
+
+	// old, unconfirmed blocks
+	oldCtxt := ctxt
+	oldCtxt.CrawlerType = common.OldUnconfirmed
+
 	if (*lbn > -1) && (*fbn > -1) {
 		log.Error("pick either -set-latest XOR -set-final but not both")
 		return
 	}
 
 	if *lbn >= 0 {
-		err = db.SetLastBlock(*ctxt, "eth", db.Latest, uint64(*lbn))
+		err = db.SetLastBlock(*latestCtxt, "eth", uint64(*lbn))
 		if err != nil {
 			log.Error(err)
 			return
@@ -111,7 +129,7 @@ func main() {
 		return
 	}
 	if *fbn >= 0 {
-		err = db.SetLastBlock(*ctxt, "eth", db.Finalized, uint64(*fbn))
+		err = db.SetLastBlock(*finalCtxt, "eth", uint64(*fbn))
 		if err != nil {
 			log.Error(err)
 			return
@@ -130,18 +148,13 @@ func main() {
 		return
 	}
 
-	abi, err := ethereum.InitABI()
-	if err != nil {
-		return
-	}
-	ctxt.ABI = abi
-
 	if *singleBlock > 0 {
-		ctxt.UpdateLastBlock = false
 		if *monitorFinal {
-			err = processFinalized(*ctxt, uint64(*singleBlock))
+			finalCtxt.UpdateLastBlock = false
+			err = processETH(*finalCtxt, uint64(*singleBlock))
 		} else {
-			err = processLatest(*ctxt, uint64(*singleBlock))
+			latestCtxt.UpdateLastBlock = false
+			err = processETH(*latestCtxt, uint64(*singleBlock))
 		}
 		if err != nil {
 			log.Errorf("failed to process single block %d, %v", *singleBlock, err)
@@ -155,9 +168,10 @@ func main() {
 	g, ctx := errgroup.WithContext(context.Background())
 
 	if *monitorLatest {
-		_, err = s.Every("1m").Do(monitorLatestETH, *ctxt, ctx)
+		_, err = s.Every("1m").Do(monitorETH, *latestCtxt, ctx)
 		if err != nil {
-			log.Fatal(err)
+			log.Error(err)
+			return
 		}
 	}
 
@@ -166,7 +180,7 @@ func main() {
 		if *port == defaultPort {
 			*port = defaultPort + 1
 		}
-		_, err = s.Every("1m").Do(monitorFinalizedETH, *ctxt, ctx)
+		_, err = s.Every("1m").Do(monitorETH, *finalCtxt, ctx)
 		if err != nil {
 			log.Error(err)
 			return
@@ -178,8 +192,8 @@ func main() {
 		if *port == defaultPort {
 			*port = defaultPort + 2
 		}
-		ctxt.UpdateLastBlock = false
-		_, err = s.Every("15m").Do(monitorOldUnconfirmed, *ctxt, ctx)
+		oldCtxt.UpdateLastBlock = false
+		_, err = s.Every("15m").Do(monitorOldUnconfirmed, *oldCtxt, ctx)
 		if err != nil {
 			log.Error(err)
 			return
@@ -264,122 +278,47 @@ func runReadyProbe(ctxt common.Context, latest bool) error {
 		return err
 	}
 	ctxt.MaxWaitInSeconds = 1
-	if latest {
-		_, err = ethereum.GetBlockNumber(ctxt)
-	} else {
-		_, err = ethereum.GetMaxFinalizedBlockNumber(ctxt)
-	}
+	_, err = ethereum.MostRecentBlockNumber(ctxt)
 	if err != nil {
 		log.Error(err)
 	}
 	return err
 }
 
-func monitorFinalizedETH(ctxt common.Context, ctx context.Context) error {
-	// number of last finalized block in the db
-	lfdb, err := db.GetLastBlock(ctxt.DB, "eth", db.Finalized)
-	if err != nil {
-		return err
-	}
-	log.Infof("last finalized block processed (from db): %d", lfdb)
-
-	// last *finalized* ETH block published
-	lfbn, err := ethereum.GetMaxFinalizedBlockNumber(ctxt)
-	if err != nil {
-		return err
-	}
-	log.Infof("##### max finalized ETH block: %d", lfbn)
-
-	// block number of the oldest unconfirmed transaction
-	oubn, err := db.GetOldestUnconfirmed(ctxt.DB)
-	if err != nil {
-		return err
-	}
-	log.Infof("oldest unconfirmed tx block (from db): %d", oubn)
-
-	if oubn == 0 || oubn > lfbn {
-		// no unconfirmed transactions or transactions not finalized yet
-		if oubn == 0 {
-			log.Info("buck/final -- nothing to do")
-		}
-		if oubn > lfbn {
-			log.Info("buck/final -- tx block not finalized yet")
-		}
-		return nil
-	}
-
-	for i := oubn; i <= lfbn; i++ {
-		select {
-		case <-ctx.Done():
-			log.Info("buck/final - context canceled")
-			return nil
-		default:
-			// keep going
-		}
-		err = processFinalized(ctxt, i)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func processFinalized(ctxt common.Context, bn uint64) error {
-	fb, err := ethereum.GetFinalizedBlock(ctxt, bn)
-	if err != nil {
-		return err
-	}
-	log.Infof("finalized block %d (%v): %d transaction hashes", bn, fb.Timestamp.Format(time.RFC3339), len(fb.Transactions))
-	if len(fb.Transactions) == 0 {
-		err = db.SetLastBlock(ctxt, "eth", db.Finalized, bn)
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-
-	err = db.FinalizeTxs(ctxt, *fb)
-	if err != nil {
-		log.Errorf("failed to confirm transactions for finalized block #%d", bn)
-		return err
-	}
-	return nil
-}
-
-func monitorLatestETH(ctxt common.Context, ctx context.Context) error {
+func monitorETH(ctxt common.Context, ctx context.Context) error {
 	// most recent ETH block published
-	lbn, err := ethereum.GetBlockNumber(ctxt)
+	mrbn, err := ethereum.MostRecentBlockNumber(ctxt)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
-	log.Infof("===>> tip of the ETH chain: %d", lbn)
+	log.Infof("===>> buck/%s tip of the ETH chain: %d", ctxt.CrawlerType, mrbn)
 
 	// number of last block that was processed
-	latest, err := db.GetLastBlock(ctxt.DB, "eth", db.Latest)
+	lpbn, err := db.GetLastBlock(ctxt.DB, "eth", ctxt.CrawlerType.String())
 	if err != nil {
 		return err
 	}
-	log.Infof("latest block processed (from db): %d", latest)
+	log.Infof("last block processed (from db): %d", lpbn)
 
 	var startBlock uint64
-	if latest <= 0 {
-		// no valid latest block value in the database?
+	if lpbn <= 0 {
+		// no valid last processed block value in the database?
 		// process the current block
-		startBlock = lbn
+		startBlock = mrbn
 	} else {
-		startBlock = latest + 1
+		startBlock = lpbn + 1
 	}
 
-	for i := startBlock; i <= lbn; i++ {
+	for i := startBlock; i <= mrbn; i++ {
 		select {
 		case <-ctx.Done():
-			log.Info("buck/latest - context canceled")
+			log.Infof("buck/%s - context canceled", ctxt.CrawlerType)
 			return nil
 		default:
 			// keep going
 		}
-		err = processLatest(ctxt, i)
+		err = processETH(ctxt, i)
 		if err != nil {
 			return err
 		}
@@ -387,7 +326,7 @@ func monitorLatestETH(ctxt common.Context, ctx context.Context) error {
 	return nil
 }
 
-func processLatest(ctxt common.Context, bn uint64) error {
+func processETH(ctxt common.Context, bn uint64) error {
 	txs, err := ethereum.GetTransactions(ctxt, bn)
 	if err != nil {
 		log.Error(err)
@@ -395,7 +334,7 @@ func processLatest(ctxt common.Context, bn uint64) error {
 	}
 	log.Infof("block %d: %d filtered transactions", bn, len(txs))
 	if len(txs) == 0 {
-		err = db.SetLastBlock(ctxt, "eth", db.Latest, bn)
+		err = db.SetLastBlock(ctxt, "eth", bn)
 		if err != nil {
 			return err
 		}
@@ -409,7 +348,7 @@ func processLatest(ctxt common.Context, bn uint64) error {
 	if err != nil {
 		// request the missing price and let's hope it is avaiable next time we
 		// need it
-		log.Infof("requesting price for ETH/%s", blockTime)
+		log.Infof("requesting price for ETH/%s", blockTime.Format(time.RFC3339))
 		err2 := db.RequestPrice(ctxt, "eth", blockTime)
 		if err2 != nil {
 			log.Errorf("failed to request price for ETH/%s, %v", blockTime, err2)
@@ -417,7 +356,7 @@ func processLatest(ctxt common.Context, bn uint64) error {
 		return err
 	}
 	log.Infof("eth price: %s", ethPrice)
-	err = db.PersistTxs(ctxt, bn, ethPrice, txs, false)
+	err = db.PersistTxs(ctxt, bn, ethPrice, txs)
 	if err != nil {
 		log.Error(err)
 		return err
@@ -437,7 +376,7 @@ func monitorOldUnconfirmed(ctxt common.Context, ctx context.Context) error {
 	log.Infof("##### old unconfirmed txs: %v", hashes)
 
 	// most recent *finalized* ETH block published
-	mfbn, err := ethereum.GetMaxFinalizedBlockNumber(ctxt)
+	mfbn, err := ethereum.MostRecentBlockNumber(ctxt)
 	if err != nil {
 		return err
 	}

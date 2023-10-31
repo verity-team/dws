@@ -13,24 +13,7 @@ import (
 	"github.com/verity-team/dws/internal/common"
 )
 
-type Label int
-
-const (
-	Latest Label = iota
-	Finalized
-)
-
-func (l Label) String() string {
-	switch l {
-	case Latest:
-		return "latest"
-	case Finalized:
-		return "finalized"
-	}
-	return "invalid label"
-}
-
-func GetLastBlock(dbh *sqlx.DB, chain string, l Label) (uint64, error) {
+func GetLastBlock(dbh *sqlx.DB, chain string, label string) (uint64, error) {
 	var (
 		err    error
 		q      string
@@ -41,9 +24,9 @@ func GetLastBlock(dbh *sqlx.DB, chain string, l Label) (uint64, error) {
 		FROM last_block
 		WHERE chain=$1 AND label=$2
 		`
-	err = dbh.Get(&result, q, chain, l.String())
+	err = dbh.Get(&result, q, chain, label)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		err = fmt.Errorf("failed to fetch last block for %s/%s, %w", chain, l.String(), err)
+		err = fmt.Errorf("failed to fetch last block for %s/%s, %w", chain, label, err)
 		log.Error(err)
 		return 0, err
 	}
@@ -51,7 +34,7 @@ func GetLastBlock(dbh *sqlx.DB, chain string, l Label) (uint64, error) {
 	return result, nil
 }
 
-func SetLastBlock(ctxt common.Context, chain string, l Label, lbn uint64) error {
+func SetLastBlock(ctxt common.Context, chain string, lbn uint64) error {
 	if !ctxt.UpdateLastBlock {
 		return nil
 	}
@@ -59,15 +42,22 @@ func SetLastBlock(ctxt common.Context, chain string, l Label, lbn uint64) error 
 		err error
 		q   string
 	)
+
+	if ctxt.CrawlerType != common.Latest && ctxt.CrawlerType != common.Finalized {
+		err = fmt.Errorf("invalid crawler type: %s", ctxt.CrawlerType)
+		log.Error(err)
+		return err
+	}
+
 	q = `
 		INSERT INTO last_block(chain, label, value) VALUES($1, $2, $3)
 		ON CONFLICT (chain, label)
 		DO UPDATE SET value = $3
 		WHERE last_block.chain=$1 and last_block.label = $2
 	`
-	_, err = ctxt.DB.Exec(q, chain, l.String(), lbn)
+	_, err = ctxt.DB.Exec(q, chain, ctxt.CrawlerType.String(), lbn)
 	if err != nil {
-		err = fmt.Errorf("failed to set last block for %s/%s, %w", l.String(), chain, err)
+		err = fmt.Errorf("failed to set last block for %s/%s, %w", ctxt.CrawlerType.String(), chain, err)
 		log.Error(err)
 		return err
 	}
@@ -75,8 +65,14 @@ func SetLastBlock(ctxt common.Context, chain string, l Label, lbn uint64) error 
 	return nil
 }
 
-func PersistTxs(ctxt common.Context, bn uint64, ethPrice decimal.Decimal, txs []common.Transaction, final bool) error {
+func PersistTxs(ctxt common.Context, bn uint64, ethPrice decimal.Decimal, txs []common.Transaction) error {
 	var err error
+
+	if ctxt.CrawlerType != common.Latest && ctxt.CrawlerType != common.Finalized {
+		err = fmt.Errorf("invalid crawler type: %s", ctxt.CrawlerType)
+		log.Error(err)
+		return err
+	}
 
 	// get token price
 	tokenPrice, err := getTokenPrice(ctxt)
@@ -115,21 +111,17 @@ func PersistTxs(ctxt common.Context, bn uint64, ethPrice decimal.Decimal, txs []
 	}
 
 	if ctxt.UpdateLastBlock {
-		label := Latest
-		if final {
-			label = Finalized
-		}
-		err = updateLastBlock(dtx, "eth", label, bn)
+		err = updateLastBlock(dtx, "eth", ctxt.CrawlerType.String(), bn)
 		if err != nil {
 			return err
 		}
-		log.Infof("updated last %s eth block to %d", label, bn)
+		log.Infof("updated last %s eth block to %d", ctxt.CrawlerType, bn)
 	}
 
 	return nil
 }
 
-func updateLastBlock(dbt *sqlx.Tx, chain string, l Label, lbn uint64) error {
+func updateLastBlock(dbt *sqlx.Tx, chain string, label string, lbn uint64) error {
 	var (
 		err error
 		q   string
@@ -140,9 +132,9 @@ func updateLastBlock(dbt *sqlx.Tx, chain string, l Label, lbn uint64) error {
 		DO UPDATE SET value = $3
 		WHERE last_block.chain=$1 and last_block.label = $2
 	`
-	_, err = dbt.Exec(q, chain, l.String(), lbn)
+	_, err = dbt.Exec(q, chain, label, lbn)
 	if err != nil {
-		err = fmt.Errorf("failed to update last block for %s/%s, %w", l.String(), chain, err)
+		err = fmt.Errorf("failed to update last block for %s/%s, %w", label, chain, err)
 		log.Error(err)
 		return err
 	}
@@ -357,7 +349,7 @@ func FinalizeTxs(ctxt common.Context, fb common.FinalizedBlock) error {
 		// only update last block if all went well
 		if err == nil {
 			if ctxt.UpdateLastBlock {
-				err = updateLastBlock(dtx, "eth", Finalized, fb.Number)
+				err = updateLastBlock(dtx, "eth", ctxt.CrawlerType.String(), fb.Number)
 				if err != nil {
 					log.Infof("updated last finalized eth block to %d", fb.Number)
 				}

@@ -9,6 +9,13 @@ import (
 	"github.com/verity-team/dws/internal/common"
 )
 
+type EthGetBlockByNumberRequest struct {
+	JsonRPC string        `json:"jsonrpc"`
+	Method  string        `json:"method"`
+	Params  []interface{} `json:"params"`
+	ID      int           `json:"id"`
+}
+
 func writeBlockToFile(ctxt common.Context, bn uint64, json []byte, final bool) error {
 	if ctxt.BlockStorage != "" {
 		var fp string
