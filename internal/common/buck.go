@@ -114,6 +114,14 @@ type FinalizedBlock struct {
 	Transactions  []string  `db:"transactions" json:"transactions"`
 }
 
+func (fb *FinalizedBlock) TXMap() map[string]bool {
+	txm := make(map[string]bool)
+	for _, hash := range fb.Transactions {
+		txm[hash] = true
+	}
+	return txm
+}
+
 type TxByHash struct {
 	BlockHash        string `json:"blockHash"`
 	BlockNumber      uint64 `json:"blockNumber"`
@@ -123,6 +131,7 @@ type TxByHash struct {
 	TransactionIndex uint64 `json:"transactionIndex"`
 	FBBlockTime      time.Time
 	FBBlockHash      string
+	FBContainsTx     bool
 }
 
 func (t *TxByHash) UnmarshalJSON(data []byte) error {

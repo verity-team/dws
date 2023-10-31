@@ -54,18 +54,22 @@ func addFBData(ctxt common.Context, txs []common.TxByHash) error {
 	}
 	// get the block times for the blocks that finalize the given transactions
 	fbs := make(map[uint64]common.FinalizedBlock)
+	fbHashes := make(map[uint64]map[string]bool)
 	for bn := range blocks {
 		fb, err := GetFinalizedBlock(ctxt, bn)
 		if err != nil {
 			return err
 		}
 		fbs[fb.Number] = *fb
+		fbHashes[fb.Number] = fb.TXMap()
 	}
 	// now set the block hash/time for the finalized transactions
 	for i := 0; i < len(txs); i++ {
 		if fb, exists := fbs[txs[i].BlockNumber]; exists {
 			txs[i].FBBlockTime = fb.Timestamp
 			txs[i].FBBlockHash = fb.Hash
+			// does the finalized block actually contain the tx?
+			_, txs[i].FBContainsTx = fbHashes[fb.Number][txs[i].Hash]
 		} else {
 			err := fmt.Errorf("internal error: no finalized block for tx '%s' and block number %d", txs[i].Hash, txs[i].BlockNumber)
 			log.Error(err)
