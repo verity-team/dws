@@ -417,7 +417,7 @@ func processLatest(ctxt common.Context, bn uint64) error {
 		return err
 	}
 	log.Infof("eth price: %s", ethPrice)
-	err = db.PersistTxs(ctxt, bn, ethPrice, txs)
+	err = db.PersistTxs(ctxt, bn, ethPrice, txs, false)
 	if err != nil {
 		log.Error(err)
 		return err

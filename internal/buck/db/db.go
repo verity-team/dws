@@ -75,7 +75,7 @@ func SetLastBlock(ctxt common.Context, chain string, l Label, lbn uint64) error 
 	return nil
 }
 
-func PersistTxs(ctxt common.Context, bn uint64, ethPrice decimal.Decimal, txs []common.Transaction) error {
+func PersistTxs(ctxt common.Context, bn uint64, ethPrice decimal.Decimal, txs []common.Transaction, final bool) error {
 	var err error
 
 	// get token price
@@ -115,11 +115,15 @@ func PersistTxs(ctxt common.Context, bn uint64, ethPrice decimal.Decimal, txs []
 	}
 
 	if ctxt.UpdateLastBlock {
-		err = updateLastBlock(dtx, "eth", Latest, bn)
+		label := Latest
+		if final {
+			label = Finalized
+		}
+		err = updateLastBlock(dtx, "eth", label, bn)
 		if err != nil {
 			return err
 		}
-		log.Infof("updated latest eth block to %d", bn)
+		log.Infof("updated last %s eth block to %d", label, bn)
 	}
 
 	return nil
@@ -154,11 +158,16 @@ func persistTx(dtx *sqlx.Tx, tx common.Transaction) error {
 		VALUES(
 			:address, :amount, :usd_amount, :asset, :tokens, :price, :tx_hash,
 			:status, :block_number, :block_hash, :block_time)
-		ON CONFLICT (tx_hash) DO NOTHING
+		ON CONFLICT (tx_hash)
+		DO UPDATE SET
+			block_hash = EXCLUDED.block_hash,
+			block_number = EXCLUDED.block_number,
+			block_time = EXCLUDED.block_time,
+			status = EXCLUDED.status
 		`
 	_, err := dtx.NamedExec(q, tx)
 	if err != nil {
-		err = fmt.Errorf("failed to insert donation for %s, %w", tx.Hash, err)
+		err = fmt.Errorf("failed to upsert donation for %s, %w", tx.Hash, err)
 		log.Error(err)
 		return err
 	}
