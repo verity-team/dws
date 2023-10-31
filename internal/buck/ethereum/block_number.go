@@ -89,10 +89,14 @@ func parseFinalizedBlock(body []byte) (*common.FinalizedBlock, error) {
 }
 
 func MostRecentBlockNumber(ctxt common.Context) (uint64, error) {
+	label := "finalized"
+	if ctxt.CrawlerType == common.Latest {
+		label = "latest"
+	}
 	request := EthGetBlockByNumberRequest{
 		JsonRPC: "2.0",
 		Method:  "eth_getBlockByNumber",
-		Params:  []interface{}{ctxt.CrawlerType.String(), false},
+		Params:  []interface{}{label, false},
 		ID:      1,
 	}
 	requestBytes, err := json.Marshal(request)

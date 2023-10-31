@@ -104,7 +104,7 @@ func PersistTxs(ctxt common.Context, bn uint64, ethPrice decimal.Decimal, txs []
 			continue
 		}
 		log.Infof("persisting tx: %5s -- a: %s, ausd: %s, t: %s, %s", tx.Asset, tx.Value, tx.USDAmount, tx.Tokens, tx.Hash)
-		err = persistTx(dtx, tx)
+		err = persistTx(dtx, tx, ctxt.CrawlerType)
 		if err != nil {
 			return err
 		}
@@ -142,8 +142,16 @@ func updateLastBlock(dbt *sqlx.Tx, chain string, label string, lbn uint64) error
 	return nil
 }
 
-func persistTx(dtx *sqlx.Tx, tx common.Transaction) error {
-	q := `
+func persistTx(dtx *sqlx.Tx, tx common.Transaction, ct common.CrawlerType) error {
+	var err error
+	if ct != common.Latest && ct != common.Finalized {
+		err = fmt.Errorf("invalid crawler type: %s", ct)
+		log.Error(err)
+		return err
+	}
+	var q string
+	if ct == common.Finalized {
+		q = `
 		INSERT INTO donation(
 			address, amount, usd_amount, asset, tokens, price, tx_hash, status,
 			block_number, block_hash, block_time)
@@ -157,7 +165,22 @@ func persistTx(dtx *sqlx.Tx, tx common.Transaction) error {
 			block_time = EXCLUDED.block_time,
 			status = EXCLUDED.status
 		`
-	_, err := dtx.NamedExec(q, tx)
+	} else {
+		// if the finalized crawler is running ahead of the latest
+		// we do NOT want to overwrite the `block_*` properties and
+		// the status
+		q = `
+		INSERT INTO donation(
+			address, amount, usd_amount, asset, tokens, price, tx_hash, status,
+			block_number, block_hash, block_time)
+		VALUES(
+			:address, :amount, :usd_amount, :asset, :tokens, :price, :tx_hash,
+			:status, :block_number, :block_hash, :block_time)
+		ON CONFLICT (tx_hash)
+		DO NOTHING
+		`
+	}
+	_, err = dtx.NamedExec(q, tx)
 	if err != nil {
 		err = fmt.Errorf("failed to upsert donation for %s, %w", tx.Hash, err)
 		log.Error(err)
