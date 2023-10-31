@@ -610,3 +610,56 @@ func confirmSingleTx(dtx *sqlx.Tx, tx common.TxByHash) (decimal.Decimal, decimal
 	}
 	return amount, tokens, nil
 }
+
+func FailTx(ctxt common.Context, tx common.TxByHash) error {
+	var err error
+	// start transaction
+	dtx, err := ctxt.DB.Beginx()
+	if err != nil {
+		return err
+	}
+
+	// at the end of the function: commit if there are no errors,
+	// roll back otherwise
+	defer func() {
+		if err != nil {
+			dtx.Rollback() // nolint:errcheck
+		} else {
+			dtx.Commit() // nolint:errcheck
+		}
+	}()
+
+	err = failTx(dtx, tx)
+	if err != nil {
+		return err
+	}
+	log.Infof("failed tx '%s'", tx.Hash)
+
+	return nil
+}
+
+func failTx(dtx *sqlx.Tx, tx common.TxByHash) error {
+	q1 := `
+		INSERT INTO failed_tx(
+			block_number, block_hash, block_time, tx_hash)
+		VALUES(
+			$1, $2, $3, $4)
+		ON CONFLICT (tx_hash) DO NOTHING
+		`
+	_, err := dtx.Exec(q1, tx.BlockNumber, tx.FBBlockHash, tx.FBBlockTime.UTC(), tx.Hash)
+	if err != nil {
+		err = fmt.Errorf("failed to insert failed tx '%s', %w", tx.Hash, err)
+		log.Error(err)
+		return err
+	}
+	q2 := `
+		DELETE FROM donation WHERE tx_hash=$1
+	`
+	_, err = dtx.Exec(q2, tx.Hash)
+	if err != nil {
+		err = fmt.Errorf("failed to delete transaction (%s), %w", tx.Hash, err)
+		log.Error(err)
+		return err
+	}
+	return nil
+}

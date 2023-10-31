@@ -61,7 +61,7 @@ func addFBData(ctxt common.Context, txs []common.TxByHash) error {
 		}
 		fbs[fb.Number] = *fb
 	}
-	// now set the block times for the finalized transactions
+	// now set the block hash/time for the finalized transactions
 	for i := 0; i < len(txs); i++ {
 		if fb, exists := fbs[txs[i].BlockNumber]; exists {
 			txs[i].FBBlockTime = fb.Timestamp

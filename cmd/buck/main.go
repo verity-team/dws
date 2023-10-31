@@ -464,7 +464,10 @@ func monitorOldUnconfirmed(ctxt common.Context, ctx context.Context) error {
 				}
 			} else {
 				log.Warnf("old unconfirmed tx (%s), block hash mismatch, old: '%s', actual: '%s'", tx.Hash, tx.BlockHash, tx.FBBlockHash)
-				// db.failTx(tx)
+				err = db.FailTx(ctxt, tx)
+				if err != nil {
+					return err
+				}
 			}
 		} else {
 			log.Warnf("old unconfirmed tx (%s) not finalized yet", tx.Hash)
