@@ -123,30 +123,6 @@ FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
 CREATE INDEX ON user_data (address);
 
---- finalized_block ----------------------------------------------------
-DROP TABLE IF EXISTS finalized_block;
-CREATE TABLE finalized_block (
-    id BIGSERIAL PRIMARY KEY,
-    base_fee_per_gas VARCHAR(16) NOT NULL,
-    gas_limit VARCHAR(16) NOT NULL,
-    gas_used VARCHAR(16) NOT NULL,
-    block_hash VARCHAR(66) NOT NULL UNIQUE,
-    block_number BIGINT NOT NULL,
-    receipts_root VARCHAR(66) NOT NULL,
-    block_size VARCHAR(16) NOT NULL,
-    state_root VARCHAR(66) NOT NULL,
-    block_time TIMESTAMP NOT NULL,
-    -- enough to keep 1600 tx hashes
-    transactions VARCHAR(107200) NOT NULL,
-
-    modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
-    created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())
-);
-CREATE TRIGGER finalized_block_update_timestamp
-BEFORE UPDATE ON finalized_block
-FOR EACH ROW
-EXECUTE PROCEDURE trigger_update_modified_at();
-
 --- failed_block ----------------------------------------------------
 DROP TABLE IF EXISTS failed_block;
 CREATE TABLE failed_block (
