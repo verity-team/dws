@@ -44,6 +44,44 @@ type Block struct {
 	Transactions []Transaction `db:"-" json:"transactions"`
 }
 
+func (b *Block) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" || string(data) == `""` {
+		return nil
+	}
+
+	type block struct {
+		Hash         string        `json:"hash"`
+		HexNumber    string        `json:"number"`
+		HexSeconds   string        `json:"timestamp"`
+		Transactions []Transaction `json:"transactions"`
+	}
+
+	var pb block
+	if err := json.Unmarshal(data, &pb); err != nil {
+		return err
+	}
+
+	seconds, err := HexStringToDecimal(pb.HexSeconds)
+	if err != nil {
+		err = fmt.Errorf("failed to convert block timestamp, %w", err)
+		return err
+	}
+	ts := time.Unix(seconds.IntPart(), 0)
+	b.Timestamp = ts.UTC()
+
+	number, err := HexStringToDecimal(pb.HexNumber)
+	if err != nil {
+		err = fmt.Errorf("failed to convert block number, %w", err)
+		return err
+	}
+	b.Number = uint64(number.IntPart())
+
+	b.Hash = pb.Hash
+	b.Transactions = pb.Transactions
+
+	return nil
+}
+
 type Transaction struct {
 	Hash        string          `db:"tx_hash" json:"hash"`
 	From        string          `db:"address" json:"from"`
@@ -74,6 +112,67 @@ type FinalizedBlock struct {
 	StateRoot     string    `db:"state_root" json:"stateRoot"`
 	Timestamp     time.Time `db:"block_time" json:"-"`
 	Transactions  []string  `db:"transactions" json:"transactions"`
+}
+
+func (fb *FinalizedBlock) TXMap() map[string]bool {
+	txm := make(map[string]bool)
+	for _, hash := range fb.Transactions {
+		txm[hash] = true
+	}
+	return txm
+}
+
+type TxByHash struct {
+	BlockHash        string `json:"blockHash"`
+	BlockNumber      uint64 `json:"blockNumber"`
+	From             string `json:"from"`
+	Hash             string `json:"hash"`
+	To               string `json:"to"`
+	TransactionIndex uint64 `json:"transactionIndex"`
+	FBBlockTime      time.Time
+	FBBlockHash      string
+	FBContainsTx     bool
+}
+
+func (t *TxByHash) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" || string(data) == `""` {
+		return nil
+	}
+
+	type tx struct {
+		BlockHash        string `json:"blockHash"`
+		BlockNumber      string `json:"blockNumber"`
+		From             string `json:"from"`
+		Hash             string `json:"hash"`
+		To               string `json:"to"`
+		TransactionIndex string `json:"transactionIndex"`
+	}
+
+	var pd tx
+	if err := json.Unmarshal(data, &pd); err != nil {
+		return err
+	}
+
+	bn, err := HexStringToDecimal(pd.BlockNumber)
+	if err != nil {
+		err = fmt.Errorf("failed to convert block number, %w", err)
+		return err
+	}
+	t.BlockNumber = uint64(bn.IntPart())
+
+	tidx, err := HexStringToDecimal(pd.TransactionIndex)
+	if err != nil {
+		err = fmt.Errorf("failed to convert transaction index, %w", err)
+		return err
+	}
+	t.TransactionIndex = uint64(tidx.IntPart())
+
+	t.BlockHash = pd.BlockHash
+	t.From = pd.From
+	t.Hash = pd.Hash
+	t.To = pd.To
+
+	return nil
 }
 
 func GetContext(erc20Json, saleParamJson string) (*Context, error) {

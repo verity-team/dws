@@ -138,7 +138,7 @@ func updateLastBlock(dbt *sqlx.Tx, chain string, l Label, lbn uint64) error {
 	`
 	_, err = dbt.Exec(q, chain, l.String(), lbn)
 	if err != nil {
-		err = fmt.Errorf("failed to set last block for %s/%s, %w", l.String(), chain, err)
+		err = fmt.Errorf("failed to update last block for %s/%s, %w", l.String(), chain, err)
 		log.Error(err)
 		return err
 	}
@@ -526,26 +526,140 @@ func RequestPrice(ctxt common.Context, asset string, ts time.Time) error {
 	return nil
 }
 
-func GetOldUnconfirmed(dbh *sqlx.DB) ([]uint64, error) {
+func GetOldUnconfirmed(dbh *sqlx.DB) ([]string, error) {
 	var (
 		err    error
 		q      string
-		result []uint64
+		hashes []string
 	)
 	q = `
-		SELECT DISTINCT block_number
+		SELECT DISTINCT tx_hash
 		FROM donation
 		WHERE
 			status = 'unconfirmed'
 			AND timezone('utc', block_time) < timezone('utc', NOW()) - INTERVAL '30 minutes'
 		ORDER BY 1
 		`
-	err = dbh.Select(&result, q)
+	err = dbh.Select(&hashes, q)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		err = fmt.Errorf("failed to fetch oldest unconfirmed block number, %w", err)
+		err = fmt.Errorf("failed to fetch old unconfirmed tx hashes, %w", err)
 		log.Error(err)
 		return nil, err
 	}
 
-	return result, nil
+	return hashes, nil
+}
+
+func FinalizeTx(ctxt common.Context, tx common.TxByHash) error {
+	var err error
+	// start transaction
+	dtx, err := ctxt.DB.Beginx()
+	if err != nil {
+		return err
+	}
+
+	// at the end of the function: commit if there are no errors,
+	// roll back otherwise
+	defer func() {
+		if err != nil {
+			dtx.Rollback() // nolint:errcheck
+		} else {
+			dtx.Commit() // nolint:errcheck
+		}
+	}()
+
+	amount, tokens, err := confirmSingleTx(dtx, tx)
+	if err != nil {
+		return err
+	}
+	log.Infof("finalized tx '%s' confirms %s USD / %d tokens", tx.Hash, amount.StringFixed(2), tokens.IntPart())
+
+	if amount.IsZero() {
+		// nothing to do - return
+		return nil
+	}
+	_, newTokens, err := updateDonationStats(dtx, amount, tokens)
+	if err != nil {
+		return err
+	}
+	if doUpdate, newP := newTokenPrice(ctxt, tokens, newTokens); doUpdate {
+		err = updateTokenPrice(dtx, newP)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func confirmSingleTx(dtx *sqlx.Tx, tx common.TxByHash) (decimal.Decimal, decimal.Decimal, error) {
+	q := `
+		UPDATE donation SET
+			block_number=$1,
+			block_time=$2,
+			status='confirmed'
+		WHERE status='unconfirmed' AND tx_hash=$3
+		RETURNING usd_amount, tokens
+	`
+	var amount, tokens decimal.Decimal
+	err := dtx.QueryRowx(q, tx.BlockNumber, tx.FBBlockTime, tx.Hash).Scan(&amount, &tokens)
+	if err != nil {
+		err = fmt.Errorf("failed to confirm single transaction (%s), %w", tx.Hash, err)
+		log.Error(err)
+		return decimal.Zero, decimal.Zero, err
+	}
+	return amount, tokens, nil
+}
+
+func FailTx(ctxt common.Context, tx common.TxByHash) error {
+	var err error
+	// start transaction
+	dtx, err := ctxt.DB.Beginx()
+	if err != nil {
+		return err
+	}
+
+	// at the end of the function: commit if there are no errors,
+	// roll back otherwise
+	defer func() {
+		if err != nil {
+			dtx.Rollback() // nolint:errcheck
+		} else {
+			dtx.Commit() // nolint:errcheck
+		}
+	}()
+
+	err = failTx(dtx, tx)
+	if err != nil {
+		return err
+	}
+	log.Infof("failed tx '%s'", tx.Hash)
+
+	return nil
+}
+
+func failTx(dtx *sqlx.Tx, tx common.TxByHash) error {
+	q1 := `
+		INSERT INTO failed_tx(
+			block_number, block_hash, block_time, tx_hash)
+		VALUES(
+			$1, $2, $3, $4)
+		ON CONFLICT (tx_hash) DO NOTHING
+		`
+	_, err := dtx.Exec(q1, tx.BlockNumber, tx.FBBlockHash, tx.FBBlockTime.UTC(), tx.Hash)
+	if err != nil {
+		err = fmt.Errorf("failed to insert failed tx '%s', %w", tx.Hash, err)
+		log.Error(err)
+		return err
+	}
+	q2 := `
+		DELETE FROM donation WHERE tx_hash=$1
+	`
+	_, err = dtx.Exec(q2, tx.Hash)
+	if err != nil {
+		err = fmt.Errorf("failed to delete transaction (%s), %w", tx.Hash, err)
+		log.Error(err)
+		return err
+	}
+	return nil
 }

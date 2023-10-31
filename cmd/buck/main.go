@@ -276,19 +276,19 @@ func runReadyProbe(ctxt common.Context, latest bool) error {
 }
 
 func monitorFinalizedETH(ctxt common.Context, ctx context.Context) error {
-	// last *finalized* ETH block published
-	lfbn, err := ethereum.GetMaxFinalizedBlockNumber(ctxt)
-	if err != nil {
-		return err
-	}
-	log.Infof("##### max finalized ETH block: %d", lfbn)
-
 	// number of last finalized block in the db
 	lfdb, err := db.GetLastBlock(ctxt.DB, "eth", db.Finalized)
 	if err != nil {
 		return err
 	}
 	log.Infof("last finalized block processed (from db): %d", lfdb)
+
+	// last *finalized* ETH block published
+	lfbn, err := ethereum.GetMaxFinalizedBlockNumber(ctxt)
+	if err != nil {
+		return err
+	}
+	log.Infof("##### max finalized ETH block: %d", lfbn)
 
 	// block number of the oldest unconfirmed transaction
 	oubn, err := db.GetOldestUnconfirmed(ctxt.DB)
@@ -299,7 +299,12 @@ func monitorFinalizedETH(ctxt common.Context, ctx context.Context) error {
 
 	if oubn == 0 || oubn > lfbn {
 		// no unconfirmed transactions or transactions not finalized yet
-		log.Info("buck/final -- nothing to do")
+		if oubn == 0 {
+			log.Info("buck/final -- nothing to do")
+		}
+		if oubn > lfbn {
+			log.Info("buck/final -- tx block not finalized yet")
+		}
 		return nil
 	}
 
@@ -421,15 +426,15 @@ func processLatest(ctxt common.Context, bn uint64) error {
 }
 
 func monitorOldUnconfirmed(ctxt common.Context, ctx context.Context) error {
-	bns, err := db.GetOldUnconfirmed(ctxt.DB)
+	hashes, err := db.GetOldUnconfirmed(ctxt.DB)
 	if err != nil {
 		return err
 	}
-	if len(bns) == 0 {
+	if len(hashes) == 0 {
 		log.Info("##### *no* unconfirmed txs older than 30 minutes")
 		return nil
 	}
-	log.Infof("##### ETH blocks with old unconfirmed txs: %v", bns)
+	log.Infof("##### old unconfirmed txs: %v", hashes)
 
 	// most recent *finalized* ETH block published
 	mfbn, err := ethereum.GetMaxFinalizedBlockNumber(ctxt)
@@ -438,7 +443,11 @@ func monitorOldUnconfirmed(ctxt common.Context, ctx context.Context) error {
 	}
 	log.Infof("##### max finalized ETH block: %d", mfbn)
 
-	for _, bn := range bns {
+	txs, err := ethereum.GetTxsByHash(ctxt, hashes)
+	if err != nil {
+		return err
+	}
+	for _, tx := range txs {
 		select {
 		case <-ctx.Done():
 			log.Info("buck/old-unconfirmed - context canceled")
@@ -446,14 +455,26 @@ func monitorOldUnconfirmed(ctxt common.Context, ctx context.Context) error {
 		default:
 			// keep going
 		}
-		if bn <= mfbn {
-			log.Infof("##### processing old finalized block %d", bn)
-			err = processFinalized(ctxt, bn)
-			if err != nil {
-				return err
+		if tx.BlockNumber <= mfbn {
+			// finalized block hash does not match the tx block hash or
+			// finalized block does not contain the tx in question
+			//		=> fail tx
+			failTx := tx.BlockHash != tx.FBBlockHash || !tx.FBContainsTx
+			if failTx {
+				log.Warnf("invalid old unconfirmed tx (%s)", tx.Hash)
+				err = db.FailTx(ctxt, tx)
+				if err != nil {
+					return err
+				}
+			} else {
+				log.Infof("##### finalizing old tx %s", tx.Hash)
+				err = db.FinalizeTx(ctxt, tx)
+				if err != nil {
+					return err
+				}
 			}
 		} else {
-			log.Warnf("block with old unconfirmed txs (%d) not finalized yet", bn)
+			log.Warnf("old unconfirmed tx (%s) not finalized yet", tx.Hash)
 		}
 	}
 	return nil
