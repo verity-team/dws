@@ -16,14 +16,9 @@ type EthGetBlockByNumberRequest struct {
 	ID      int           `json:"id"`
 }
 
-func writeBlockToFile(ctxt common.Context, bn uint64, json []byte, final bool) error {
+func writeBlockToFile(ctxt common.Context, bn uint64, json []byte) error {
 	if ctxt.BlockStorage != "" {
-		var fp string
-		if final {
-			fp = ctxt.BlockStorage + "/" + fmt.Sprintf("fb-%d.json", bn)
-		} else {
-			fp = ctxt.BlockStorage + "/" + fmt.Sprintf("%d.json", bn)
-		}
+		fp := ctxt.BlockStorage + "/" + fmt.Sprintf("%s-%d.json", ctxt.CrawlerType, bn)
 		err := os.WriteFile(fp, json, 0400)
 		if err != nil {
 			log.Warn(err)

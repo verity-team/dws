@@ -43,7 +43,7 @@ func GetTransactions(ctxt common.Context, blockNumber uint64) ([]common.Transact
 
 	log.Infof("fetched block %d", blockNumber)
 
-	err = writeBlockToFile(ctxt, blockNumber, body, false)
+	err = writeBlockToFile(ctxt, blockNumber, body)
 	if err != nil {
 		return nil, err
 	}

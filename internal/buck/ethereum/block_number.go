@@ -33,7 +33,7 @@ func GetFinalizedBlock(ctxt common.Context, blockNumber uint64) (*common.Finaliz
 		return nil, err
 	}
 
-	err = writeBlockToFile(ctxt, blockNumber, body, true)
+	err = writeBlockToFile(ctxt, blockNumber, body)
 	if err != nil {
 		return nil, err
 	}
