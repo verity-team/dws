@@ -18,13 +18,6 @@ import (
 	"github.com/verity-team/dws/internal/common"
 )
 
-type EthGetBlockByNumberRequest struct {
-	JsonRPC string        `json:"jsonrpc"`
-	Method  string        `json:"method"`
-	Params  []interface{} `json:"params"`
-	ID      int           `json:"id"`
-}
-
 func GetTransactions(ctxt common.Context, blockNumber uint64) ([]common.Transaction, error) {
 	request := EthGetBlockByNumberRequest{
 		JsonRPC: "2.0",
@@ -50,7 +43,7 @@ func GetTransactions(ctxt common.Context, blockNumber uint64) ([]common.Transact
 
 	log.Infof("fetched block %d", blockNumber)
 
-	err = writeBlockToFile(ctxt, blockNumber, body, false)
+	err = writeBlockToFile(ctxt, blockNumber, body)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +126,11 @@ func filterTransactions(ctxt common.Context, b common.Block) ([]common.Transacti
 		if txBelongsToUs {
 			tx.BlockNumber = b.Number
 			tx.BlockTime = b.Timestamp
-			tx.Status = string(api.Unconfirmed)
+			if ctxt.CrawlerType == common.Finalized {
+				tx.Status = string(api.Confirmed)
+			} else {
+				tx.Status = string(api.Unconfirmed)
+			}
 			result = append(result, tx)
 		}
 	}

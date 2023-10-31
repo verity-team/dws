@@ -53,7 +53,7 @@ func main() {
 		log.Error(err)
 		return
 	}
-	_, err = s.Every("1m").Do(servePriceRequests, dbh, ctx)
+	_, err = s.Every("10s").Do(servePriceRequests, dbh, ctx)
 	if err != nil {
 		log.Error(err)
 		return

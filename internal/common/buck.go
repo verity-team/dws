@@ -14,6 +14,26 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type CrawlerType int
+
+const (
+	Latest CrawlerType = iota
+	Finalized
+	OldUnconfirmed
+)
+
+func (ct CrawlerType) String() string {
+	switch ct {
+	case Latest:
+		return "latest"
+	case Finalized:
+		return "finalized"
+	case OldUnconfirmed:
+		return "old-unconfirmed"
+	}
+	return "invalid crawler type"
+}
+
 type SaleParam struct {
 	Limit int
 	Price decimal.Decimal
@@ -35,6 +55,7 @@ type Context struct {
 	UpdateLastBlock  bool
 	MaxWaitInSeconds int
 	ABI              map[string]abi.ABI
+	CrawlerType      CrawlerType
 }
 
 type Block struct {

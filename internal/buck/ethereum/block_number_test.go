@@ -27,14 +27,8 @@ func (suite *BlockNumberSuite) SetupTest() {
 	}
 }
 
-func (suite *BlockNumberSuite) TestLatestBlockSuccess() {
-	actual, err := parseLatestBlock(suite.latest)
-	assert.Nil(suite.T(), err)
-	assert.Equal(suite.T(), uint64(4487104), actual)
-}
-
 func (suite *BlockNumberSuite) TestLatestFinalizedBlockSuccess() {
-	actual, err := parseMaxFinalizedBlock(suite.finalized)
+	actual, err := parseMostRecentBlockNumber(suite.finalized)
 	assert.Nil(suite.T(), err)
 	assert.Equal(suite.T(), uint64(4489455), actual)
 }
