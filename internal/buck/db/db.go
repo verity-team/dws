@@ -138,7 +138,7 @@ func updateLastBlock(dbt *sqlx.Tx, chain string, l Label, lbn uint64) error {
 	`
 	_, err = dbt.Exec(q, chain, l.String(), lbn)
 	if err != nil {
-		err = fmt.Errorf("failed to set last block for %s/%s, %w", l.String(), chain, err)
+		err = fmt.Errorf("failed to update last block for %s/%s, %w", l.String(), chain, err)
 		log.Error(err)
 		return err
 	}
@@ -542,7 +542,7 @@ func GetOldUnconfirmed(dbh *sqlx.DB) ([]string, error) {
 		`
 	err = dbh.Select(&hashes, q)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		err = fmt.Errorf("failed to fetch oldest unconfirmed block number, %w", err)
+		err = fmt.Errorf("failed to fetch old unconfirmed tx hashes, %w", err)
 		log.Error(err)
 		return nil, err
 	}
@@ -596,14 +596,15 @@ func confirmSingleTx(dtx *sqlx.Tx, tx common.TxByHash) (decimal.Decimal, decimal
 	q := `
 		UPDATE donation SET
 			block_number=$1,
+			block_time=$2,
 			status='confirmed'
-		WHERE status='unconfirmed' AND tx_hash=$2
+		WHERE status='unconfirmed' AND tx_hash=$3
 		RETURNING usd_amount, tokens
 	`
 	var amount, tokens decimal.Decimal
-	err := dtx.QueryRowx(q, tx.BlockNumber, tx.Hash).Scan(&amount, &tokens)
+	err := dtx.QueryRowx(q, tx.BlockNumber, tx.FBBlockTime, tx.Hash).Scan(&amount, &tokens)
 	if err != nil {
-		err = fmt.Errorf("failed to confirm transaction (%s), %w", tx.Hash, err)
+		err = fmt.Errorf("failed to confirm single transaction (%s), %w", tx.Hash, err)
 		log.Error(err)
 		return decimal.Zero, decimal.Zero, err
 	}

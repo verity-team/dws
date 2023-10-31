@@ -456,10 +456,15 @@ func monitorOldUnconfirmed(ctxt common.Context, ctx context.Context) error {
 			// keep going
 		}
 		if tx.BlockNumber <= mfbn {
-			log.Infof("##### finalizing old tx %s", tx.Hash)
-			err = db.FinalizeTx(ctxt, tx)
-			if err != nil {
-				return err
+			if tx.BlockHash == tx.FBBlockHash {
+				log.Infof("##### finalizing old tx %s", tx.Hash)
+				err = db.FinalizeTx(ctxt, tx)
+				if err != nil {
+					return err
+				}
+			} else {
+				log.Warnf("old unconfirmed tx (%s), block hash mismatch, old: '%s', actual: '%s'", tx.Hash, tx.BlockHash, tx.FBBlockHash)
+				// db.failTx(tx)
 			}
 		} else {
 			log.Warnf("old unconfirmed tx (%s) not finalized yet", tx.Hash)

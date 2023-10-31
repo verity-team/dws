@@ -1,6 +1,7 @@
 package ethereum
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/goccy/go-json"
@@ -19,7 +20,7 @@ func GetTxsByHash(ctxt common.Context, hashes []string) ([]common.TxByHash, erro
 	if len(hashes) == 0 {
 		return nil, nil
 	}
-	var res []common.TxByHash
+	var txs []common.TxByHash
 	batchSize := 127
 
 	for i := 0; i < len(hashes); i += batchSize {
@@ -35,9 +36,43 @@ func GetTxsByHash(ctxt common.Context, hashes []string) ([]common.TxByHash, erro
 		if err != nil {
 			return nil, err
 		}
-		res = append(res, br...)
+		txs = append(txs, br...)
 	}
-	return res, nil
+	err := addFBData(ctxt, txs)
+	if err != nil {
+		return nil, err
+	}
+	return txs, nil
+}
+
+func addFBData(ctxt common.Context, txs []common.TxByHash) error {
+	blocks := make(map[uint64]bool)
+	for _, tx := range txs {
+		if _, exists := blocks[tx.BlockNumber]; !exists {
+			blocks[tx.BlockNumber] = true
+		}
+	}
+	// get the block times for the blocks that finalize the given transactions
+	fbs := make(map[uint64]common.FinalizedBlock)
+	for bn := range blocks {
+		fb, err := GetFinalizedBlock(ctxt, bn)
+		if err != nil {
+			return err
+		}
+		fbs[fb.Number] = *fb
+	}
+	// now set the block times for the finalized transactions
+	for i := 0; i < len(txs); i++ {
+		if fb, exists := fbs[txs[i].BlockNumber]; exists {
+			txs[i].FBBlockTime = fb.Timestamp
+			txs[i].FBBlockHash = fb.Hash
+		} else {
+			err := fmt.Errorf("internal error: no finalized block for tx '%s' and block number %d", txs[i].Hash, txs[i].BlockNumber)
+			log.Error(err)
+			return err
+		}
+	}
+	return nil
 }
 
 func doGetTxsByHash(ctxt common.Context, hashes []string) ([]common.TxByHash, error) {

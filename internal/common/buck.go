@@ -121,6 +121,8 @@ type TxByHash struct {
 	Hash             string `json:"hash"`
 	To               string `json:"to"`
 	TransactionIndex uint64 `json:"transactionIndex"`
+	FBBlockTime      time.Time
+	FBBlockHash      string
 }
 
 func (t *TxByHash) UnmarshalJSON(data []byte) error {
