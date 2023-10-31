@@ -92,11 +92,8 @@ func MostRecentBlockNumber(ctxt common.Context) (uint64, error) {
 	request := EthGetBlockByNumberRequest{
 		JsonRPC: "2.0",
 		Method:  "eth_getBlockByNumber",
-		Params:  []interface{}{"finalized", false},
+		Params:  []interface{}{ctxt.CrawlerType.String(), false},
 		ID:      1,
-	}
-	if ctxt.CrawlerType == common.Latest {
-		request.Params = []interface{}{false}
 	}
 	requestBytes, err := json.Marshal(request)
 	if err != nil {
@@ -135,6 +132,7 @@ func parseMostRecentBlockNumber(body []byte) (uint64, error) {
 	}
 	blockNumber, err := strconv.ParseUint(resp.Result.Number, 0, 64)
 	if err != nil {
+		err = fmt.Errorf("failed to parse block number ('%s'), %w", resp.Result.Number, err)
 		log.Error(err)
 		return 0, err
 	}

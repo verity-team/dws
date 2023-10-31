@@ -104,15 +104,15 @@ func main() {
 	ctxt.ABI = abi
 
 	// latest blocks
-	latestCtxt := ctxt
+	latestCtxt := *ctxt
 	latestCtxt.CrawlerType = common.Latest
 
 	// finalized blocks
-	finalCtxt := ctxt
+	finalCtxt := *ctxt
 	finalCtxt.CrawlerType = common.Finalized
 
 	// old, unconfirmed blocks
-	oldCtxt := ctxt
+	oldCtxt := *ctxt
 	oldCtxt.CrawlerType = common.OldUnconfirmed
 
 	if (*lbn > -1) && (*fbn > -1) {
@@ -121,7 +121,7 @@ func main() {
 	}
 
 	if *lbn >= 0 {
-		err = db.SetLastBlock(*latestCtxt, "eth", uint64(*lbn))
+		err = db.SetLastBlock(latestCtxt, "eth", uint64(*lbn))
 		if err != nil {
 			log.Error(err)
 			return
@@ -129,7 +129,7 @@ func main() {
 		return
 	}
 	if *fbn >= 0 {
-		err = db.SetLastBlock(*finalCtxt, "eth", uint64(*fbn))
+		err = db.SetLastBlock(finalCtxt, "eth", uint64(*fbn))
 		if err != nil {
 			log.Error(err)
 			return
@@ -151,10 +151,10 @@ func main() {
 	if *singleBlock > 0 {
 		if *monitorFinal {
 			finalCtxt.UpdateLastBlock = false
-			err = processETH(*finalCtxt, uint64(*singleBlock))
+			err = processETH(finalCtxt, uint64(*singleBlock))
 		} else {
 			latestCtxt.UpdateLastBlock = false
-			err = processETH(*latestCtxt, uint64(*singleBlock))
+			err = processETH(latestCtxt, uint64(*singleBlock))
 		}
 		if err != nil {
 			log.Errorf("failed to process single block %d, %v", *singleBlock, err)
@@ -168,7 +168,7 @@ func main() {
 	g, ctx := errgroup.WithContext(context.Background())
 
 	if *monitorLatest {
-		_, err = s.Every("1m").Do(monitorETH, *latestCtxt, ctx)
+		_, err = s.Every("1m").Do(monitorETH, latestCtxt, ctx)
 		if err != nil {
 			log.Error(err)
 			return
@@ -180,7 +180,7 @@ func main() {
 		if *port == defaultPort {
 			*port = defaultPort + 1
 		}
-		_, err = s.Every("1m").Do(monitorETH, *finalCtxt, ctx)
+		_, err = s.Every("1m").Do(monitorETH, finalCtxt, ctx)
 		if err != nil {
 			log.Error(err)
 			return
@@ -193,7 +193,7 @@ func main() {
 			*port = defaultPort + 2
 		}
 		oldCtxt.UpdateLastBlock = false
-		_, err = s.Every("15m").Do(monitorOldUnconfirmed, *oldCtxt, ctx)
+		_, err = s.Every("15m").Do(monitorOldUnconfirmed, oldCtxt, ctx)
 		if err != nil {
 			log.Error(err)
 			return
