@@ -109,6 +109,19 @@ func PersistTxs(ctxt common.Context, bn uint64, ethPrice decimal.Decimal, txs []
 		}
 	}
 
+	if ctxt.CrawlerType == common.Finalized {
+		total, newTokens, oldTokens, err := updateDonationStats(dtx)
+		if err != nil {
+			return err
+		}
+		log.Infof("updated donation stats: total %s, tokens %s, block %d", total.StringFixed(2), newTokens, bn)
+		if doUpdate, newP := newTokenPrice(ctxt, oldTokens, newTokens); doUpdate {
+			err = updateTokenPrice(dtx, newP)
+			if err != nil {
+				return err
+			}
+		}
+	}
 	if ctxt.UpdateLastBlock {
 		err = updateLastBlock(dtx, "eth", ctxt.CrawlerType.String(), bn)
 		if err != nil {
@@ -300,26 +313,29 @@ func GetOldestUnconfirmed(dbh *sqlx.DB) (uint64, error) {
 	return result, nil
 }
 
-func updateDonationStats(dtx *sqlx.Tx, incTotal, incTokens decimal.Decimal) (decimal.Decimal, decimal.Decimal, error) {
+func updateDonationStats(dtx *sqlx.Tx) (decimal.Decimal, decimal.Decimal, decimal.Decimal, error) {
 	q1 := `
-		WITH updated_stats AS (
-		 UPDATE donation_stats
-		 SET total = total + $1,
-			  tokens = tokens + $2
-		 RETURNING total, tokens
+		WITH DonationSum AS (
+			 SELECT
+				  SUM(usd_amount) AS total_usd_amount,
+				  SUM(tokens) AS total_tokens
+			 FROM donation
+			 WHERE status = 'confirmed'
 		)
-		SELECT total, tokens
-		FROM updated_stats
+		UPDATE donation_stats
+		SET total = (SELECT total_usd_amount FROM DonationSum),
+			 tokens = (SELECT total_tokens FROM DonationSum)
+		RETURNING total, tokens, (SELECT tokens FROM donation_stats)
 		`
-	var newTotal, newTokens decimal.Decimal
-	err := dtx.QueryRowx(q1, incTotal, incTokens.IntPart()).Scan(&newTotal, &newTokens)
+	var newTotal, newTokens, oldTokens decimal.Decimal
+	err := dtx.QueryRowx(q1).Scan(&newTotal, &newTokens, &oldTokens)
 	if err != nil {
 		err = fmt.Errorf("failed to update donation stats %w", err)
 		log.Error(err)
-		return decimal.Zero, decimal.Zero, err
+		return decimal.Zero, decimal.Zero, decimal.Zero, err
 	}
 
-	return newTotal, newTokens, nil
+	return newTotal, newTokens, oldTokens, nil
 }
 
 func updateTokenPrice(dtx *sqlx.Tx, ntp decimal.Decimal) error {
@@ -345,9 +361,9 @@ func updateTokenPrice(dtx *sqlx.Tx, ntp decimal.Decimal) error {
 	return nil
 }
 
-func newTokenPrice(ctxt common.Context, incTokens, newTokens decimal.Decimal) (bool, decimal.Decimal) {
+func newTokenPrice(ctxt common.Context, oldTokens, newTokens decimal.Decimal) (bool, decimal.Decimal) {
 	// did we enter a new price range? do we need to update the price?
-	currentP := priceBucket(ctxt, newTokens.Sub(incTokens))
+	currentP := priceBucket(ctxt, newTokens.Sub(oldTokens))
 	newP := priceBucket(ctxt, newTokens)
 
 	return newP.GreaterThan(currentP), newP
@@ -431,11 +447,11 @@ func FinalizeTx(ctxt common.Context, tx common.TxByHash) error {
 		// nothing to do - return
 		return nil
 	}
-	_, newTokens, err := updateDonationStats(dtx, amount, tokens)
+	_, newTokens, oldTokens, err := updateDonationStats(dtx)
 	if err != nil {
 		return err
 	}
-	if doUpdate, newP := newTokenPrice(ctxt, tokens, newTokens); doUpdate {
+	if doUpdate, newP := newTokenPrice(ctxt, oldTokens, newTokens); doUpdate {
 		err = updateTokenPrice(dtx, newP)
 		if err != nil {
 			return err
