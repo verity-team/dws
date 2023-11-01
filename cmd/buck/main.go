@@ -66,6 +66,10 @@ func main() {
 	if present {
 		ctxt.DebugDataStore = debugStore
 	}
+	blockCache, present := os.LookupEnv("DWS_BLOCK_CACHE")
+	if present {
+		ctxt.BlockCache = blockCache
+	}
 
 	dsn := common.GetDSN()
 	dbh, err := sqlx.Open("postgres", dsn)
