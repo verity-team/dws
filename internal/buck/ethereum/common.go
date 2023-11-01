@@ -52,7 +52,7 @@ func writeBlockToFile(ctxt common.Context, bn uint64, json []byte) error {
 			return err
 		}
 		fp := filepath.Join(ctxt.BlockCache, fmt.Sprintf("fb-%d.json", bn))
-		err := os.WriteFile(fp, json, 0400)
+		err := os.WriteFile(fp, json, 0600)
 		if err != nil {
 			err = fmt.Errorf("failed to write finalized block #%d, %w", bn, err)
 			log.Error(err)
@@ -68,7 +68,7 @@ func writeBlockToFile(ctxt common.Context, bn uint64, json []byte) error {
 			return nil
 		}
 		fp := filepath.Join(ctxt.DebugDataStore, fmt.Sprintf("%s-%d.json", ctxt.CrawlerType, bn))
-		err := os.WriteFile(fp, json, 0400)
+		err := os.WriteFile(fp, json, 0600)
 		if err != nil {
 			err = fmt.Errorf("failed to write block #%d, %w", bn, err)
 			log.Warn(err)
@@ -86,7 +86,7 @@ func writeTxReceiptsToFile(ctxt common.Context, bn uint64, json []byte) error {
 			return nil
 		}
 		fp := filepath.Join(ctxt.DebugDataStore, fmt.Sprintf("txr-%d-%d.json", bn, time.Now().UnixMilli()))
-		err = os.WriteFile(fp, json, 0400)
+		err = os.WriteFile(fp, json, 0600)
 		if err != nil {
 			err = fmt.Errorf("failed to write transaction receipts for block #%d, %w", bn, err)
 			log.Warn(err)
@@ -104,7 +104,7 @@ func writeTxsToFile(ctxt common.Context, epoch int64, json []byte) error {
 			return nil
 		}
 		fp := filepath.Join(ctxt.DebugDataStore, fmt.Sprintf("txs-%d-%d.json", epoch, time.Now().UnixMilli()))
-		err = os.WriteFile(fp, json, 0400)
+		err = os.WriteFile(fp, json, 0600)
 		if err != nil {
 			err = fmt.Errorf("failed to write transaction objects, %w", err)
 			log.Warn(err)
