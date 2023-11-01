@@ -77,7 +77,7 @@ func GetBlock(ctxt common.Context, bn uint64) (*common.Block, error) {
 		}
 		block, err = parseBlock(body)
 		if err != nil {
-			err = fmt.Errorf("failed to parse block #%d, %w", bn, err)
+			err = fmt.Errorf("failed to parse block #%d on second try, %w", bn, err)
 			return nil, err
 		}
 	}
