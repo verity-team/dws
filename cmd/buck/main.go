@@ -62,9 +62,9 @@ func main() {
 	}
 	ctxt.ReceivingAddr = strings.ToLower(daddr)
 	ctxt.ETHRPCURL = url
-	blockStorage, present := os.LookupEnv("DWS_BLOCK_STORAGE")
+	debugStore, present := os.LookupEnv("DWS_DEBUG_DATA_STORE")
 	if present {
-		ctxt.BlockStorage = blockStorage
+		ctxt.DebugDataStore = debugStore
 	}
 
 	dsn := common.GetDSN()

@@ -51,7 +51,7 @@ type Context struct {
 	ReceivingAddr    string
 	ETHRPCURL        string
 	DB               *sqlx.DB
-	BlockStorage     string
+	DebugDataStore   string
 	UpdateLastBlock  bool
 	MaxWaitInSeconds int
 	ABI              map[string]abi.ABI
