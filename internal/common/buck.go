@@ -46,16 +46,17 @@ type ERC20 struct {
 }
 
 type Context struct {
+	ABI              map[string]abi.ABI
+	BlockCache       string
+	CrawlerType      CrawlerType
+	DB               *sqlx.DB
+	DebugDataStore   string
+	ETHRPCURL        string
+	MaxWaitInSeconds int
+	ReceivingAddr    string
 	SaleParams       []SaleParam
 	StableCoins      map[string]ERC20
-	ReceivingAddr    string
-	ETHRPCURL        string
-	DB               *sqlx.DB
-	BlockStorage     string
 	UpdateLastBlock  bool
-	MaxWaitInSeconds int
-	ABI              map[string]abi.ABI
-	CrawlerType      CrawlerType
 }
 
 type Block struct {

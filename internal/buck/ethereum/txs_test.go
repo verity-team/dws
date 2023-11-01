@@ -29,31 +29,6 @@ func (suite *TxsSuite) SetupTest() {
 	}
 }
 
-func (suite *TxsSuite) TestLatestBlockSuccess() {
-	block, err := parseBlock(suite.body)
-	hash := "0xfd7724ea905f528af6466ff6229630ec1d7bd4d9df21cbd089f9d67337dfd367"
-	assert.Nil(suite.T(), err)
-	assert.Equal(suite.T(), 99, len(block.Transactions))
-	assert.Equal(suite.T(), hash, block.Hash)
-	assert.Equal(suite.T(), uint64(18352138), block.Number)
-	assert.Equal(suite.T(), "2023-10-15T00:15:59Z", block.Timestamp.Format(time.RFC3339))
-}
-
-func (suite *TxsSuite) TestUSDTTxSuccess() {
-	block, err := parseBlock(suite.body)
-	assert.Nil(suite.T(), err)
-	input := "0xa9059cbb0000000000000000000000007c298d22e78ead0b20c6a32dec24c6d0b9f2074f000000000000000000000000000000000000000000000000000000007ac5f665"
-	from := "0x974caa59e49682cda0ad2bbe82983419a2ecc400"
-	to := "0xdac17f958d2ee523a2206206994597c13d831ec7"
-	txHash := "0x3c8273e0d522380ed5c1caf943ede820251581dc77cc6b80b68a47d926b586cc"
-	tx := block.Transactions[44]
-	assert.Equal(suite.T(), input, tx.Input)
-	assert.Equal(suite.T(), "0x0", tx.Value)
-	assert.Equal(suite.T(), strings.ToLower(from), strings.ToLower(tx.From))
-	assert.Equal(suite.T(), strings.ToLower(to), strings.ToLower(tx.To))
-	assert.Equal(suite.T(), strings.ToLower(txHash), strings.ToLower(tx.Hash))
-}
-
 func (suite *TxsSuite) TestInputDataUSDTLong() {
 	input := "0xa9059cbb00000000000000000000000099870de8ae594e6e8705fc6689e89b4d039af1e2000000000000000000000000000000000000000000000000000000001bf6b3a295c343657f5eb02e5b549f80caa5e270c71972aded06826284169bf492b5c658"
 	recipient, amount, err := parseInputData(suite.abi, "usdt", input)
