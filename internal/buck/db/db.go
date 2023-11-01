@@ -473,8 +473,10 @@ func confirmSingleTx(dtx *sqlx.Tx, tx common.TxByHash) (decimal.Decimal, decimal
 	var amount, tokens decimal.Decimal
 	err := dtx.QueryRowx(q, tx.BlockNumber, tx.FBBlockTime, tx.Hash).Scan(&amount, &tokens)
 	if err != nil {
-		err = fmt.Errorf("failed to confirm single transaction (%s), %w", tx.Hash, err)
-		log.Error(err)
+		if !errors.Is(err, sql.ErrNoRows) {
+			err = fmt.Errorf("failed to confirm single transaction (%s), %w", tx.Hash, err)
+			log.Error(err)
+		}
 		return decimal.Zero, decimal.Zero, err
 	}
 	return amount, tokens, nil

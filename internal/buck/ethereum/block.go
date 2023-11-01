@@ -9,55 +9,77 @@ import (
 	"github.com/verity-team/dws/internal/common"
 )
 
-func GetBlock(ctxt common.Context, blockNumber uint64) (*common.Block, error) {
+func fetchBlock(ctxt common.Context, bn uint64) ([]byte, error) {
+	request := EthGetBlockByNumberRequest{
+		JsonRPC: "2.0",
+		Method:  "eth_getBlockByNumber",
+		Params:  []interface{}{fmt.Sprintf("0x%x", bn), true},
+		ID:      1,
+	}
+
+	requestBytes, err := json.Marshal(request)
+	if err != nil {
+		return nil, err
+	}
+
+	params := common.HTTPParams{
+		URL:              ctxt.ETHRPCURL,
+		RequestBody:      requestBytes,
+		MaxWaitInSeconds: ctxt.MaxWaitInSeconds,
+	}
+	body, err := common.HTTPPost(params)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Infof("fetched block %d", bn)
+
+	err = writeBlockToFile(ctxt, bn, body)
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
+}
+
+func GetBlock(ctxt common.Context, bn uint64) (*common.Block, error) {
 	var (
-		body []byte
-		err  error
+		body      []byte
+		err       error
+		freshCopy bool
 	)
 	// try getting the finalized block from the cache
-	body, err = getFinalizedBlockFromCache(ctxt, blockNumber)
+	body, err = getFinalizedBlockFromCache(ctxt, bn)
 	if err != nil {
-		log.Debugf("block %d not in cache", blockNumber)
+		log.Debugf("block %d not in cache", bn)
 	} else {
-		log.Infof("****** block %d served from cache", blockNumber)
+		log.Infof("****** block %d served from cache", bn)
 	}
 
 	if body == nil {
 		// not found in cache -- get it from the ethereum jsonrpc API provider
-		request := EthGetBlockByNumberRequest{
-			JsonRPC: "2.0",
-			Method:  "eth_getBlockByNumber",
-			Params:  []interface{}{fmt.Sprintf("0x%x", blockNumber), true},
-			ID:      1,
-		}
-
-		requestBytes, err := json.Marshal(request)
+		body, err = fetchBlock(ctxt, bn)
 		if err != nil {
 			return nil, err
 		}
-
-		params := common.HTTPParams{
-			URL:              ctxt.ETHRPCURL,
-			RequestBody:      requestBytes,
-			MaxWaitInSeconds: ctxt.MaxWaitInSeconds,
-		}
-		body, err = common.HTTPPost(params)
-		if err != nil {
-			return nil, err
-		}
-
-		log.Infof("fetched block %d", blockNumber)
-
-		err = writeBlockToFile(ctxt, blockNumber, body)
-		if err != nil {
-			return nil, err
-		}
+		freshCopy = true
 	}
 	block, err := parseBlock(body)
 	if err != nil {
-		err = fmt.Errorf("failed to parse block #%d, %w", blockNumber, err)
+		err = fmt.Errorf("failed to parse block #%d, %w", bn, err)
 		log.Error(err)
-		return nil, err
+		if freshCopy {
+			return nil, err
+		}
+		// hmm .. maybe the cached copy was corrupted .. fetch again and retry
+		body, err = fetchBlock(ctxt, bn)
+		if err != nil {
+			return nil, err
+		}
+		block, err = parseBlock(body)
+		if err != nil {
+			err = fmt.Errorf("failed to parse block #%d on second try, %w", bn, err)
+			return nil, err
+		}
 	}
 	return block, nil
 }
