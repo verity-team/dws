@@ -14,14 +14,12 @@ func GetBlock(ctxt common.Context, blockNumber uint64) (*common.Block, error) {
 		body []byte
 		err  error
 	)
-	if ctxt.CrawlerType == common.Finalized {
-		// try getting the finalized block from the cache
-		body, err = getFinalizedBlockFromCache(ctxt, blockNumber)
-		if err != nil {
-			log.Debugf("block %d not in cache", blockNumber)
-		} else {
-			log.Infof("****** block %d served from cache", blockNumber)
-		}
+	// try getting the finalized block from the cache
+	body, err = getFinalizedBlockFromCache(ctxt, blockNumber)
+	if err != nil {
+		log.Debugf("block %d not in cache", blockNumber)
+	} else {
+		log.Infof("****** block %d served from cache", blockNumber)
 	}
 
 	if body == nil {
