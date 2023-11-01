@@ -9,7 +9,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	ethc "github.com/ethereum/go-ethereum/common"
-	"github.com/goccy/go-json"
 
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
@@ -19,38 +18,8 @@ import (
 )
 
 func GetTransactions(ctxt common.Context, blockNumber uint64) ([]common.Transaction, error) {
-	request := EthGetBlockByNumberRequest{
-		JsonRPC: "2.0",
-		Method:  "eth_getBlockByNumber",
-		Params:  []interface{}{fmt.Sprintf("0x%x", blockNumber), true},
-		ID:      1,
-	}
-
-	requestBytes, err := json.Marshal(request)
+	block, err := GetBlock(ctxt, blockNumber)
 	if err != nil {
-		return nil, err
-	}
-
-	params := common.HTTPParams{
-		URL:              ctxt.ETHRPCURL,
-		RequestBody:      requestBytes,
-		MaxWaitInSeconds: ctxt.MaxWaitInSeconds,
-	}
-	body, err := common.HTTPPost(params)
-	if err != nil {
-		return nil, err
-	}
-
-	log.Infof("fetched block %d", blockNumber)
-
-	err = writeBlockToFile(ctxt, blockNumber, body)
-	if err != nil {
-		return nil, err
-	}
-	block, err := parseBlock(body)
-	if err != nil {
-		err = fmt.Errorf("failed to parse block #%d, %w", blockNumber, err)
-		log.Error(err)
 		return nil, err
 	}
 	log.Infof("block %d (%v): %d transactions in total", blockNumber, block.Timestamp.Format(time.RFC3339), len(block.Transactions))
@@ -135,21 +104,6 @@ func filterTransactions(ctxt common.Context, b common.Block) ([]common.Transacti
 		}
 	}
 	return result, nil
-}
-
-func parseBlock(body []byte) (*common.Block, error) {
-	type Response struct {
-		Block common.Block `json:"result"`
-	}
-
-	var resp Response
-	err := json.Unmarshal(body, &resp)
-	if err != nil {
-		return nil, err
-	}
-	b := resp.Block
-	log.Infof("parsed block %d, %s -- %d transactions", b.Number, b.Hash, len(b.Transactions))
-	return &b, nil
 }
 
 func markFailedTxs(ctxt common.Context, bn uint64, txs []common.Transaction) error {

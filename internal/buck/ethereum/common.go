@@ -33,6 +33,14 @@ func createDirectoryIfNotExists(dirPath string) error {
 	return nil
 }
 
+func getFinalizedBlockFromCache(ctxt common.Context, bn uint64) ([]byte, error) {
+	if ctxt.BlockCache == "" {
+		return nil, nil
+	}
+	fp := filepath.Join(ctxt.BlockCache, fmt.Sprintf("fb-%d.json", bn))
+	return os.ReadFile(fp)
+}
+
 func writeBlockToFile(ctxt common.Context, bn uint64, json []byte) error {
 	var err error
 	if ctxt.BlockCache != "" && ctxt.CrawlerType == common.Finalized {
