@@ -5,6 +5,7 @@ import ConnectOption from "./ConnectOption";
 import { AvailableWallet } from "@/utils/token";
 import ConnectStatus from "./ConnectStatus";
 import TextButton from "../common/TextButton";
+import { connectWallet, requestAccounts } from "@/utils/metamask/wallet";
 
 interface ConnectModalV2Props {
   isOpen: boolean;
@@ -19,6 +20,9 @@ const ConnectModalV2 = ({
   const [currentProvider, setCurrentProvider] =
     useState<AvailableWallet>("MetaMask");
 
+  const [accounts, setAccounts] = useState<string[]>([]);
+  const [selectedAccount, setSelectedAccount] = useState<string>("");
+
   // Run procedure when closing connect wallet form
   const handleCloseModal = useCallback(() => {
     setCurrentStep(0);
@@ -29,10 +33,28 @@ const ConnectModalV2 = ({
     setCurrentStep((step) => (step - 1 < 0 ? 0 : step - 1));
   }, []);
 
-  const handleConnectMetaMask = () => {
+  const handleConnectMetaMask = async () => {
     // Make UI switch to connecting screen
     setCurrentStep(1);
     setCurrentProvider("MetaMask");
+
+    const accounts = await requestAccounts();
+
+    if (accounts.length <= 0) {
+      // Declare connection as failed
+      return;
+    }
+
+    if (accounts.length === 1) {
+      // User connect only 1 account, proceed to final step (step 4)
+      setTimeout(() => {
+        // setCurrentStep(3);
+        handleCloseModal();
+      }, 3000);
+    } else {
+      // User connect multiple accounts, proceed to step 3
+      // setCurrentStep(2);
+    }
 
     console.log("Connecting to MetaMask");
   };
@@ -55,12 +77,23 @@ const ConnectModalV2 = ({
                 width={64}
                 height={64}
               />
-              <div className="text-2xl py-2">Connect your wallet</div>
-              <div className="py-1">
-                Connecting your wallet is like &quot;logging in&quot; to Web3.
+
+              <div hidden={currentStep !== 0}>
+                <div className="text-2xl py-2">Connect your wallet</div>
+                <div className="py-1">
+                  Connecting your wallet is like &quot;logging in&quot; to Web3.
+                </div>
+                <div className="py-1">
+                  Select your wallet from the option to get started
+                </div>
               </div>
-              <div className="py-1">
-                Select your wallet from the option to get started
+
+              <div hidden={currentStep !== 1}>
+                <div className="text-2xl py-2">Approve Connection</div>
+                <div className="py-1">
+                  Please approve the connection in your wallet and authorize
+                  access to continue
+                </div>
               </div>
             </div>
           </div>
