@@ -115,7 +115,7 @@ func PersistTxs(ctxt common.Context, bn uint64, ethPrice decimal.Decimal, txs []
 			return err
 		}
 		log.Infof("updated donation stats: total %s, tokens %s, block %d", total.StringFixed(2), newTokens, bn)
-		if doUpdate, newP := newTokenPrice(ctxt, oldTokens, newTokens); doUpdate {
+		if doUpdate, newP := ctxt.NewTokenPrice(oldTokens, newTokens); doUpdate {
 			err = updateTokenPrice(dtx, newP)
 			if err != nil {
 				return err
@@ -382,14 +382,6 @@ func updateTokenPrice(dtx *sqlx.Tx, ntp decimal.Decimal) error {
 	return nil
 }
 
-func newTokenPrice(ctxt common.Context, oldTokens, newTokens decimal.Decimal) (bool, decimal.Decimal) {
-	// did we enter a new price range? do we need to update the price?
-	currentP := ctxt.PriceBucket(oldTokens)
-	newP := ctxt.PriceBucket(newTokens)
-
-	return newP.GreaterThan(currentP), newP
-}
-
 func RequestPrice(ctxt common.Context, asset string, ts time.Time) error {
 	q := `
 		INSERT INTO price_req(what_asset, what_time) VALUES($1, $2)
@@ -461,7 +453,7 @@ func FinalizeTx(ctxt common.Context, tx common.TxByHash) error {
 	if err != nil {
 		return err
 	}
-	if doUpdate, newP := newTokenPrice(ctxt, oldTokens, newTokens); doUpdate {
+	if doUpdate, newP := ctxt.NewTokenPrice(oldTokens, newTokens); doUpdate {
 		err = updateTokenPrice(dtx, newP)
 		if err != nil {
 			return err

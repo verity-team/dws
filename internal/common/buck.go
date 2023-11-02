@@ -59,7 +59,7 @@ type Context struct {
 	UpdateLastBlock  bool
 }
 
-func (c Context) PriceBucket(tokens decimal.Decimal) decimal.Decimal {
+func (c Context) priceBucket(tokens decimal.Decimal) decimal.Decimal {
 	// find the correct price given the number of tokens sold
 	// please note: the sales params slice is sorted in ascending order,
 	// based on the limit property
@@ -76,6 +76,14 @@ func (c Context) TokenSaleLimit() decimal.Decimal {
 	// sales params slice is sorted
 	max := c.SaleParams[len(c.SaleParams)-1].Limit
 	return decimal.NewFromInt(int64(max))
+}
+
+func (c Context) NewTokenPrice(oldTokens, newTokens decimal.Decimal) (bool, decimal.Decimal) {
+	// did we enter a new price range? do we need to update the price?
+	currentP := c.priceBucket(oldTokens)
+	newP := c.priceBucket(newTokens)
+
+	return newP.GreaterThan(currentP), newP
 }
 
 type Block struct {
