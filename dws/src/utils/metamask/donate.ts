@@ -77,7 +77,7 @@ export const donateETH = async (
   }
 
   try {
-    return await ethereum.request<string>({
+    return await ethereum.request({
       method: "eth_sendTransaction",
       params: [
         {
@@ -118,7 +118,7 @@ export const donateERC = async (
   }
 
   try {
-    return await ethereum.request<string>({
+    return await ethereum.request({
       method: "eth_sendTransaction",
       params: [
         {

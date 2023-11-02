@@ -10,11 +10,15 @@ import React, {
   useEffect,
   useState,
 } from "react";
-import toast, { Toaster } from "react-hot-toast";
-import { getWalletShorthand } from "@/utils/metamask/wallet";
+import { Toaster } from "react-hot-toast";
 import { connectWalletWithAffiliate } from "@/utils/api/client/affiliateAPI";
 import ConnectModalV2 from "./wallet/ConnectModalv2";
-import { AvailableWallet } from "@/utils/token";
+import { AvailableToken, AvailableWallet } from "@/utils/token";
+import { createWeb3Modal, defaultWagmiConfig } from "@web3modal/wagmi/react";
+import { mainnet, sepolia } from "viem/chains";
+import { WagmiConfig, useAccount } from "wagmi";
+import { requestSignature } from "@/utils/metamask/sign";
+import { donate } from "@/utils/metamask/donate";
 
 interface ClientRootProps {
   children: ReactNode;
@@ -23,6 +27,11 @@ interface ClientRootProps {
 interface WalletUtils {
   connect: () => void;
   disconnect: () => void;
+  requestTransaction: (
+    amount: number,
+    token: AvailableToken
+  ) => Promise<string>;
+  requestWalletSignature: (message: string) => Promise<string>;
 }
 
 // Affiliate code
@@ -34,6 +43,30 @@ export const ClientWallet = createContext<string>("");
 export const WalletUtils = createContext<WalletUtils>({
   connect: () => {},
   disconnect: () => {},
+  requestTransaction: () => Promise.resolve(""),
+  requestWalletSignature: () => Promise.resolve(""),
+});
+
+const projectId = "cc64c60e9acdab0e270dd3bd452b7fd9";
+const metadata = {
+  name: "TruthMemes",
+  description: "TruthMemes",
+  url: "https://truthmemes.io/",
+  icons: ["https://avatars.githubusercontent.com/u/37784886"],
+};
+const chains = [mainnet, sepolia];
+const wagmiConfig = defaultWagmiConfig({ chains, projectId, metadata });
+
+createWeb3Modal({
+  wagmiConfig,
+  projectId,
+  chains,
+  themeVariables: {
+    "--w3m-z-index": 1400,
+  },
+  excludeWalletIds: [
+    "c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96",
+  ],
 });
 
 // For importing provider and all kind of wrapper for client components
@@ -82,13 +115,43 @@ const ClientRoot = ({
     setAccount("");
   }, []);
 
-  const handleConfirmWalletAndProvider = (
-    walletAddress: string,
-    provider: AvailableWallet
-  ) => {
-    setAccount(walletAddress);
-    setProvider(provider);
-  };
+  const requestTransaction = useCallback(
+    async (amount: number, token: AvailableToken) => {
+      if (provider === "MetaMask") {
+        const txHash = await donate(account, amount, token);
+        if (txHash == null) {
+          return "";
+        }
+        return txHash;
+      }
+
+      if (provider === "WalletConnect") {
+        return "";
+      }
+
+      return "";
+    },
+    [provider, account]
+  );
+
+  const requestWalletSignature = useCallback(
+    async (message: string): Promise<string> => {
+      if (provider === "MetaMask") {
+        const signature = await requestSignature(account, message);
+        if (signature == null) {
+          return "";
+        }
+        return signature;
+      }
+
+      if (provider === "WalletConnect") {
+        return "";
+      }
+
+      return "";
+    },
+    [provider, account]
+  );
 
   const handleCloseConnectWalletForm = (): void => {
     setConnectWalletFormOpen(false);
@@ -96,24 +159,31 @@ const ClientRoot = ({
 
   return (
     <>
-      <WalletUtils.Provider
-        value={{ connect: connectWallet, disconnect: disconnectWallet }}
-      >
-        <ClientWallet.Provider value={account}>
-          <ClientAFC.Provider value={affiliateCode}>
-            {children}
-          </ClientAFC.Provider>
-        </ClientWallet.Provider>
-      </WalletUtils.Provider>
-      <Toaster />
-      <ConnectModalV2
-        isOpen={connectWalletFormOpen}
-        onClose={handleCloseConnectWalletForm}
-        selectedAccount={account}
-        setSelectedAccount={setAccount}
-        selectedProvider={provider}
-        setSelectedProvider={setProvider}
-      />
+      <WagmiConfig config={wagmiConfig}>
+        <WalletUtils.Provider
+          value={{
+            connect: connectWallet,
+            disconnect: disconnectWallet,
+            requestTransaction,
+            requestWalletSignature: requestWalletSignature,
+          }}
+        >
+          <ClientWallet.Provider value={account}>
+            <ClientAFC.Provider value={affiliateCode}>
+              {children}
+            </ClientAFC.Provider>
+          </ClientWallet.Provider>
+        </WalletUtils.Provider>
+        <Toaster />
+        <ConnectModalV2
+          isOpen={connectWalletFormOpen}
+          onClose={handleCloseConnectWalletForm}
+          selectedAccount={account}
+          setSelectedAccount={setAccount}
+          selectedProvider={provider}
+          setSelectedProvider={setProvider}
+        />
+      </WagmiConfig>
     </>
   );
 };

@@ -12,7 +12,7 @@ export const requestSignature = async (
 
   const encodedMessage = `0x${Buffer.from(message, "utf-8").toString("hex")}`;
 
-  const signature = await ethereum.request<string>({
+  const signature = await ethereum.request({
     method: "personal_sign",
     params: [encodedMessage, account],
   });

@@ -1,3 +1,5 @@
+"use client";
+
 import { Dialog, DialogContent, IconButton } from "@mui/material";
 import Image from "next/image";
 import { ReactElement, SetStateAction, useCallback, useState } from "react";
@@ -5,14 +7,11 @@ import ConnectOption from "./ConnectOption";
 import { AvailableWallet } from "@/utils/token";
 import ConnectStatus from "./ConnectStatus";
 import TextButton from "../common/TextButton";
-import {
-  connectWallet,
-  getWalletShorthand,
-  requestAccounts,
-} from "@/utils/metamask/wallet";
+import { getWalletShorthand, requestAccounts } from "@/utils/metamask/wallet";
 import WalletOption from "./WalletOption";
 import CloseIcon from "@mui/icons-material/Close";
 import { sleep } from "@/utils/utils";
+import { useWeb3Modal } from "@web3modal/wagmi/react";
 
 interface ConnectModalV2Props {
   isOpen: boolean;
@@ -47,6 +46,8 @@ const ConnectModalV2 = ({
 
   const [connectStatus, setConnectStatus] =
     useState<WalletConnectStatus>("connecting");
+
+  const { open } = useWeb3Modal();
 
   // Run procedure when closing connect wallet form
   const handleCloseModal = useCallback(() => {
@@ -108,7 +109,11 @@ const ConnectModalV2 = ({
       // User connect multiple accounts, proceed to step 3
       setCurrentStep(2);
     }
-  }, []);
+  }, [handleFinalizeConnection, setSelectedAccount, setSelectedProvider]);
+
+  const handleConnectWC = useCallback(() => {
+    open();
+  }, [open]);
 
   const handleRetry = useCallback(async () => {
     setConnectStatus("connecting");
@@ -123,7 +128,7 @@ const ConnectModalV2 = ({
       setSelectedAccount(selectedAccount);
       handleFinalizeConnection();
     },
-    [handleFinalizeConnection]
+    [handleFinalizeConnection, setSelectedAccount]
   );
 
   return (
@@ -207,6 +212,11 @@ const ConnectModalV2 = ({
                   icon="/icons/metamask.svg"
                   name="MetaMask"
                   onClick={handleConnectMetaMask}
+                />
+                <ConnectOption
+                  icon="/icons/walletconnect.svg"
+                  name="WalletConnect"
+                  onClick={handleConnectWC}
                 />
               </div>
             </div>

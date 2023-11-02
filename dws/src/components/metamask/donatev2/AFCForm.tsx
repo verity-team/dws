@@ -1,6 +1,5 @@
 "use client";
 
-import { requestSignature } from "@/utils/metamask/sign";
 import { connectWallet } from "@/utils/metamask/wallet";
 import { Maybe } from "@/utils/types";
 import { getRFC3339String } from "@/utils/utils";
@@ -20,7 +19,7 @@ import {
   useState,
 } from "react";
 import toast from "react-hot-toast";
-import { ClientWallet } from "@/components/ClientRoot";
+import { ClientWallet, WalletUtils } from "@/components/ClientRoot";
 import { requestNewAffiliateCode } from "@/utils/api/client/affiliateAPI";
 import {
   useUserDonationData,
@@ -29,6 +28,7 @@ import {
 
 const AFCForm = (): ReactElement => {
   const account = useContext(ClientWallet);
+  const { requestWalletSignature } = useContext(WalletUtils);
 
   const [isFormOpen, setFormOpen] = useState(false);
   const [isLoading, setLoading] = useState(false);
@@ -94,7 +94,7 @@ const AFCForm = (): ReactElement => {
 
     let signature: Maybe<string> = null;
     try {
-      signature = await requestSignature(currentAccount, message);
+      signature = await requestWalletSignature(message);
     } catch {
       toast.error("Transaction rejected");
       setLoading(false);
@@ -168,15 +168,17 @@ const AFCForm = (): ReactElement => {
                   </div>
                 ) : (
                   <button
-                    className="w-full px-4 py-2 border-2 border-black bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    className="w-full px-4 py-2 border-2 border-black bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed"
                     onClick={handleGenAffiliateCode}
+                    disabled={!account}
                   >
                     Generate affiliate code
                   </button>
                 )}
                 <div className="text-base italic mt-2">
-                  Note: You will need to sign a message for verification
-                  purposes
+                  {!!account
+                    ? "Note: You will need to sign a message for verification purposes"
+                    : "Note: You need to connect a wallet before you can generate affilate code"}
                 </div>
               </>
             )}
