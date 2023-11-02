@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"crypto/rand"
 
@@ -15,27 +16,72 @@ import (
 	"github.com/verity-team/dws/api"
 )
 
-func ConnectWallet(db *sqlx.DB, wc api.ConnectionRequest) error {
-	q := `
+type walletConnection struct {
+	Address string `db:"address" json:"address"`
+	Code    string `db:"code" json:"code"`
+}
+
+func mostRecentWalletConnection(db *sqlx.DB, address string) (*walletConnection, error) {
+	q1 := `
+		SELECT
+			address, code
+		FROM wallet_connection
+		WHERE address=$1
+		ORDER BY id DESC
+		LIMIT 1
+		`
+	var result walletConnection
+	err := db.Get(&result, q1, address)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// not found
+			return nil, nil
+		}
+		err = fmt.Errorf("failed to fetch wallet connection for address '%s', %w", address, err)
+		log.Error(err)
+		return nil, err
+	}
+	return &result, nil
+}
+
+func ConnectWallet(db *sqlx.DB, req api.ConnectionRequest) error {
+	latest, err := mostRecentWalletConnection(db, strings.ToLower(req.Address))
+	if err != nil {
+		return err
+	}
+	if latest != nil && latest.Code == req.Code {
+		// most recent wallet connection already has this affiliate code -> done
+		return nil
+	}
+	var q string
+	if req.Code != "none" {
+		// we only want to insert a wallet_connection record if the
+		// affiliate code exists in some user_data record in the database
+		q = `
 		INSERT INTO wallet_connection (code, address)
-		SELECT :code, :address
-		WHERE NOT EXISTS (
-		  SELECT 1
-		  FROM wallet_connection
-		  WHERE
-			 code = :code
-			 AND address = :address
-			 AND id = (
-				SELECT id FROM wallet_connection
-				WHERE address = :address
-				ORDER BY id DESC LIMIT 1)
-		)
+		SELECT wc.affiliate_code AS code, :address
+		FROM user_data AS wc
+		WHERE wc.affiliate_code = :code
 	 `
-	if _, err := db.NamedExec(q, wc); err != nil {
+	} else {
+		// the user is connecting his wallet without an affiliate code
+		q = `
+		INSERT INTO wallet_connection (code, address) VALUES(:code, :address)
+	 `
+	}
+	res, err := db.NamedExec(q, req)
+	if err != nil {
 		log.Errorf("failed to insert wallet connection data, %v", err)
 		return err
 	}
-
+	ras, err := res.RowsAffected()
+	if err != nil {
+		log.Errorf("failed to get rows affected, %v", err)
+		return err
+	}
+	if ras == 0 {
+		log.Warnf("wallet connection request with invalid affiliate code: '%s'", req.Code)
+	}
 	return nil
 }
 
@@ -169,29 +215,6 @@ func GetAffiliateCode(db *sqlx.DB, address string) (*api.AffiliateCode, error) {
 			return nil, nil
 		}
 		err = fmt.Errorf("failed to fetch affiliate code for address '%s', %w", address, err)
-		log.Error(err)
-		return nil, err
-	}
-
-	return &result, nil
-}
-
-func ExistingAffiliateCode(db *sqlx.DB, afc string) (*api.AffiliateCode, error) {
-	// fetch the afiliate code for the given code
-	q1 := `
-		SELECT
-			address, COALESCE(affiliate_code, '') AS code, created_at
-		FROM user_data
-		WHERE affiliate_code=$1
-		`
-	var result api.AffiliateCode
-	err := db.Get(&result, q1, afc)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			// not found
-			return nil, nil
-		}
-		err = fmt.Errorf("failed to fetch affiliate code for code '%s', %w", afc, err)
 		log.Error(err)
 		return nil, err
 	}
