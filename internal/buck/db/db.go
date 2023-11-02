@@ -363,21 +363,10 @@ func updateTokenPrice(dtx *sqlx.Tx, ntp decimal.Decimal) error {
 
 func newTokenPrice(ctxt common.Context, oldTokens, newTokens decimal.Decimal) (bool, decimal.Decimal) {
 	// did we enter a new price range? do we need to update the price?
-	currentP := priceBucket(ctxt, newTokens.Sub(oldTokens))
-	newP := priceBucket(ctxt, newTokens)
+	currentP := ctxt.PriceBucket(oldTokens)
+	newP := ctxt.PriceBucket(newTokens)
 
 	return newP.GreaterThan(currentP), newP
-}
-
-func priceBucket(ctxt common.Context, tokens decimal.Decimal) decimal.Decimal {
-	// find the correct price given the number of tokens sold
-	for _, sp := range ctxt.SaleParams {
-		if tokens.LessThan(decimal.NewFromInt(int64(sp.Limit))) {
-			return sp.Price
-		}
-	}
-	// we fell through the loop, return the max price
-	return ctxt.SaleParams[len(ctxt.SaleParams)-1].Price
 }
 
 func RequestPrice(ctxt common.Context, asset string, ts time.Time) error {

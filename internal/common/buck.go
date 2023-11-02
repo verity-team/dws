@@ -59,6 +59,17 @@ type Context struct {
 	UpdateLastBlock  bool
 }
 
+func (c Context) PriceBucket(tokens decimal.Decimal) decimal.Decimal {
+	// find the correct price given the number of tokens sold
+	for _, sp := range c.SaleParams {
+		if tokens.LessThan(decimal.NewFromInt(int64(sp.Limit))) {
+			return sp.Price
+		}
+	}
+	// we fell through the loop, return the max price
+	return c.SaleParams[len(c.SaleParams)-1].Price
+}
+
 type Block struct {
 	Hash         string        `db:"block_hash" json:"hash"`
 	Number       uint64        `db:"block_number" json:"-"`
