@@ -37,7 +37,7 @@ func mostRecentWalletConnection(db *sqlx.DB, address string) (*walletConnection,
 			// not found
 			return nil, nil
 		}
-		err = fmt.Errorf("failed to fetch wallet connection for address '%s', %w", address, err)
+		err = fmt.Errorf("failed to fetch most recent wallet connection for address '%s', %w", address, err)
 		log.Error(err)
 		return nil, err
 	}
@@ -59,9 +59,9 @@ func ConnectWallet(db *sqlx.DB, req api.ConnectionRequest) error {
 		// affiliate code exists in some user_data record in the database
 		q = `
 		INSERT INTO wallet_connection (code, address)
-		SELECT wc.affiliate_code AS code, :address
-		FROM user_data AS wc
-		WHERE wc.affiliate_code = :code
+		SELECT ud.affiliate_code AS code, :address
+		FROM user_data AS ud
+		WHERE ud.affiliate_code = :code
 	 `
 	} else {
 		// the user is connecting his wallet without an affiliate code
