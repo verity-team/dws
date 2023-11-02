@@ -1,8 +1,14 @@
 import BN from "bn.js";
 
 export type AvailableToken = "ETH" | "USDT" | "LINK";
+export type AvailableWallet = "MetaMask" | "WalletConnect" | "Coinbase";
 
-export const avaiableTokens: Array<AvailableToken> = ["ETH", "USDT", "LINK"];
+export const availableTokens: Array<AvailableToken> = ["ETH", "USDT", "LINK"];
+export const availableWallets: Array<AvailableWallet> = [
+  "MetaMask",
+  "WalletConnect",
+  "Coinbase",
+];
 
 // TODO: Do NOT forget to update this when launch
 export const stableCoinPrice: Record<string, number> = {

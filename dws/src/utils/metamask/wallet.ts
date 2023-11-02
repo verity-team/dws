@@ -29,20 +29,15 @@ export const requestAccounts = async (): Promise<Array<string>> => {
 
   // Request wallet (connected) accounts
   let accounts = [];
-  try {
-    accounts = await ethereum.request({
-      method: "eth_requestAccounts",
-    });
-    if (accounts == null || !Array.isArray(accounts)) {
-      return [];
-    }
-  } catch (err) {
-    console.warn({ err });
+  accounts = await ethereum.request({
+    method: "eth_requestAccounts",
+  });
+  if (accounts == null || !Array.isArray(accounts)) {
     return [];
   }
 
   // Request mainnet to continue
-  const isMainnet = await requestMainnet();
+  const isMainnet = await requestTargetNetwork();
   if (!isMainnet) {
     return [];
   }
@@ -51,24 +46,29 @@ export const requestAccounts = async (): Promise<Array<string>> => {
 };
 
 // Request mainnet
-const requestMainnet = async (): Promise<boolean> => {
+const requestTargetNetwork = async (): Promise<boolean> => {
   const ethereum = window.ethereum;
   if (ethereum == null) {
     toast.error("No Ethereum wallet installed");
     return false;
   }
 
+  // Get config from .env, or else fallback to mainnet config
+  const targetNetworkId = process.env.NEXT_PUBLIC_TARGET_NETWORK_ID ?? "0x1";
+  const targetNetworkRPC =
+    process.env.NEXT_PUBLIC_TARGET_NETWORK_RPC ?? "https://eth.llamarpc.com";
+
   try {
     await ethereum.request({
       method: "wallet_switchEthereumChain",
-      params: [{ chainId: "0x1" }],
+      params: [{ chainId: targetNetworkId }],
     });
     return true;
   } catch (error: any) {
     if (error.code === 4902) {
       const success = await requestAddEthChain(
-        "0x1",
-        "https://eth.llamarpc.com"
+        targetNetworkId,
+        targetNetworkRPC
       );
       if (!success) {
         console.warn(error);
