@@ -130,7 +130,7 @@ func (s *DelphiServer) Ready(ctx echo.Context) error {
 func (s *DelphiServer) Version(ctx echo.Context) error {
 	version = fmt.Sprintf("delphi::%s::%s", bts, rev)
 	log.Info("version = ", version)
-	return ctx.String(http.StatusOK, fmt.Sprintf(`{"version": "%s"}\n`, version))
+	return ctx.String(http.StatusOK, fmt.Sprintf(`{"version": "%s"}`, version))
 }
 
 func verifySig(from, msg, sigHex string) bool {

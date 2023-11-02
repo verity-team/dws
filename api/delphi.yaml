@@ -149,10 +149,10 @@ paths:
         "200":
           description: OK
           content:
-            text/plain:
+            application/json:
               schema:
                 type: string
-                example: "delphi::2023-11-02T13:23:50Z::63b7dd8b2d6e"
+                example: {"version": "delphi::2023-11-02T13:23:50Z::63b7dd8b2d6e"}
   /affiliate/code:
     post:
       summary: generate new affiliate code
