@@ -262,8 +262,7 @@ func PersistFailedBlock(dbh *sqlx.DB, b common.Block) error {
 			:block_number, :block_hash, :block_time)
 		ON CONFLICT (block_number) DO NOTHING
 		`
-	_, err := dbh.NamedExec(q, b)
-	if err != nil {
+	if _, err := dbh.NamedExec(q, b); err != nil {
 		err = fmt.Errorf("failed to insert failed block with number %d, %w", b.Number, err)
 		log.Error(err)
 		return err
@@ -349,8 +348,7 @@ func closeCampaign(dtx *sqlx.Tx) error {
 		UPDATE donation_stats
 		SET status='closed'
 		`
-	_, err := dtx.Exec(q1)
-	if err != nil {
+	if _, err := dtx.Exec(q1); err != nil {
 		err = fmt.Errorf("failed to set donation_stats.status to 'closed', %w", err)
 		log.Error(err)
 		return err

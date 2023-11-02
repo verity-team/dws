@@ -31,8 +31,7 @@ func ConnectWallet(db *sqlx.DB, wc api.ConnectionRequest) error {
 				ORDER BY id DESC LIMIT 1)
 		)
 	 `
-	_, err := db.NamedExec(q, wc)
-	if err != nil {
+	if _, err := db.NamedExec(q, wc); err != nil {
 		log.Errorf("failed to insert wallet connection data, %v", err)
 		return err
 	}
@@ -179,8 +178,7 @@ func GetAffiliateCode(db *sqlx.DB, address string) (*api.AffiliateCode, error) {
 
 func genAFC() (string, error) {
 	buff := make([]byte, 8)
-	_, err := rand.Read(buff)
-	if err != nil {
+	if _, err := rand.Read(buff); err != nil {
 		err = fmt.Errorf("failed to generate an affiliate code, %w", err)
 		log.Error(err)
 		return "", err
