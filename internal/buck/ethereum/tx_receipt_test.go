@@ -8,17 +8,18 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+const txrPath = "testdata/eth_getTransactionReceipt.json"
+
 type TxReceiptSuite struct {
 	suite.Suite
 	body []byte
-	path string
 }
 
 func (suite *TxReceiptSuite) SetupTest() {
 	var err error
-	suite.body, err = os.ReadFile(suite.path)
+	suite.body, err = os.ReadFile(txrPath)
 	if err != nil {
-		suite.Failf("failed to read test input '%s', %v", suite.path, err)
+		suite.Failf("failed to read test input '%s', %v", txrPath, err)
 	}
 }
 
@@ -35,9 +36,21 @@ func (suite *TxReceiptSuite) TestSuccess() {
 	assert.Equal(suite.T(), "0x1", rcpt.Status)
 	assert.Equal(suite.T(), "0x9a6394faa769f066b17bd329a9d5f028719bb0bc", rcpt.From)
 }
-
 func TestTxReceiptSuite(t *testing.T) {
 	s := new(TxReceiptSuite)
-	s.path = "testdata/eth_getTransactionReceipt.json"
 	suite.Run(t, s)
+}
+
+func FuzzParseTxReceipt(f *testing.F) {
+	body, err := os.ReadFile(txrPath)
+	if err != nil {
+		f.Fatalf("failed to read test input '%s', %v", txrPath, err)
+	}
+	f.Add(body)
+	f.Fuzz(func(t *testing.T, body []byte) {
+		rcpts, err := parseTxReceipt(body)
+		if err != nil {
+			t.Errorf("fuzz test - parseTxReceipt: %q, %v", rcpts, err)
+		}
+	})
 }
