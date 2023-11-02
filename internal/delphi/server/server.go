@@ -224,8 +224,9 @@ func (s *DelphiServer) DonationData(ctx echo.Context) error {
 		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
 	dd.ReceivingAddress = ra
-	// if we failed to fetch an ETH price, the status should be set to "paused"
-	if dd.Prices[0].Price == "0.00" {
+	// if we failed to fetch an ETH price and the campaign is not closed yet,
+	// the status should be set to "paused"
+	if dd.Prices[0].Price == "0.00" && dd.Status != api.Closed {
 		dd.Status = api.Paused
 	}
 	return ctx.JSON(http.StatusOK, *dd)
