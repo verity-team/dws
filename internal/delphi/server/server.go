@@ -67,12 +67,12 @@ func (s *DelphiServer) ConnectWallet(ctx echo.Context) error {
 	// make sure the affiliate code actually exists and belongs to
 	// the address in case one was specified in the request
 	if cr.Code != "none" {
-		afcFromDB, err := db.GetAffiliateCode(s.db, cr.Address)
+		dbData, err := db.ExistingAffiliateCode(s.db, cr.Code)
 		if err != nil {
 			_, cerr := getError(102, "", err)
 			return ctx.JSON(http.StatusInternalServerError, cerr)
 		}
-		if cr.Code != afcFromDB.Code {
+		if dbData == nil || cr.Code != dbData.Code {
 			_, cerr := getError(103, "", errors.New("invalid affiliate code"))
 			return ctx.JSON(http.StatusBadRequest, cerr)
 		}
