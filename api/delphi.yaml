@@ -140,6 +140,19 @@ paths:
           description: OK
         "503":
           description: something's wrong
+  /version:
+    get:
+      summary: what is the version of this service?
+      description: what is the version of this service?
+      operationId: version
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: string
+                example: {"version": "delphi::2023-11-02T13:23:50Z::63b7dd8b2d6e"}
   /affiliate/code:
     post:
       summary: generate new affiliate code

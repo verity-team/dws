@@ -19,7 +19,11 @@ import (
 	"github.com/verity-team/dws/internal/delphi/db"
 )
 
-const MAX_TIMESTAMP_AGE = 10
+const MAX_TIMESTAMP_AGE = 30
+
+var (
+	bts, rev, version string
+)
 
 type DelphiServer struct {
 	db *sqlx.DB
@@ -123,6 +127,12 @@ func (s *DelphiServer) Ready(ctx echo.Context) error {
 
 }
 
+func (s *DelphiServer) Version(ctx echo.Context) error {
+	version = fmt.Sprintf("delphi::%s::%s", bts, rev)
+	log.Info("version = ", version)
+	return ctx.String(http.StatusOK, fmt.Sprintf(`{"version": "%s"}`, version))
+}
+
 func verifySig(from, msg, sigHex string) bool {
 	sig, err := hexutil.Decode(sigHex)
 	if err != nil {
@@ -159,19 +169,31 @@ func getTS(tss string) (time.Time, error) {
 	return ts.UTC(), nil
 }
 
-func olderThan(ts time.Time, seconds int) bool {
+func authTSTooOld(authTS time.Time) bool {
+	var (
+		maxTSAge int
+		err      error
+	)
+	envVar, present := os.LookupEnv("DWS_MAX_TIMESTAMP_AGE")
+	if present {
+		maxTSAge, err = strconv.Atoi(envVar)
+	}
+	if !present || err != nil {
+		// env var not set or cannot be converted to int
+		maxTSAge = MAX_TIMESTAMP_AGE
+	}
 	now := time.Now().UTC()
-	tdif := now.Sub(ts.UTC())
-	return tdif.Seconds() > float64(seconds)
+	tdif := now.Sub(authTS.UTC())
+	return tdif.Seconds() > float64(maxTSAge)
 }
 
 func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodeParams) error {
-	ts, err := getTS(params.DelphiTs)
+	authTS, err := getTS(params.DelphiTs)
 	if err != nil {
 		_, cerr := getError(105, "", err)
 		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
-	if olderThan(ts, MAX_TIMESTAMP_AGE) {
+	if authTSTooOld(authTS) {
 		err = fmt.Errorf("/affiliate/code delphi-ts ('%s') is not recent enough for address '%s'", params.DelphiTs, params.DelphiKey)
 		log.Error(err)
 		cerr := api.Error{
@@ -182,7 +204,7 @@ func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodePar
 	}
 
 	path := strings.Join(strings.Split(ctx.Path(), "/")[1:], " ")
-	msg := fmt.Sprintf("%s, %s", path, ts.Format("2006-01-02 15:04:05-07:00"))
+	msg := fmt.Sprintf("%s, %s", path, authTS.Format("2006-01-02 15:04:05-07:00"))
 	authOK := verifySig(params.DelphiKey, msg, params.DelphiSignature)
 	if !authOK {
 		return ctx.NoContent(http.StatusUnauthorized)
