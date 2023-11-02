@@ -178,8 +178,7 @@ func GetAffiliateCode(db *sqlx.DB, address string) (*api.AffiliateCode, error) {
 
 func genAFC() (string, error) {
 	buff := make([]byte, 8)
-	_, err := rand.Read(buff)
-	if err != nil {
+	if _, err := rand.Read(buff); err != nil {
 		err = fmt.Errorf("failed to generate an affiliate code, %w", err)
 		log.Error(err)
 		return "", err

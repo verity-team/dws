@@ -116,8 +116,7 @@ func (s *DelphiServer) Alive(ctx echo.Context) error {
 }
 
 func (s *DelphiServer) Ready(ctx echo.Context) error {
-	err := s.db.Ping()
-	if err != nil {
+	if err := s.db.Ping(); err != nil {
 		return ctx.String(http.StatusServiceUnavailable, "{}\n")
 	}
 	return ctx.String(http.StatusOK, "{}\n")

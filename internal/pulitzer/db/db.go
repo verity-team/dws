@@ -27,8 +27,7 @@ func PersistETHPrice(dbh *sqlx.DB, avp decimal.Decimal) error {
 		"asset": "eth",
 		"price": avp,
 	}
-	_, err := dbh.NamedExec(q, qd)
-	if err != nil {
+	if _, err := dbh.NamedExec(q, qd); err != nil {
 		log.Errorf("failed to insert ETH price, %v", err)
 		return err
 	}
@@ -98,8 +97,7 @@ func persistKline(dbt *sqlx.Tx, asset string, kl data.Kline) error {
 		"price":      kl.ClosePrice,
 		"created_at": kl.CloseTime,
 	}
-	_, err := dbt.NamedExec(q, qd)
-	if err != nil {
+	if _, err := dbt.NamedExec(q, qd); err != nil {
 		err = fmt.Errorf("failed to insert historical ETH price for %s, %w", kl.CloseTime, err)
 		log.Error(err)
 		return err
@@ -112,8 +110,7 @@ func closeRequest(dbt *sqlx.Tx, id uint64) error {
 		UPDATE price_req SET status='succeeded'
 		WHERE id=$1
 		`
-	_, err := dbt.Exec(q, id)
-	if err != nil {
+	if _, err := dbt.Exec(q, id); err != nil {
 		err = fmt.Errorf("failed to close price request #%d, %w", id, err)
 		log.Error(err)
 		return err
