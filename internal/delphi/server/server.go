@@ -71,7 +71,8 @@ func (s *DelphiServer) ConnectWallet(ctx echo.Context) error {
 			_, cerr := getError(102, "", err)
 			return ctx.JSON(http.StatusInternalServerError, cerr)
 		}
-		if dbData == nil || cr.Code != dbData.Code {
+		if dbData == nil {
+			// affiliate code not found in database
 			_, cerr := getError(103, "", errors.New("invalid affiliate code"))
 			return ctx.JSON(http.StatusBadRequest, cerr)
 		}
