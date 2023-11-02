@@ -168,7 +168,30 @@ func GetAffiliateCode(db *sqlx.DB, address string) (*api.AffiliateCode, error) {
 			// not found
 			return nil, nil
 		}
-		err = fmt.Errorf("failed to fetch affiliate code for %s, %w", address, err)
+		err = fmt.Errorf("failed to fetch affiliate code for address '%s', %w", address, err)
+		log.Error(err)
+		return nil, err
+	}
+
+	return &result, nil
+}
+
+func ExistingAffiliateCode(db *sqlx.DB, afc string) (*api.AffiliateCode, error) {
+	// fetch the afiliate code for the given code
+	q1 := `
+		SELECT
+			address, COALESCE(affiliate_code, '') AS code, created_at
+		FROM user_data
+		WHERE affiliate_code=$1
+		`
+	var result api.AffiliateCode
+	err := db.Get(&result, q1, afc)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// not found
+			return nil, nil
+		}
+		err = fmt.Errorf("failed to fetch affiliate code for code '%s', %w", afc, err)
 		log.Error(err)
 		return nil, err
 	}

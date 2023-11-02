@@ -60,15 +60,27 @@ func (s *DelphiServer) ConnectWallet(ctx echo.Context) error {
 		log.Error(err)
 		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
-	cr.Address = strings.ToLower(cr.Address)
+	// make sure the affiliate code actually exists in the database
+	if cr.Code != "none" {
+		dbData, err := db.ExistingAffiliateCode(s.db, cr.Code)
+		if err != nil {
+			_, cerr := getError(102, "", err)
+			return ctx.JSON(http.StatusInternalServerError, cerr)
+		}
+		if dbData == nil {
+			// affiliate code not found in database
+			_, cerr := getError(103, "", errors.New("invalid affiliate code"))
+			return ctx.JSON(http.StatusBadRequest, cerr)
+		}
+	}
 	if err = db.ConnectWallet(s.db, cr); err != nil {
-		err, cerr := getError(102, "failed to log wallet connection", err)
+		err, cerr := getError(104, "failed to log wallet connection", err)
 		log.Error(err)
 		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
-	udr, err := s.getUserData(cr.Address)
+	udr, err := s.getUserData(strings.ToLower(cr.Address))
 	if err != nil {
-		_, cerr := getError(103, "", err)
+		_, cerr := getError(105, "", err)
 		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
 	return ctx.JSON(http.StatusOK, *udr)
@@ -101,7 +113,7 @@ func (s *DelphiServer) getUserData(address string) (*api.UserDataResult, error) 
 func (s *DelphiServer) UserData(ctx echo.Context, address string) error {
 	udr, err := s.getUserData(address)
 	if err != nil {
-		_, cerr := getError(104, "", err)
+		_, cerr := getError(106, "", err)
 		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
 	return ctx.JSON(http.StatusOK, *udr)
@@ -179,32 +191,35 @@ func authTSTooOld(authTS time.Time) bool {
 	return tdif.Seconds() > float64(maxTSAge)
 }
 
+func formMsg(urlPath string, authTS time.Time) string {
+	path := strings.Join(strings.Split(urlPath, "/")[1:], " ")
+	return fmt.Sprintf("%s, %s", path, authTS.Format("2006-01-02 15:04:05-07:00"))
+}
+
 func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodeParams) error {
 	authTS, err := getTS(params.DelphiTs)
 	if err != nil {
-		_, cerr := getError(105, "", err)
+		_, cerr := getError(107, "", err)
 		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
 	if authTSTooOld(authTS) {
 		err = fmt.Errorf("/affiliate/code delphi-ts ('%s') is not recent enough for address '%s'", params.DelphiTs, params.DelphiKey)
 		log.Error(err)
 		cerr := api.Error{
-			Code:    106,
+			Code:    108,
 			Message: "timestamp is not recent enough",
 		}
 		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
 
-	path := strings.Join(strings.Split(ctx.Path(), "/")[1:], " ")
-	msg := fmt.Sprintf("%s, %s", path, authTS.Format("2006-01-02 15:04:05-07:00"))
-	authOK := verifySig(params.DelphiKey, msg, params.DelphiSignature)
+	authOK := verifySig(params.DelphiKey, formMsg(ctx.Path(), authTS), params.DelphiSignature)
 	if !authOK {
 		return ctx.NoContent(http.StatusUnauthorized)
 	}
 	log.Infof("auth OK for /affiliate/code request, address '%s'", params.DelphiKey)
 	afc, err := db.GetAffiliateCode(s.db, strings.ToLower(params.DelphiKey))
 	if err != nil {
-		_, cerr := getError(107, "", err)
+		_, cerr := getError(109, "", err)
 		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
 	if afc != nil && afc.Code != "" {
@@ -213,7 +228,7 @@ func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodePar
 	}
 	afc, err = db.GenerateAffiliateCode(s.db, strings.ToLower(params.DelphiKey))
 	if err != nil {
-		_, cerr := getError(108, "", err)
+		_, cerr := getError(110, "", err)
 		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
 	if afc != nil {
@@ -226,14 +241,14 @@ func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodePar
 func (s *DelphiServer) DonationData(ctx echo.Context) error {
 	dd, err := db.GetDonationData(s.db)
 	if err != nil {
-		_, cerr := getError(109, "", err)
+		_, cerr := getError(111, "", err)
 		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
 	ra, present := os.LookupEnv("DWS_DONATION_ADDRESS")
 	if !present {
 		err = errors.New("DWS_DONATION_ADDRESS environment variable not set")
 		log.Error(err)
-		_, cerr := getError(110, "", err)
+		_, cerr := getError(112, "", err)
 		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
 	dd.ReceivingAddress = ra
