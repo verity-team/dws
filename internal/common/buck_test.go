@@ -21,6 +21,8 @@ func TestPriceBucket(t *testing.T) {
 
 	a := c.priceBucket(decimal.NewFromInt(int64(0)))
 	assert.Equal(t, decimal.NewFromFloat(0.001), a)
+	a = c.priceBucket(decimal.NewFromInt(int64(1049999999)))
+	assert.Equal(t, decimal.NewFromFloat(0.001), a)
 	a = c.priceBucket(decimal.NewFromInt(int64(1050000000)))
 	assert.Equal(t, decimal.NewFromFloat(0.002), a)
 	a = c.priceBucket(decimal.NewFromInt(int64(2625000000)))
