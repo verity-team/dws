@@ -71,13 +71,11 @@ func (s *DelphiServer) ConnectWallet(ctx echo.Context) error {
 		_, cerr := getError(103, "", err)
 		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
-	if udr == nil {
-		return ctx.NoContent(http.StatusNotFound)
-	}
 	return ctx.JSON(http.StatusOK, *udr)
 }
 
 func (s *DelphiServer) getUserData(address string) (*api.UserDataResult, error) {
+	var result api.UserDataResult
 	address = strings.ToLower(address)
 	dd, err := db.GetUserDonationData(s.db, address)
 	if err != nil {
@@ -89,12 +87,10 @@ func (s *DelphiServer) getUserData(address string) (*api.UserDataResult, error) 
 	}
 	if (dd == nil) && (udata == nil) {
 		// no user data for the address given
-		return nil, nil
+		return &result, nil
 	}
 
-	result := api.UserDataResult{
-		Donations: dd,
-	}
+	result.Donations = dd
 	if udata != nil {
 		result.UserData = *udata
 	}
@@ -107,10 +103,6 @@ func (s *DelphiServer) UserData(ctx echo.Context, address string) error {
 	if err != nil {
 		_, cerr := getError(104, "", err)
 		return ctx.JSON(http.StatusInternalServerError, cerr)
-	}
-
-	if udr == nil {
-		return ctx.NoContent(http.StatusNotFound)
 	}
 	return ctx.JSON(http.StatusOK, *udr)
 }

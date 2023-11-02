@@ -44,8 +44,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/error'
-        "404":
-          description: no data found for address
         "5XX":
           description: |
             Servers are not working as expected. The request is probably valid
@@ -112,8 +110,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/error'
-        "404":
-          description: no data found for address
         "5XX":
           description: |
             Servers are not working as expected. The request is probably valid
