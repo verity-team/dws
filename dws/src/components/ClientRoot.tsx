@@ -11,9 +11,9 @@ import React, {
   useState,
 } from "react";
 import toast, { Toaster } from "react-hot-toast";
-import ConnectModal from "./metamask/wallet/ConnectModal";
 import { getWalletShorthand, requestAccounts } from "@/utils/metamask/wallet";
 import { connectWalletWithAffiliate } from "@/utils/api/client/affiliateAPI";
+import ConnectModalV2 from "./wallet/ConnectModalv2";
 
 interface ClientRootProps {
   children: ReactNode;
@@ -45,7 +45,7 @@ const ClientRoot = ({
 
   const [accounts, setAccounts] = useState<string[]>([]);
   const [account, setAccount] = useState("");
-  const [selectWalletOpen, setSelectWalletOpen] = useState(false);
+  const [connectWalletFormOpen, setConnectWalletFormOpen] = useState(false);
 
   useEffect(() => {
     const ethereum = window?.ethereum;
@@ -82,15 +82,15 @@ const ClientRoot = ({
     }
 
     setAccounts(result);
-    setSelectWalletOpen(true);
+    setConnectWalletFormOpen(true);
   }, []);
 
   const disconnectWallet = useCallback((): void => {
     setAccount("");
   }, []);
 
-  const handleClose = (): void => {
-    setSelectWalletOpen(false);
+  const handleCloseConnectWalletForm = (): void => {
+    setConnectWalletFormOpen(false);
   };
 
   const handleSelectAccount = (selected: string): void => {
@@ -118,12 +118,16 @@ const ClientRoot = ({
       </WalletUtils.Provider>
 
       <Toaster />
-      <ConnectModal
+      {/* <ConnectModal
         isOpen={selectWalletOpen}
         account={account}
         accounts={accounts}
         onClose={handleClose}
         onSelect={handleSelectAccount}
+      /> */}
+      <ConnectModalV2
+        isOpen={connectWalletFormOpen}
+        onClose={handleCloseConnectWalletForm}
       />
     </>
   );
