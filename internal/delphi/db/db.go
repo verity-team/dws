@@ -31,8 +31,7 @@ func ConnectWallet(db *sqlx.DB, wc api.ConnectionRequest) error {
 				ORDER BY id DESC LIMIT 1)
 		)
 	 `
-	_, err := db.NamedExec(q, wc)
-	if err != nil {
+	if _, err := db.NamedExec(q, wc); err != nil {
 		log.Errorf("failed to insert wallet connection data, %v", err)
 		return err
 	}

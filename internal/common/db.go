@@ -22,8 +22,7 @@ func GetLatestETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 		LIMIT 1
 		`
 	var ethp decimal.Decimal
-	err := db.Get(&ethp, q1)
-	if err != nil {
+	if err := db.Get(&ethp, q1); err != nil {
 		err = fmt.Errorf("failed to fetch an ETH price that is newer than 3 minutes, %w", err)
 		log.Error(err)
 		return decimal.Zero, err
