@@ -110,7 +110,7 @@ func PersistTxs(ctxt common.Context, bn uint64, ethPrice decimal.Decimal, txs []
 	}
 
 	if ctxt.CrawlerType == common.Finalized {
-		total, newTokens, oldTokens, err := updateDonationStats(dtx)
+		total, newTokens, oldTokens, err := updateDonationStats(dtx, ctxt)
 		if err != nil {
 			return err
 		}
@@ -313,7 +313,7 @@ func GetOldestUnconfirmed(dbh *sqlx.DB) (uint64, error) {
 	return result, nil
 }
 
-func updateDonationStats(dtx *sqlx.Tx) (decimal.Decimal, decimal.Decimal, decimal.Decimal, error) {
+func updateDonationStats(dtx *sqlx.Tx, ctxt common.Context) (decimal.Decimal, decimal.Decimal, decimal.Decimal, error) {
 	q1 := `
 		WITH DonationSum AS (
 			 SELECT
@@ -335,7 +335,28 @@ func updateDonationStats(dtx *sqlx.Tx) (decimal.Decimal, decimal.Decimal, decima
 		return decimal.Zero, decimal.Zero, decimal.Zero, err
 	}
 
+	if newTokens.GreaterThanOrEqual(ctxt.TokenSaleLimit()) {
+		err = closeCampaign(dtx)
+		if err != nil {
+			return decimal.Zero, decimal.Zero, decimal.Zero, err
+		}
+	}
 	return newTotal, newTokens, oldTokens, nil
+}
+
+func closeCampaign(dtx *sqlx.Tx) error {
+	q1 := `
+		UPDATE donation_stats
+		SET status='closed'
+		`
+	_, err := dtx.Exec(q1)
+	if err != nil {
+		err = fmt.Errorf("failed to set donation_stats.status to 'closed', %w", err)
+		log.Error(err)
+		return err
+	}
+
+	return nil
 }
 
 func updateTokenPrice(dtx *sqlx.Tx, ntp decimal.Decimal) error {
@@ -436,7 +457,7 @@ func FinalizeTx(ctxt common.Context, tx common.TxByHash) error {
 		// nothing to do - return
 		return nil
 	}
-	_, newTokens, oldTokens, err := updateDonationStats(dtx)
+	_, newTokens, oldTokens, err := updateDonationStats(dtx, ctxt)
 	if err != nil {
 		return err
 	}
