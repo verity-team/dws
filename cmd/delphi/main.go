@@ -68,20 +68,15 @@ func main() {
 
 	// This is how you set up a basic Echo router
 	e := echo.New()
-	// Log all requests
 	e.Use(echomiddleware.Logger())
 
 	e.Use(echomiddleware.BodyLimitWithConfig(blv))
 	e.Use(echomiddleware.Secure())
 
-	// Use our validation middleware to check all requests against the
-	// OpenAPI schema.
 	e.Use(middleware.OapiRequestValidator(swagger))
 
-	// We now register our petStore above as the handler for the interface
 	api.RegisterHandlers(e, ds)
 
-	// And we serve HTTP until the world ends.
 	err = e.Start(net.JoinHostPort("0.0.0.0", *port))
 	if err != nil {
 		log.Error(err)

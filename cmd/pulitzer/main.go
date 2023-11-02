@@ -64,6 +64,9 @@ func main() {
 	e.GET("/live", func(c echo.Context) error {
 		return c.String(http.StatusOK, "{}\n")
 	})
+	e.GET("/version", func(c echo.Context) error {
+		return c.String(http.StatusOK, fmt.Sprintf(`{"version": "%s"}\n`, version))
+	})
 	e.GET("/ready", func(c echo.Context) error {
 		select {
 		case <-ctx.Done():
