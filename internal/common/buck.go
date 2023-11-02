@@ -59,6 +59,33 @@ type Context struct {
 	UpdateLastBlock  bool
 }
 
+func (c Context) priceBucket(tokens decimal.Decimal) decimal.Decimal {
+	// find the correct price given the number of tokens sold
+	// please note: the sales params slice is sorted in ascending order,
+	// based on the limit property
+	for _, sp := range c.SaleParams {
+		if tokens.LessThan(decimal.NewFromInt(int64(sp.Limit))) {
+			return sp.Price
+		}
+	}
+	// we fell through the loop, return the max price
+	return c.SaleParams[len(c.SaleParams)-1].Price
+}
+
+func (c Context) TokenSaleLimit() decimal.Decimal {
+	// sales params slice is sorted
+	max := c.SaleParams[len(c.SaleParams)-1].Limit
+	return decimal.NewFromInt(int64(max))
+}
+
+func (c Context) NewTokenPrice(oldTokens, newTokens decimal.Decimal) (bool, decimal.Decimal) {
+	// did we enter a new price range? do we need to update the price?
+	currentP := c.priceBucket(oldTokens)
+	newP := c.priceBucket(newTokens)
+
+	return newP.GreaterThan(currentP), newP
+}
+
 type Block struct {
 	Hash         string        `db:"block_hash" json:"hash"`
 	Number       uint64        `db:"block_number" json:"-"`
@@ -244,7 +271,7 @@ func getSaleParams(saleParamJson string) ([]SaleParam, error) {
 		log.Error(err)
 		return nil, err
 	}
-	// sort in ascending order
+	// sort in ascending order, based on limit
 	sort.Slice(sps, func(i, j int) bool {
 		return sps[i].Limit < sps[j].Limit
 	})
