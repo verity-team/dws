@@ -29,15 +29,10 @@ export const requestAccounts = async (): Promise<Array<string>> => {
 
   // Request wallet (connected) accounts
   let accounts = [];
-  try {
-    accounts = await ethereum.request({
-      method: "eth_requestAccounts",
-    });
-    if (accounts == null || !Array.isArray(accounts)) {
-      return [];
-    }
-  } catch (err) {
-    console.warn({ err });
+  accounts = await ethereum.request({
+    method: "eth_requestAccounts",
+  });
+  if (accounts == null || !Array.isArray(accounts)) {
     return [];
   }
 

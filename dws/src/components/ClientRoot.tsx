@@ -54,7 +54,7 @@ const ClientRoot = ({
     }
 
     ethereum.on("chainChanged", (chainId: string) => {
-      if (chainId === "0x1") {
+      if (chainId === process.env.NEXT_PUBLIC_TARGET_NETWORK_ID) {
         return;
       }
 
@@ -75,13 +75,7 @@ const ClientRoot = ({
     }).catch(console.warn);
   }, [account]);
 
-  const connectWallet = useCallback(async (): Promise<void> => {
-    const result = await requestAccounts();
-    if (result == null || result.length === 0) {
-      return;
-    }
-
-    setAccounts(result);
+  const connectWallet = useCallback(() => {
     setConnectWalletFormOpen(true);
   }, []);
 

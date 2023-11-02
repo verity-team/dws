@@ -1,4 +1,4 @@
-import { ReactElement } from "react";
+import { ReactElement, memo } from "react";
 import WalletIcon from "@mui/icons-material/Wallet";
 import Image from "next/image";
 
@@ -30,4 +30,4 @@ const ConnectOption = ({
   );
 };
 
-export default ConnectOption;
+export default memo(ConnectOption);
