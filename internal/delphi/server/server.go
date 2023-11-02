@@ -64,8 +64,7 @@ func (s *DelphiServer) ConnectWallet(ctx echo.Context) error {
 	if cr.Code == "" {
 		cr.Code = "none"
 	}
-	// make sure the affiliate code actually exists and belongs to
-	// the address in case one was specified in the request
+	// make sure the affiliate code actually exists in the database
 	if cr.Code != "none" {
 		dbData, err := db.ExistingAffiliateCode(s.db, cr.Code)
 		if err != nil {
