@@ -1,4 +1,4 @@
-import { AvailableToken, avaiableTokens } from "@/utils/token";
+import { AvailableToken, availableTokens } from "@/utils/token";
 import { ReactElement, memo } from "react";
 
 interface TokenSelectorProps {
@@ -12,7 +12,7 @@ const TokenSelector = ({
 }: TokenSelectorProps): ReactElement<TokenSelectorProps> => {
   return (
     <div className="grid grid-cols-3 gap-2 p-2">
-      {avaiableTokens.map((token) => {
+      {availableTokens.map((token) => {
         if (token === selectedToken) {
           return (
             <button
