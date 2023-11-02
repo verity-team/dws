@@ -179,6 +179,11 @@ func authTSTooOld(authTS time.Time) bool {
 	return tdif.Seconds() > float64(maxTSAge)
 }
 
+func formMsg(urlPath string, authTS time.Time) string {
+	path := strings.Join(strings.Split(urlPath, "/")[1:], " ")
+	return fmt.Sprintf("%s, %s", path, authTS.Format("2006-01-02 15:04:05-07:00"))
+}
+
 func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodeParams) error {
 	authTS, err := getTS(params.DelphiTs)
 	if err != nil {
@@ -195,9 +200,7 @@ func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodePar
 		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
 
-	path := strings.Join(strings.Split(ctx.Path(), "/")[1:], " ")
-	msg := fmt.Sprintf("%s, %s", path, authTS.Format("2006-01-02 15:04:05-07:00"))
-	authOK := verifySig(params.DelphiKey, msg, params.DelphiSignature)
+	authOK := verifySig(params.DelphiKey, formMsg(ctx.Path(), authTS), params.DelphiSignature)
 	if !authOK {
 		return ctx.NoContent(http.StatusUnauthorized)
 	}
