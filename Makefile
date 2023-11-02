@@ -7,6 +7,7 @@ timestamp := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 COMPOSE_CMD := docker-compose
 DOCKER_COMPOSE_FOLDER=deployments/docker
+DELPHI_SERVER_PGK=github.com/verity-team/dws/internal/delphi/server
 
 all: build
 
@@ -22,7 +23,7 @@ build: lint
 		"-X main.rev=$(version) -X main.bts=$(timestamp)" cmd/buck/main.go
 	rm -f $(BIN_DIR)/delphi
 	go build -o $(BIN_DIR)/delphi -v -ldflags \
-		"-X main.rev=$(version) -X main.bts=$(timestamp)" cmd/delphi/main.go
+		"-X main.rev=$(version) -X main.bts=$(timestamp) -X $(DELPHI_SERVER_PGK).rev=$(version) -X $(DELPHI_SERVER_PGK).bts=$(timestamp)" cmd/delphi/main.go
 	rm -f $(BIN_DIR)/pulitzer
 	go build -o $(BIN_DIR)/pulitzer -v -ldflags \
 		"-X main.rev=$(version) -X main.bts=$(timestamp)" cmd/pulitzer/main.go

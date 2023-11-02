@@ -19,7 +19,11 @@ import (
 	"github.com/verity-team/dws/internal/delphi/db"
 )
 
-const MAX_TIMESTAMP_AGE = 10
+const MAX_TIMESTAMP_AGE = 30
+
+var (
+	bts, rev, version string
+)
 
 type DelphiServer struct {
 	db *sqlx.DB
@@ -121,6 +125,12 @@ func (s *DelphiServer) Ready(ctx echo.Context) error {
 	}
 	return ctx.String(http.StatusOK, "{}\n")
 
+}
+
+func (s *DelphiServer) Version(ctx echo.Context) error {
+	version = fmt.Sprintf("delphi::%s::%s", bts, rev)
+	log.Info("version = ", version)
+	return ctx.String(http.StatusOK, fmt.Sprintf(`{"version": "%s"}\n`, version))
 }
 
 func verifySig(from, msg, sigHex string) bool {
