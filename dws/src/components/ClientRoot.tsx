@@ -11,16 +11,17 @@ import React, {
   useState,
 } from "react";
 import toast, { Toaster } from "react-hot-toast";
-import { getWalletShorthand, requestAccounts } from "@/utils/metamask/wallet";
+import { getWalletShorthand } from "@/utils/metamask/wallet";
 import { connectWalletWithAffiliate } from "@/utils/api/client/affiliateAPI";
 import ConnectModalV2 from "./wallet/ConnectModalv2";
+import { AvailableWallet } from "@/utils/token";
 
 interface ClientRootProps {
   children: ReactNode;
 }
 
 interface WalletUtils {
-  connect: () => Promise<void>;
+  connect: () => void;
   disconnect: () => void;
 }
 
@@ -31,7 +32,7 @@ export const ClientWallet = createContext<string>("");
 
 // Functions to change wallet and disconnect wallet
 export const WalletUtils = createContext<WalletUtils>({
-  connect: () => Promise.resolve(),
+  connect: () => {},
   disconnect: () => {},
 });
 
@@ -43,8 +44,8 @@ const ClientRoot = ({
   const searchParams = useSearchParams();
   const affiliateCode = searchParams.get("afc");
 
-  const [accounts, setAccounts] = useState<string[]>([]);
   const [account, setAccount] = useState("");
+  const [provider, setProvider] = useState<AvailableWallet>("MetaMask");
   const [connectWalletFormOpen, setConnectWalletFormOpen] = useState(false);
 
   useEffect(() => {
@@ -67,8 +68,6 @@ const ClientRoot = ({
       return;
     }
 
-    toast.success(`Connected to ${getWalletShorthand(account)}`);
-    toast("Welcome to TruthMemes", { icon: "👋" });
     connectWalletWithAffiliate({
       address: account,
       code: affiliateCode ?? "none",
@@ -83,20 +82,16 @@ const ClientRoot = ({
     setAccount("");
   }, []);
 
-  const handleCloseConnectWalletForm = (): void => {
-    setConnectWalletFormOpen(false);
+  const handleConfirmWalletAndProvider = (
+    walletAddress: string,
+    provider: AvailableWallet
+  ) => {
+    setAccount(walletAddress);
+    setProvider(provider);
   };
 
-  const handleSelectAccount = (selected: string): void => {
-    if (selected === "") {
-      return;
-    }
-
-    if (selected === account) {
-      return;
-    }
-
-    setAccount(selected);
+  const handleCloseConnectWalletForm = (): void => {
+    setConnectWalletFormOpen(false);
   };
 
   return (
@@ -110,18 +105,14 @@ const ClientRoot = ({
           </ClientAFC.Provider>
         </ClientWallet.Provider>
       </WalletUtils.Provider>
-
       <Toaster />
-      {/* <ConnectModal
-        isOpen={selectWalletOpen}
-        account={account}
-        accounts={accounts}
-        onClose={handleClose}
-        onSelect={handleSelectAccount}
-      /> */}
       <ConnectModalV2
         isOpen={connectWalletFormOpen}
         onClose={handleCloseConnectWalletForm}
+        selectedAccount={account}
+        setSelectedAccount={setAccount}
+        selectedProvider={provider}
+        setSelectedProvider={setProvider}
       />
     </>
   );

@@ -1,6 +1,6 @@
 import { Dialog, DialogContent, IconButton } from "@mui/material";
 import Image from "next/image";
-import { ReactElement, useCallback, useState } from "react";
+import { ReactElement, SetStateAction, useCallback, useState } from "react";
 import ConnectOption from "./ConnectOption";
 import { AvailableWallet } from "@/utils/token";
 import ConnectStatus from "./ConnectStatus";
@@ -17,6 +17,10 @@ import { sleep } from "@/utils/utils";
 interface ConnectModalV2Props {
   isOpen: boolean;
   onClose: () => void;
+  selectedAccount: string;
+  setSelectedAccount: React.Dispatch<SetStateAction<string>>;
+  selectedProvider: AvailableWallet;
+  setSelectedProvider: React.Dispatch<SetStateAction<AvailableWallet>>;
 }
 
 /**
@@ -31,14 +35,15 @@ export type WalletConnectStatus = "connecting" | "pending" | "rejected";
 
 const ConnectModalV2 = ({
   isOpen,
+  selectedAccount,
+  setSelectedAccount,
+  selectedProvider,
+  setSelectedProvider,
   onClose,
 }: ConnectModalV2Props): ReactElement<ConnectModalV2Props> => {
   const [currentStep, setCurrentStep] = useState(0);
-  const [currentProvider, setCurrentProvider] =
-    useState<AvailableWallet>("MetaMask");
 
   const [accounts, setAccounts] = useState<string[]>([]);
-  const [selectedAccount, setSelectedAccount] = useState<string>("");
 
   const [connectStatus, setConnectStatus] =
     useState<WalletConnectStatus>("connecting");
@@ -52,7 +57,10 @@ const ConnectModalV2 = ({
   }, [onClose]);
 
   const handleFinalizeConnection = useCallback(async () => {
+    // Show success screen
     setCurrentStep(3);
+
+    // Close modal after some times so user can read the message
     await sleep(2000);
     handleCloseModal();
   }, [handleCloseModal]);
@@ -65,7 +73,7 @@ const ConnectModalV2 = ({
   const handleConnectMetaMask = useCallback(async () => {
     // Make UI switch to connecting screen
     setCurrentStep(1);
-    setCurrentProvider("MetaMask");
+    setSelectedProvider("MetaMask");
 
     let requestedAccounts = [];
     try {
@@ -93,6 +101,7 @@ const ConnectModalV2 = ({
     if (requestedAccounts.length === 1) {
       // User connect only 1 account
       // => Use that account, show success message (step 4), then proceed to close the popup
+      setSelectedAccount(requestedAccounts[0]);
       handleFinalizeConnection();
       return;
     } else {
@@ -104,10 +113,10 @@ const ConnectModalV2 = ({
   const handleRetry = useCallback(async () => {
     setConnectStatus("connecting");
 
-    if (currentProvider === "MetaMask") {
+    if (selectedProvider === "MetaMask") {
       await handleConnectMetaMask();
     }
-  }, [currentProvider, handleConnectMetaMask]);
+  }, [selectedProvider, handleConnectMetaMask]);
 
   const handleSelectWallet = useCallback(
     (selectedAccount: string) => {

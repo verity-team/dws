@@ -4,7 +4,6 @@ import { ReactElement, memo, useCallback } from "react";
 interface WalletOptionProps {
   address: string;
   name: string;
-  selected: boolean;
   onSelect: (selectedWallet: string) => void;
 }
 
