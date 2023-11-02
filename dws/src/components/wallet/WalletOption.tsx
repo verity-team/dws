@@ -11,16 +11,11 @@ interface WalletOptionProps {
 const WalletOption = ({
   address,
   name,
-  selected,
   onSelect,
 }: WalletOptionProps): ReactElement<WalletOptionProps> => {
   const handleSelect = useCallback(() => {
-    if (selected) {
-      return;
-    }
-
     onSelect(address);
-  }, [selected, onSelect]);
+  }, [address, onSelect]);
 
   return (
     <div

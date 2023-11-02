@@ -5,9 +5,14 @@ import ConnectOption from "./ConnectOption";
 import { AvailableWallet } from "@/utils/token";
 import ConnectStatus from "./ConnectStatus";
 import TextButton from "../common/TextButton";
-import { connectWallet, requestAccounts } from "@/utils/metamask/wallet";
+import {
+  connectWallet,
+  getWalletShorthand,
+  requestAccounts,
+} from "@/utils/metamask/wallet";
 import WalletOption from "./WalletOption";
 import CloseIcon from "@mui/icons-material/Close";
+import { sleep } from "@/utils/utils";
 
 interface ConnectModalV2Props {
   isOpen: boolean;
@@ -40,13 +45,20 @@ const ConnectModalV2 = ({
 
   // Run procedure when closing connect wallet form
   const handleCloseModal = useCallback(() => {
+    onClose();
+
     setCurrentStep(0);
     setConnectStatus("connecting");
-    onClose();
   }, [onClose]);
 
-  const handlePreviousStep = useCallback(() => {
-    setCurrentStep((step) => (step - 1 < 0 ? 0 : step - 1));
+  const handleFinalizeConnection = useCallback(async () => {
+    setCurrentStep(3);
+    await sleep(2000);
+    handleCloseModal();
+  }, [handleCloseModal]);
+
+  const handleBackToWallet = useCallback(() => {
+    setCurrentStep(0);
     setConnectStatus("connecting");
   }, []);
 
@@ -81,10 +93,8 @@ const ConnectModalV2 = ({
     if (requestedAccounts.length === 1) {
       // User connect only 1 account
       // => Use that account, show success message (step 4), then proceed to close the popup
-      setTimeout(() => {
-        setCurrentStep(3);
-        handleCloseModal();
-      }, 3000);
+      handleFinalizeConnection();
+      return;
     } else {
       // User connect multiple accounts, proceed to step 3
       setCurrentStep(2);
@@ -99,10 +109,13 @@ const ConnectModalV2 = ({
     }
   }, [currentProvider, handleConnectMetaMask]);
 
-  const handleSelectWallet = useCallback((selectedAccount: string) => {
-    setSelectedAccount(selectedAccount);
-    setCurrentStep(3);
-  }, []);
+  const handleSelectWallet = useCallback(
+    (selectedAccount: string) => {
+      setSelectedAccount(selectedAccount);
+      handleFinalizeConnection();
+    },
+    [handleFinalizeConnection]
+  );
 
   return (
     <Dialog
@@ -165,6 +178,14 @@ const ConnectModalV2 = ({
                   *You can switch between connected wallets. No worries!
                 </div>
               </div>
+
+              <div hidden={currentStep !== 3}>
+                <div className="text-2xl py-2">
+                  Welcome to
+                  <br />
+                  Truth Memes
+                </div>
+              </div>
             </div>
           </div>
 
@@ -190,35 +211,44 @@ const ConnectModalV2 = ({
                 />
               </div>
               <div className="my-8 flex items-center justify-center h-full">
-                <TextButton onClick={handlePreviousStep}>
+                <TextButton onClick={handleBackToWallet}>
                   Back to wallets
                 </TextButton>
               </div>
             </div>
 
             <div className="px-4" hidden={currentStep !== 2}>
-              <div className="text-xl p-2">Available Wallets (3)</div>
+              <div className="text-xl p-2">
+                Connected wallets ({accounts.length})
+              </div>
               <div className="grid grid-cols-2 gap-4 p-2">
                 {accounts.map((address, i) => (
                   <WalletOption
                     key={address}
                     address={address}
                     name={`Wallet ${i + 1}`}
-                    selected={address === address}
                     onSelect={handleSelectWallet}
                   />
                 ))}
               </div>
               <div className="my-8 flex items-center justify-center h-full space-x-2">
                 <div>
-                  <TextButton onClick={handlePreviousStep}>
+                  <TextButton onClick={handleBackToWallet}>
                     Back to wallets
                   </TextButton>
                 </div>
               </div>
             </div>
 
-            <div className="px-4" hidden={currentStep !== 3}></div>
+            <div className="px-4" hidden={currentStep !== 3}>
+              <div className="text-xl p-2">Connected</div>
+              <div className="flex flex-col items-center justify-start border-2 border-black rounded-lg px-4 py-2">
+                <div>Connected to {getWalletShorthand(selectedAccount)}</div>
+                <div className="italic">
+                  This screen will close in a short while
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </DialogContent>
