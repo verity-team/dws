@@ -16,9 +16,15 @@ import ConnectModalV2 from "./wallet/ConnectModalv2";
 import { AvailableToken, AvailableWallet } from "@/utils/token";
 import { createWeb3Modal, defaultWagmiConfig } from "@web3modal/wagmi/react";
 import { mainnet, sepolia } from "viem/chains";
-import { WagmiConfig, useAccount } from "wagmi";
+import { WagmiConfig, useAccount, useSendTransaction } from "wagmi";
 import { requestSignature } from "@/utils/metamask/sign";
 import { donate } from "@/utils/metamask/donate";
+import {
+  prepareSendTransaction,
+  sendTransaction,
+  signMessage,
+} from "@wagmi/core";
+import { parseEther } from "viem";
 
 interface ClientRootProps {
   children: ReactNode;
@@ -47,7 +53,7 @@ export const WalletUtils = createContext<WalletUtils>({
   requestWalletSignature: () => Promise.resolve(""),
 });
 
-const projectId = "cc64c60e9acdab0e270dd3bd452b7fd9";
+const projectId = process.env.NEXT_PUBLIC_WC_PROJECT_ID ?? "";
 const metadata = {
   name: "TruthMemes",
   description: "TruthMemes",
@@ -126,7 +132,17 @@ const ClientRoot = ({
       }
 
       if (provider === "WalletConnect") {
-        return "";
+        const receiver = process.env.NEXT_PUBLIC_DONATE_PUBKEY;
+        if (!receiver) {
+          console.warn("Receive wallet not set");
+          return "";
+        }
+        const txConfig = await prepareSendTransaction({
+          to: receiver,
+          value: parseEther(amount.toString()),
+        });
+        const { hash } = await sendTransaction(txConfig);
+        return hash;
       }
 
       return "";
@@ -145,7 +161,8 @@ const ClientRoot = ({
       }
 
       if (provider === "WalletConnect") {
-        return "";
+        const signature = await signMessage({ message });
+        return signature;
       }
 
       return "";

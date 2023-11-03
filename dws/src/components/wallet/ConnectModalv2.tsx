@@ -2,7 +2,13 @@
 
 import { Dialog, DialogContent, IconButton } from "@mui/material";
 import Image from "next/image";
-import { ReactElement, SetStateAction, useCallback, useState } from "react";
+import {
+  ReactElement,
+  SetStateAction,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 import ConnectOption from "./ConnectOption";
 import { AvailableWallet } from "@/utils/token";
 import ConnectStatus from "./ConnectStatus";
@@ -12,6 +18,7 @@ import WalletOption from "./WalletOption";
 import CloseIcon from "@mui/icons-material/Close";
 import { sleep } from "@/utils/utils";
 import { useWeb3Modal } from "@web3modal/wagmi/react";
+import { useAccount, useDisconnect, useSwitchNetwork } from "wagmi";
 
 interface ConnectModalV2Props {
   isOpen: boolean;
@@ -48,6 +55,32 @@ const ConnectModalV2 = ({
     useState<WalletConnectStatus>("connecting");
 
   const { open } = useWeb3Modal();
+  const { disconnectAsync } = useDisconnect();
+  const { address } = useAccount();
+  const { switchNetworkAsync } = useSwitchNetwork();
+
+  useEffect(() => {
+    if (!address) {
+      return;
+    }
+
+    const ensureNetwork = async () => {
+      const targetNetworkId = parseInt(
+        process.env.NEXT_PUBLIC_TARGET_NETWORK_ID ?? "0x1",
+        16
+      );
+
+      await switchNetworkAsync?.(targetNetworkId);
+    };
+
+    ensureNetwork()
+      .then(() => {
+        setSelectedAccount(address);
+        setSelectedProvider("WalletConnect");
+        handleFinalizeConnection();
+      })
+      .catch(console.error);
+  }, [address]);
 
   // Run procedure when closing connect wallet form
   const handleCloseModal = useCallback(() => {
@@ -111,9 +144,11 @@ const ConnectModalV2 = ({
     }
   }, [handleFinalizeConnection, setSelectedAccount, setSelectedProvider]);
 
-  const handleConnectWC = useCallback(() => {
+  const handleConnectWC = useCallback(async () => {
+    // Disconnect so user can change to another wallet without extra steps
+    await disconnectAsync();
     open();
-  }, [open]);
+  }, [open, disconnectAsync]);
 
   const handleRetry = useCallback(async () => {
     setConnectStatus("connecting");
