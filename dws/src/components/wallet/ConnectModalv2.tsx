@@ -1,22 +1,32 @@
+"use client";
+
 import { Dialog, DialogContent, IconButton } from "@mui/material";
 import Image from "next/image";
-import { ReactElement, useCallback, useState } from "react";
+import {
+  ReactElement,
+  SetStateAction,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 import ConnectOption from "./ConnectOption";
 import { AvailableWallet } from "@/utils/token";
 import ConnectStatus from "./ConnectStatus";
 import TextButton from "../common/TextButton";
-import {
-  connectWallet,
-  getWalletShorthand,
-  requestAccounts,
-} from "@/utils/metamask/wallet";
+import { getWalletShorthand, requestAccounts } from "@/utils/metamask/wallet";
 import WalletOption from "./WalletOption";
 import CloseIcon from "@mui/icons-material/Close";
 import { sleep } from "@/utils/utils";
+import { useWeb3Modal } from "@web3modal/wagmi/react";
+import { useAccount, useDisconnect, useNetwork, useSwitchNetwork } from "wagmi";
 
 interface ConnectModalV2Props {
   isOpen: boolean;
   onClose: () => void;
+  selectedAccount: string;
+  setSelectedAccount: React.Dispatch<SetStateAction<string>>;
+  selectedProvider: AvailableWallet;
+  setSelectedProvider: React.Dispatch<SetStateAction<AvailableWallet>>;
 }
 
 /**
@@ -31,17 +41,24 @@ export type WalletConnectStatus = "connecting" | "pending" | "rejected";
 
 const ConnectModalV2 = ({
   isOpen,
+  selectedAccount,
+  setSelectedAccount,
+  selectedProvider,
+  setSelectedProvider,
   onClose,
 }: ConnectModalV2Props): ReactElement<ConnectModalV2Props> => {
   const [currentStep, setCurrentStep] = useState(0);
-  const [currentProvider, setCurrentProvider] =
-    useState<AvailableWallet>("MetaMask");
 
   const [accounts, setAccounts] = useState<string[]>([]);
-  const [selectedAccount, setSelectedAccount] = useState<string>("");
 
   const [connectStatus, setConnectStatus] =
     useState<WalletConnectStatus>("connecting");
+
+  const { open } = useWeb3Modal();
+  const { disconnectAsync } = useDisconnect();
+
+  const { chain } = useNetwork();
+  const { switchNetwork } = useSwitchNetwork();
 
   // Run procedure when closing connect wallet form
   const handleCloseModal = useCallback(() => {
@@ -52,7 +69,10 @@ const ConnectModalV2 = ({
   }, [onClose]);
 
   const handleFinalizeConnection = useCallback(async () => {
+    // Show success screen
     setCurrentStep(3);
+
+    // Close modal after some times so user can read the message
     await sleep(2000);
     handleCloseModal();
   }, [handleCloseModal]);
@@ -62,10 +82,46 @@ const ConnectModalV2 = ({
     setConnectStatus("connecting");
   }, []);
 
+  const switchToTargetNetwork = useCallback(() => {
+    const targetNetworkId = parseInt(
+      process.env.NEXT_PUBLIC_TARGET_NETWORK_ID ?? "0x1",
+      16
+    );
+    switchNetwork?.(targetNetworkId);
+  }, [switchNetwork]);
+
+  const { address } = useAccount({
+    onConnect: ({ address }) => {
+      if (address == null) {
+        return;
+      }
+      switchToTargetNetwork();
+    },
+  });
+
+  useEffect(() => {
+    if (chain == null || address == null) {
+      return;
+    }
+
+    const targetNetworkId = parseInt(
+      process.env.NEXT_PUBLIC_TARGET_NETWORK_ID ?? "0x1",
+      16
+    );
+    if (chain.id !== targetNetworkId) {
+      switchToTargetNetwork();
+      return;
+    }
+
+    setSelectedAccount(address);
+    setSelectedProvider("WalletConnect");
+    handleFinalizeConnection();
+  }, [chain, address]);
+
   const handleConnectMetaMask = useCallback(async () => {
     // Make UI switch to connecting screen
     setCurrentStep(1);
-    setCurrentProvider("MetaMask");
+    setSelectedProvider("MetaMask");
 
     let requestedAccounts = [];
     try {
@@ -93,28 +149,35 @@ const ConnectModalV2 = ({
     if (requestedAccounts.length === 1) {
       // User connect only 1 account
       // => Use that account, show success message (step 4), then proceed to close the popup
+      setSelectedAccount(requestedAccounts[0]);
       handleFinalizeConnection();
       return;
     } else {
       // User connect multiple accounts, proceed to step 3
       setCurrentStep(2);
     }
-  }, []);
+  }, [handleFinalizeConnection, setSelectedAccount, setSelectedProvider]);
+
+  const handleConnectWC = useCallback(async () => {
+    // Disconnect so user can change to another wallet without extra steps
+    await disconnectAsync();
+    open();
+  }, [open, disconnectAsync]);
 
   const handleRetry = useCallback(async () => {
     setConnectStatus("connecting");
 
-    if (currentProvider === "MetaMask") {
+    if (selectedProvider === "MetaMask") {
       await handleConnectMetaMask();
     }
-  }, [currentProvider, handleConnectMetaMask]);
+  }, [selectedProvider, handleConnectMetaMask]);
 
   const handleSelectWallet = useCallback(
     (selectedAccount: string) => {
       setSelectedAccount(selectedAccount);
       handleFinalizeConnection();
     },
-    [handleFinalizeConnection]
+    [handleFinalizeConnection, setSelectedAccount]
   );
 
   return (
@@ -198,6 +261,11 @@ const ConnectModalV2 = ({
                   icon="/icons/metamask.svg"
                   name="MetaMask"
                   onClick={handleConnectMetaMask}
+                />
+                <ConnectOption
+                  icon="/icons/walletconnect.svg"
+                  name="WalletConnect"
+                  onClick={handleConnectWC}
                 />
               </div>
             </div>

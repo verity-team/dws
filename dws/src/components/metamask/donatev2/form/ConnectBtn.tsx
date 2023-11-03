@@ -20,11 +20,11 @@ const ConnectButton = ({
 
   const handleConnect = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
-    await connect();
+    connect();
   };
 
   const handleChangeAccount = async () => {
-    await connect();
+    connect();
   };
 
   if (account) {

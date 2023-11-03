@@ -14,7 +14,7 @@ import { useForm } from "react-hook-form";
 import toast from "react-hot-toast";
 import { mutate } from "swr";
 import TextError from "@/components/common/TextError";
-import { ClientWallet } from "@/components/ClientRoot";
+import { ClientWallet, WalletUtils } from "@/components/ClientRoot";
 import {
   useDonationData,
   getUserDonationDataKey,
@@ -26,6 +26,7 @@ export interface DonateFormData {
 
 const DonateForm = (): ReactElement => {
   const account = useContext(ClientWallet);
+  const { requestTransaction } = useContext(WalletUtils);
 
   const { tokenPrices } = useDonationData();
 
@@ -81,8 +82,8 @@ const DonateForm = (): ReactElement => {
       return;
     }
 
-    const txHash = await donate(account, data.payAmount, selectedToken);
-    if (txHash == null) {
+    const txHash = await requestTransaction(data.payAmount, selectedToken);
+    if (!txHash) {
       setLoading(false);
       toast.error("Donate failed");
       return;
