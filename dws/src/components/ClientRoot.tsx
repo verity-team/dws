@@ -10,7 +10,7 @@ import React, {
   useEffect,
   useState,
 } from "react";
-import { Toaster } from "react-hot-toast";
+import toast, { Toaster } from "react-hot-toast";
 import { connectWalletWithAffiliate } from "@/utils/api/client/affiliateAPI";
 import ConnectModalV2 from "./wallet/ConnectModalv2";
 import { AvailableToken, AvailableWallet } from "@/utils/token";
@@ -20,11 +20,12 @@ import { WagmiConfig, useAccount, useSendTransaction } from "wagmi";
 import { requestSignature } from "@/utils/metamask/sign";
 import { donate } from "@/utils/metamask/donate";
 import {
+  disconnect,
   prepareSendTransaction,
   sendTransaction,
   signMessage,
 } from "@wagmi/core";
-import { parseEther } from "viem";
+import { BaseError, EstimateGasExecutionError, parseEther } from "viem";
 
 interface ClientRootProps {
   children: ReactNode;
@@ -71,7 +72,16 @@ createWeb3Modal({
     "--w3m-z-index": 1400,
   },
   excludeWalletIds: [
+    // MetaMask
     "c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96",
+  ],
+  featuredWalletIds: [
+    // TrustWallet
+    "4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0",
+    // Safe
+    "225affb176778569276e484e1b92637ad061b01e13a048b35a9d280c3b58970f",
+    // Ledger Live
+    "19177a98252e07ddfc9af2083ba8e07ef627cb6103467ffebb3f8f4205fd7927",
   ],
 });
 
@@ -119,6 +129,7 @@ const ClientRoot = ({
 
   const disconnectWallet = useCallback((): void => {
     setAccount("");
+    disconnect();
   }, []);
 
   const requestTransaction = useCallback(
@@ -137,12 +148,21 @@ const ClientRoot = ({
           console.warn("Receive wallet not set");
           return "";
         }
-        const txConfig = await prepareSendTransaction({
-          to: receiver,
-          value: parseEther(amount.toString()),
-        });
-        const { hash } = await sendTransaction(txConfig);
-        return hash;
+
+        try {
+          const txConfig = await prepareSendTransaction({
+            to: receiver,
+            value: parseEther(amount.toString()),
+          });
+
+          const { hash } = await sendTransaction(txConfig);
+          return hash;
+        } catch (error: any) {
+          if (error instanceof EstimateGasExecutionError) {
+            toast.error("Insufficient fund");
+          }
+          return "";
+        }
       }
 
       return "";
@@ -161,8 +181,13 @@ const ClientRoot = ({
       }
 
       if (provider === "WalletConnect") {
-        const signature = await signMessage({ message });
-        return signature;
+        try {
+          const signature = await signMessage({ message });
+          return signature;
+        } catch (error: any) {
+          console.warn(error);
+          return "";
+        }
       }
 
       return "";

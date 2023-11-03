@@ -18,7 +18,7 @@ import WalletOption from "./WalletOption";
 import CloseIcon from "@mui/icons-material/Close";
 import { sleep } from "@/utils/utils";
 import { useWeb3Modal } from "@web3modal/wagmi/react";
-import { useAccount, useDisconnect, useSwitchNetwork } from "wagmi";
+import { useAccount, useDisconnect, useNetwork, useSwitchNetwork } from "wagmi";
 
 interface ConnectModalV2Props {
   isOpen: boolean;
@@ -56,31 +56,9 @@ const ConnectModalV2 = ({
 
   const { open } = useWeb3Modal();
   const { disconnectAsync } = useDisconnect();
-  const { address } = useAccount();
-  const { switchNetworkAsync } = useSwitchNetwork();
 
-  useEffect(() => {
-    if (!address) {
-      return;
-    }
-
-    const ensureNetwork = async () => {
-      const targetNetworkId = parseInt(
-        process.env.NEXT_PUBLIC_TARGET_NETWORK_ID ?? "0x1",
-        16
-      );
-
-      await switchNetworkAsync?.(targetNetworkId);
-    };
-
-    ensureNetwork()
-      .then(() => {
-        setSelectedAccount(address);
-        setSelectedProvider("WalletConnect");
-        handleFinalizeConnection();
-      })
-      .catch(console.error);
-  }, [address]);
+  const { chain } = useNetwork();
+  const { switchNetwork } = useSwitchNetwork();
 
   // Run procedure when closing connect wallet form
   const handleCloseModal = useCallback(() => {
@@ -103,6 +81,42 @@ const ConnectModalV2 = ({
     setCurrentStep(0);
     setConnectStatus("connecting");
   }, []);
+
+  const switchToTargetNetwork = useCallback(() => {
+    const targetNetworkId = parseInt(
+      process.env.NEXT_PUBLIC_TARGET_NETWORK_ID ?? "0x1",
+      16
+    );
+    switchNetwork?.(targetNetworkId);
+  }, [switchNetwork]);
+
+  const { address } = useAccount({
+    onConnect: ({ address }) => {
+      if (address == null) {
+        return;
+      }
+      switchToTargetNetwork();
+    },
+  });
+
+  useEffect(() => {
+    if (chain == null || address == null) {
+      return;
+    }
+
+    const targetNetworkId = parseInt(
+      process.env.NEXT_PUBLIC_TARGET_NETWORK_ID ?? "0x1",
+      16
+    );
+    if (chain.id !== targetNetworkId) {
+      switchToTargetNetwork();
+      return;
+    }
+
+    setSelectedAccount(address);
+    setSelectedProvider("WalletConnect");
+    handleFinalizeConnection();
+  }, [chain, address]);
 
   const handleConnectMetaMask = useCallback(async () => {
     // Make UI switch to connecting screen
