@@ -38,7 +38,7 @@ func GetTransactions(ctxt common.Context, blockNumber uint64) ([]common.Transact
 }
 
 func filterTransactions(ctxt common.Context, b common.Block) ([]common.Transaction, error) {
-	result := make([]common.Transaction, 0)
+	var result []common.Transaction
 	for _, tx := range b.Transactions {
 		var txBelongsToUs bool
 		if tx.Input == "0x" {
