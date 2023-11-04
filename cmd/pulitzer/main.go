@@ -85,7 +85,7 @@ func main() {
 	g.Go(func() error {
 		// run live/ready probe server
 		err := e.Start(fmt.Sprintf(":%d", *port))
-		if err != http.ErrServerClosed {
+		if !errors.Is(err, http.ErrServerClosed) {
 			log.Error(err)
 		}
 		return err

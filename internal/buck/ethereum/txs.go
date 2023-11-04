@@ -54,7 +54,11 @@ func filterTransactions(ctxt common.Context, b common.Block) ([]common.Transacti
 				log.Error(err)
 				err = db.PersistFailedTx(ctxt.DB, b, tx)
 				if err != nil {
+					// failed txs must be persisted -- otherwise we are losing
+					// them altogether
+					err = fmt.Errorf("failed to persist failed tx '%s', %w", tx.Hash, err)
 					log.Error(err)
+					return nil, err
 				}
 				continue
 			}

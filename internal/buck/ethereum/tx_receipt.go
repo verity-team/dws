@@ -3,7 +3,6 @@ package ethereum
 import (
 	"github.com/goccy/go-json"
 
-	"github.com/labstack/gommon/log"
 	"github.com/verity-team/dws/internal/common"
 )
 
@@ -83,10 +82,7 @@ func doGetTxReceipts(ctxt common.Context, txs []common.Transaction) ([]TxReceipt
 	if err != nil {
 		return nil, err
 	}
-	err = writeTxReceiptsToFile(ctxt, txs[0].BlockNumber, body)
-	if err != nil {
-		log.Warnf("failed to persist tx receipts for block %d to disk", txs[0].BlockNumber)
-	}
+	writeTxReceiptsToFile(ctxt, txs[0].BlockNumber, body)
 
 	return result, nil
 }

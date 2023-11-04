@@ -110,10 +110,7 @@ func doGetTxsByHash(ctxt common.Context, hashes []string) ([]common.TxByHash, er
 	if err != nil {
 		return nil, err
 	}
-	err = writeTxsToFile(ctxt, time.Now().Unix(), body)
-	if err != nil {
-		log.Warnf("failed to persist %d txs starting with hash '%s' to disk", len(hashes), hashes[0])
-	}
+	writeTxsToFile(ctxt, time.Now().Unix(), body)
 
 	return result, nil
 }

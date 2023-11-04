@@ -77,13 +77,13 @@ func writeBlockToFile(ctxt common.Context, bn uint64, json []byte) error {
 	return nil
 }
 
-func writeTxReceiptsToFile(ctxt common.Context, bn uint64, json []byte) error {
+func writeTxReceiptsToFile(ctxt common.Context, bn uint64, json []byte) {
 	// write transaction receipts to debug data store, errors are tolerated
 	if ctxt.DebugDataStore != "" {
 		err := createDirectoryIfNotExists(ctxt.DebugDataStore)
 		if err != nil {
 			log.Warn(err)
-			return nil
+			return
 		}
 		fp := filepath.Join(ctxt.DebugDataStore, fmt.Sprintf("txr-%d-%d.json", bn, time.Now().UnixMilli()))
 		err = os.WriteFile(fp, json, 0600)
@@ -92,16 +92,15 @@ func writeTxReceiptsToFile(ctxt common.Context, bn uint64, json []byte) error {
 			log.Warn(err)
 		}
 	}
-	return nil
 }
 
-func writeTxsToFile(ctxt common.Context, epoch int64, json []byte) error {
+func writeTxsToFile(ctxt common.Context, epoch int64, json []byte) {
 	// write transaction objects to debug data store, errors are tolerated
 	if ctxt.DebugDataStore != "" {
 		err := createDirectoryIfNotExists(ctxt.DebugDataStore)
 		if err != nil {
 			log.Warn(err)
-			return nil
+			return
 		}
 		fp := filepath.Join(ctxt.DebugDataStore, fmt.Sprintf("txs-%d-%d.json", epoch, time.Now().UnixMilli()))
 		err = os.WriteFile(fp, json, 0600)
@@ -110,5 +109,4 @@ func writeTxsToFile(ctxt common.Context, epoch int64, json []byte) error {
 			log.Warn(err)
 		}
 	}
-	return nil
 }
