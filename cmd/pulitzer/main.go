@@ -209,7 +209,7 @@ func servePriceRequests(ctx context.Context) error {
 			log.Error(err)
 			return err
 		}
-		log.Infof("obtained historical prices for request #%d/%s", rq.ID, rq.Time)
+		log.Infof("obtained historical prices (%s) for request #%d/%s", klines[0].ClosePrice.StringFixed(2), rq.ID, rq.Time)
 	}
 	return nil
 }

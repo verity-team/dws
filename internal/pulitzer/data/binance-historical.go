@@ -33,29 +33,41 @@ func GetHistoricalPriceFromBinance(ts time.Time) ([]Kline, error) {
 	}
 
 	klines := make([]Kline, len(klineData))
-	for _, kline := range klineData {
+	for idx, kline := range klineData {
 		if len(kline) != 12 {
 			log.Error("binance: klines: invalid data format")
 			continue
 		}
 
-		p, err := decimal.NewFromString(kline[4].(string))
+		datum, ok := kline[4].(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid close price: '%s'", kline[4])
+		}
+		p, err := decimal.NewFromString(datum)
 		if err != nil {
-			err = fmt.Errorf("error decoding close price ('%s') in JSON response, %w", kline[4].(string), err)
+			err = fmt.Errorf("error decoding close price ('%s') in JSON response, %w", datum, err)
 			return nil, err
 		}
-		v, err := decimal.NewFromString(kline[5].(string))
+		datum, ok = kline[5].(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid volume figure: '%s'", kline[5])
+		}
+		v, err := decimal.NewFromString(datum)
 		if err != nil {
-			err = fmt.Errorf("error decoding Volume ('%s') in JSON response, %w", kline[5].(string), err)
+			err = fmt.Errorf("error decoding Volume ('%s') in JSON response, %w", datum, err)
 			return nil, err
 		}
-		ct := time.Unix(int64(kline[6].(float64)/1000), 0)
+		fval, ok := kline[6].(float64)
+		if !ok {
+			return nil, fmt.Errorf("invalid closing time: '%s'", kline[6])
+		}
+		ct := time.Unix(int64(fval/1000), 0)
 		k := Kline{
 			ClosePrice: p,
 			Volume:     v,
 			CloseTime:  ct.UTC(),
 		}
-		klines = append(klines, k)
+		klines[idx] = k
 	}
 	return klines, nil
 }
