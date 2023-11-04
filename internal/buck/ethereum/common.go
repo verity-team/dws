@@ -11,7 +11,7 @@ import (
 )
 
 type EthGetBlockByNumberRequest struct {
-	JsonRPC string        `json:"jsonrpc"`
+	JsonRPC string        `json:"jsonrpc"` // nolint:revive
 	Method  string        `json:"method"`
 	Params  []interface{} `json:"params"`
 	ID      int           `json:"id"`

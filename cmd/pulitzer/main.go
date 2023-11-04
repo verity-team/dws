@@ -47,13 +47,14 @@ func main() {
 	s := gocron.NewScheduler(time.UTC)
 	s.SingletonModeAll()
 	g, ctx := errgroup.WithContext(context.Background())
+	ctx = context.WithValue(ctx, common.DBHandle, dbh)
 
-	_, err = s.Every("1m").Do(getETHPrice, dbh, ctx)
+	_, err = s.Every("1m").Do(getETHPrice, ctx)
 	if err != nil {
 		log.Error(err)
 		return
 	}
-	_, err = s.Every("10s").Do(servePriceRequests, dbh, ctx)
+	_, err = s.Every("10s").Do(servePriceRequests, ctx)
 	if err != nil {
 		log.Error(err)
 		return
@@ -179,13 +180,17 @@ func checkPriceDeviation(prices []decimal.Decimal) error {
 	return nil
 }
 
-func servePriceRequests(dbh *sqlx.DB, ctx context.Context) error {
+func servePriceRequests(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		log.Info("pulitzer/historic - context canceled")
 		return nil
 	default:
 		// keep going
+	}
+	dbh, ok := ctx.Value(common.DBHandle).(*sqlx.DB)
+	if !ok {
+		return errors.New("pulitzer/historic invalid database handle")
 	}
 	rqs, err := db.GetOpenPriceRequests(dbh)
 	if err != nil {
@@ -209,13 +214,17 @@ func servePriceRequests(dbh *sqlx.DB, ctx context.Context) error {
 	return nil
 }
 
-func getETHPrice(dbh *sqlx.DB, ctx context.Context) (decimal.Decimal, error) {
+func getETHPrice(ctx context.Context) (decimal.Decimal, error) {
 	select {
 	case <-ctx.Done():
 		log.Info("pulitzer/latest - context canceled")
 		return decimal.Zero, nil
 	default:
 		// keep going
+	}
+	dbh, ok := ctx.Value(common.DBHandle).(*sqlx.DB)
+	if !ok {
+		return decimal.Zero, errors.New("pulitzer/latest invalid database handle")
 	}
 	// Create a wait group to synchronize the goroutines
 	var wg sync.WaitGroup

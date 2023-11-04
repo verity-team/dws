@@ -27,12 +27,12 @@ func GetHistoricalPriceFromBinance(ts time.Time) ([]Kline, error) {
 		return nil, err
 	}
 
-	var klines []Kline
 	var klineData [][]interface{}
 	if err = json.Unmarshal(responseBody, &klineData); err != nil {
 		return nil, err
 	}
 
+	klines := make([]Kline, len(klineData))
 	for _, kline := range klineData {
 		if len(kline) != 12 {
 			log.Error("binance: klines: invalid data format")

@@ -45,7 +45,7 @@ func main() {
 	if !present {
 		log.Fatal("ETH_RPC_URL variable not set")
 	}
-	saleParamJson, present := os.LookupEnv("DWS_SALE_PARAMS")
+	saleParamJSON, present := os.LookupEnv("DWS_SALE_PARAMS")
 	if !present {
 		err := errors.New("DWS_SALE_PARAMS environment variable not set")
 		log.Fatal(err)
@@ -56,7 +56,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	ctxt, err := common.GetContext(erc20Json, saleParamJson)
+	ctxt, err := common.GetContext(erc20Json, saleParamJSON)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func main() {
 	g, ctx := errgroup.WithContext(context.Background())
 
 	if *monitorLatest {
-		_, err = s.Every("1m").Do(monitorETH, latestCtxt, ctx)
+		_, err = s.Every("1m").Do(monitorETH, context.WithValue(ctx, common.BuckContext, &latestCtxt))
 		if err != nil {
 			log.Error(err)
 			return
@@ -184,7 +184,7 @@ func main() {
 		if *port == defaultPort {
 			*port = defaultPort + 1
 		}
-		_, err = s.Every("1m").Do(monitorETH, finalCtxt, ctx)
+		_, err = s.Every("1m").Do(monitorETH, context.WithValue(ctx, common.BuckContext, &finalCtxt))
 		if err != nil {
 			log.Error(err)
 			return
@@ -197,7 +197,7 @@ func main() {
 			*port = defaultPort + 2
 		}
 		oldCtxt.UpdateLastBlock = false
-		_, err = s.Every("15m").Do(monitorOldUnconfirmed, oldCtxt, ctx)
+		_, err = s.Every("15m").Do(monitorOldUnconfirmed, context.WithValue(ctx, common.BuckContext, &oldCtxt))
 		if err != nil {
 			log.Error(err)
 			return
@@ -292,9 +292,13 @@ func runReadyProbe(ctxt common.Context) error {
 	return err
 }
 
-func monitorETH(ctxt common.Context, ctx context.Context) error {
+func monitorETH(ctx context.Context) error {
+	ctxt, ok := ctx.Value(common.BuckContext).(*common.Context)
+	if !ok {
+		return errors.New("invalid buck context")
+	}
 	// most recent ETH block published
-	mrbn, err := ethereum.MostRecentBlockNumber(ctxt)
+	mrbn, err := ethereum.MostRecentBlockNumber(*ctxt)
 	if err != nil {
 		log.Error(err)
 		return err
@@ -325,7 +329,7 @@ func monitorETH(ctxt common.Context, ctx context.Context) error {
 		default:
 			// keep going
 		}
-		err = processETH(ctxt, i)
+		err = processETH(*ctxt, i)
 		if err != nil {
 			return err
 		}
@@ -371,7 +375,11 @@ func processETH(ctxt common.Context, bn uint64) error {
 	return nil
 }
 
-func monitorOldUnconfirmed(ctxt common.Context, ctx context.Context) error {
+func monitorOldUnconfirmed(ctx context.Context) error {
+	ctxt, ok := ctx.Value(common.BuckContext).(*common.Context)
+	if !ok {
+		return errors.New("buck/old-unconfirmed invalid buck context")
+	}
 	hashes, err := db.GetOldUnconfirmed(ctxt.DB)
 	if err != nil {
 		return err
@@ -383,13 +391,13 @@ func monitorOldUnconfirmed(ctxt common.Context, ctx context.Context) error {
 	log.Infof("##### old unconfirmed txs: %v", hashes)
 
 	// most recent *finalized* ETH block published
-	mfbn, err := ethereum.MostRecentBlockNumber(ctxt)
+	mfbn, err := ethereum.MostRecentBlockNumber(*ctxt)
 	if err != nil {
 		return err
 	}
 	log.Infof("##### max finalized ETH block: %d", mfbn)
 
-	txs, err := ethereum.GetTxsByHash(ctxt, hashes)
+	txs, err := ethereum.GetTxsByHash(*ctxt, hashes)
 	if err != nil {
 		return err
 	}
@@ -408,13 +416,13 @@ func monitorOldUnconfirmed(ctxt common.Context, ctx context.Context) error {
 			failTx := tx.BlockHash != tx.FBBlockHash || !tx.FBContainsTx
 			if failTx {
 				log.Warnf("invalid old unconfirmed tx (%s)", tx.Hash)
-				err = db.FailTx(ctxt, tx)
+				err = db.FailTx(*ctxt, tx)
 				if err != nil {
 					return err
 				}
 			} else {
 				log.Infof("##### finalizing old tx %s", tx.Hash)
-				err = db.FinalizeTx(ctxt, tx)
+				err = db.FinalizeTx(*ctxt, tx)
 				if err != nil {
 					return err
 				}

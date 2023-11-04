@@ -224,7 +224,7 @@ func (t *TxByHash) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func GetContext(erc20Json, saleParamJson string) (*Context, error) {
+func GetContext(erc20Json, saleParamJSON string) (*Context, error) {
 	var (
 		err    error
 		result Context
@@ -234,7 +234,7 @@ func GetContext(erc20Json, saleParamJson string) (*Context, error) {
 	if err != nil {
 		return nil, err
 	}
-	result.SaleParams, err = getSaleParams(saleParamJson)
+	result.SaleParams, err = getSaleParams(saleParamJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -263,9 +263,9 @@ func getStableCoins(erc20Json string) (map[string]ERC20, error) {
 	return result, nil
 }
 
-func getSaleParams(saleParamJson string) ([]SaleParam, error) {
+func getSaleParams(saleParamJSON string) ([]SaleParam, error) {
 	var sps []SaleParam
-	err := json.Unmarshal([]byte(saleParamJson), &sps)
+	err := json.Unmarshal([]byte(saleParamJSON), &sps)
 	if err != nil {
 		err = fmt.Errorf("error decoding sale param JSON data, %w", err)
 		log.Error(err)

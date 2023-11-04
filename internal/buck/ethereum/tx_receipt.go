@@ -93,7 +93,7 @@ func parseTxReceipt(body []byte) ([]TxReceipt, error) {
 	if err != nil {
 		return nil, err
 	}
-	var res []TxReceipt = make([]TxReceipt, len(resp))
+	var res = make([]TxReceipt, len(resp))
 	for i, d := range resp {
 		res[i] = d.Result
 	}
