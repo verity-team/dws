@@ -74,8 +74,15 @@ export const useDonationData = () => {
 export const getUserDonationDataKey = (account: string) =>
   `/api/donation/user/${account}`;
 
-// TODO: Add data refresh interval
 // For long-term use of data, have data refresh integrated
+/**
+ * Get user donation data from server with refresh
+ *
+ * Refresh interval are changed based on the response's body
+ *
+ * @param account [string]
+ * @returns {{data, error, isLoading}} Return user's data, error (if any), and request status
+ */
 export const useUserDonationData = (account: string) => {
   const defaultWaitTime = useMemo(() => {
     const time = Number(process.env.NEXT_PUBLIC_UDATA_REFRESH_TIME_DEFAULT);
