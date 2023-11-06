@@ -86,10 +86,6 @@ func (c Context) NewTokenPrice(oldTokens, newTokens decimal.Decimal) (bool, deci
 	return newP.GreaterThan(currentP), newP
 }
 
-type Fetchable interface {
-	TxReceipt | TxByHash
-}
-
 type Hashable interface {
 	GetHash() string
 }
@@ -102,7 +98,11 @@ func ToHashable[H Hashable](hs []H) []Hashable {
 	return res
 }
 
-type Fetcher[R TxReceipt | TxByHash] interface {
+type Fetchable interface {
+	TxReceipt | TxByHash
+}
+
+type Fetcher[R Fetchable] interface {
 	Fetch(Context, []Hashable) ([]R, error)
 }
 
