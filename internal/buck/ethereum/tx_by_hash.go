@@ -53,16 +53,16 @@ func addFBData(ctxt common.Context, txs []common.TxByHash) error {
 
 type TXBHFetcher struct{}
 
-func (txbh TXBHFetcher) Fetch(ctxt common.Context, hashes []c.Hashable) ([]common.TxByHash, error) {
-	if len(hashes) == 0 {
+func (txbh TXBHFetcher) Fetch(ctxt common.Context, hs []c.Hashable) ([]common.TxByHash, error) {
+	if len(hs) == 0 {
 		return nil, nil
 	}
-	rd := make([]map[string]interface{}, len(hashes))
-	for idx, hash := range hashes {
+	rd := make([]map[string]interface{}, len(hs))
+	for idx, h := range hs {
 		rq := map[string]interface{}{
 			"jsonrpc": "2.0",
 			"method":  "eth_getTransactionByHash",
-			"params":  []interface{}{hash},
+			"params":  []interface{}{h.GetHash()},
 			"id":      idx + 1,
 		}
 		rd[idx] = rq
@@ -84,7 +84,7 @@ func (txbh TXBHFetcher) Fetch(ctxt common.Context, hashes []c.Hashable) ([]commo
 	if err != nil {
 		return nil, err
 	}
-	writeTxsToFile(ctxt, time.Now().Unix(), body)
+	writeTxsToFile(ctxt, time.Now().UTC().Unix(), body)
 
 	err = addFBData(ctxt, result)
 	if err != nil {

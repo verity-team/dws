@@ -48,16 +48,16 @@ func GetData[R c.Fetchable](ctxt c.Context, hs []c.Hashable, fr c.Fetcher[R]) ([
 
 type txrFetcher struct{}
 
-func (txfr txrFetcher) Fetch(ctxt c.Context, txs []c.Hashable) ([]c.TxReceipt, error) {
-	if len(txs) == 0 {
+func (txfr txrFetcher) Fetch(ctxt c.Context, hs []c.Hashable) ([]c.TxReceipt, error) {
+	if len(hs) == 0 {
 		return nil, nil
 	}
-	rd := make([]map[string]interface{}, len(txs))
-	for idx, tx := range txs {
+	rd := make([]map[string]interface{}, len(hs))
+	for idx, h := range hs {
 		rq := map[string]interface{}{
 			"jsonrpc": "2.0",
 			"method":  "eth_getTransactionReceipt",
-			"params":  []interface{}{tx.GetHash()},
+			"params":  []interface{}{h.GetHash()},
 			"id":      idx + 1,
 		}
 		rd[idx] = rq
