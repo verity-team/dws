@@ -166,8 +166,16 @@ type TxReceipt struct {
 	Type              string `json:"type"`
 }
 
+type TXH struct {
+	Hash string `db:"tx_hash" json:"hash"`
+}
+
+func (tx TXH) GetHash() string {
+	return tx.Hash
+}
+
 type Transaction struct {
-	Hash        string          `db:"tx_hash" json:"hash"`
+	TXH
 	From        string          `db:"address" json:"from"`
 	To          string          `db:"-" json:"to"`
 	Value       string          `db:"amount" json:"value"`
@@ -183,10 +191,6 @@ type Transaction struct {
 	BlockNumber uint64          `db:"block_number" json:"-"`
 	BlockHash   string          `db:"block_hash" json:"blockhash"`
 	BlockTime   time.Time       `db:"block_time" json:"-"`
-}
-
-func (tx Transaction) GetHash() string {
-	return tx.Hash
 }
 
 type FinalizedBlock struct {

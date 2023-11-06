@@ -395,11 +395,11 @@ func RequestPrice(ctxt c.Context, asset string, ts time.Time) error {
 	return nil
 }
 
-func GetOldUnconfirmed(dbh *sqlx.DB) ([]string, error) {
+func GetOldUnconfirmed(dbh *sqlx.DB) ([]c.TXH, error) {
 	var (
 		err    error
 		q      string
-		hashes []string
+		hashes []c.TXH
 	)
 	q = `
 		SELECT DISTINCT tx_hash

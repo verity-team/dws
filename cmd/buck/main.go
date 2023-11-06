@@ -375,20 +375,6 @@ func processETH(ctxt c.Context, bn uint64) error {
 	return nil
 }
 
-type txbHashable struct {
-	Hash string
-}
-
-func (txbh txbHashable) GetHash() string { return txbh.Hash }
-
-func string2hashable(hashes []string) []c.Hashable {
-	var res []c.Hashable
-	for _, h := range hashes {
-		res = append(res, txbHashable{Hash: h})
-	}
-	return res
-}
-
 func monitorOldUnconfirmed(ctx context.Context) error {
 	ctxt, ok := ctx.Value(c.BuckContext).(*c.Context)
 	if !ok {
@@ -411,7 +397,7 @@ func monitorOldUnconfirmed(ctx context.Context) error {
 	}
 	log.Infof("##### max finalized ETH block: %d", mfbn)
 
-	txs, err := eth.GetData[c.TxByHash](*ctxt, string2hashable(hashes), eth.TXBHFetcher{})
+	txs, err := eth.GetData[c.TxByHash](*ctxt, c.ToHashable(hashes), eth.TXBHFetcher{})
 	if err != nil {
 		return err
 	}
