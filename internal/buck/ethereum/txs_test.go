@@ -11,7 +11,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-	"github.com/verity-team/dws/internal/common"
+	c "github.com/verity-team/dws/internal/common"
 )
 
 type TxsSuite struct {
@@ -62,9 +62,9 @@ func (suite *TxsSuite) TestERC20Tx() {
 	to := "0x4667A044543e7f1B7D3a4b88396e024BE0E34F36"
 	contract := strings.ToLower("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
 	hash := "0x2bc8ef53d6a20b91e5dd3b856d78f5ed0aeb4f56232e6bf6de3783c6c58c13de"
-	ctxt := common.Context{
+	ctxt := c.Context{
 		ReceivingAddr: strings.ToLower(to),
-		StableCoins: map[string]common.ERC20{
+		StableCoins: map[string]c.ERC20{
 			contract: {
 				Asset:   "usdc",
 				Address: contract,
@@ -90,9 +90,9 @@ func (suite *TxsSuite) TestETHTx() {
 	to := "0x2051f9d1082008924f751eb396df1101d4b123e1"
 	hash := "0x0aec48263d9ef216779aac6210c665723519251fbcb2b2d73cbb364c1b10f56d"
 	contract := strings.ToLower("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
-	ctxt := common.Context{
+	ctxt := c.Context{
 		ReceivingAddr: strings.ToLower(to),
-		StableCoins: map[string]common.ERC20{
+		StableCoins: map[string]c.ERC20{
 			contract: {
 				Asset:   "usdc",
 				Address: contract,

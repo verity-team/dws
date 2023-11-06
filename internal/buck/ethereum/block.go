@@ -6,10 +6,10 @@ import (
 
 	"github.com/goccy/go-json"
 	log "github.com/sirupsen/logrus"
-	"github.com/verity-team/dws/internal/common"
+	c "github.com/verity-team/dws/internal/common"
 )
 
-func fetchBlock(ctxt common.Context, bn uint64) ([]byte, error) {
+func fetchBlock(ctxt c.Context, bn uint64) ([]byte, error) {
 	request := EthGetBlockByNumberRequest{
 		JsonRPC: "2.0",
 		Method:  "eth_getBlockByNumber",
@@ -22,12 +22,12 @@ func fetchBlock(ctxt common.Context, bn uint64) ([]byte, error) {
 		return nil, err
 	}
 
-	params := common.HTTPParams{
+	params := c.HTTPParams{
 		URL:              ctxt.ETHRPCURL,
 		RequestBody:      requestBytes,
 		MaxWaitInSeconds: ctxt.MaxWaitInSeconds,
 	}
-	body, err := common.HTTPPost(params)
+	body, err := c.HTTPPost(params)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +41,7 @@ func fetchBlock(ctxt common.Context, bn uint64) ([]byte, error) {
 	return body, nil
 }
 
-func GetBlock(ctxt common.Context, bn uint64) (*common.Block, error) {
+func GetBlock(ctxt c.Context, bn uint64) (*c.Block, error) {
 	var (
 		body      []byte
 		err       error
@@ -84,9 +84,9 @@ func GetBlock(ctxt common.Context, bn uint64) (*common.Block, error) {
 	return block, nil
 }
 
-func parseBlock(body []byte) (*common.Block, error) {
+func parseBlock(body []byte) (*c.Block, error) {
 	type Response struct {
-		Block common.Block `json:"result"`
+		Block c.Block `json:"result"`
 	}
 
 	var resp Response
@@ -99,7 +99,7 @@ func parseBlock(body []byte) (*common.Block, error) {
 	return &b, nil
 }
 
-func GetFinalizedBlock(ctxt common.Context, blockNumber uint64) (*common.FinalizedBlock, error) {
+func GetFinalizedBlock(ctxt c.Context, blockNumber uint64) (*c.FinalizedBlock, error) {
 	request := EthGetBlockByNumberRequest{
 		JsonRPC: "2.0",
 		Method:  "eth_getBlockByNumber",
@@ -111,12 +111,12 @@ func GetFinalizedBlock(ctxt common.Context, blockNumber uint64) (*common.Finaliz
 		return nil, err
 	}
 
-	params := common.HTTPParams{
+	params := c.HTTPParams{
 		URL:              ctxt.ETHRPCURL,
 		RequestBody:      requestBytes,
 		MaxWaitInSeconds: ctxt.MaxWaitInSeconds,
 	}
-	body, err := common.HTTPPost(params)
+	body, err := c.HTTPPost(params)
 	if err != nil {
 		return nil, err
 	}
@@ -135,9 +135,9 @@ func GetFinalizedBlock(ctxt common.Context, blockNumber uint64) (*common.Finaliz
 	return fb, nil
 }
 
-func parseFinalizedBlock(body []byte) (*common.FinalizedBlock, error) {
+func parseFinalizedBlock(body []byte) (*c.FinalizedBlock, error) {
 	type fblock struct {
-		common.FinalizedBlock
+		c.FinalizedBlock
 		HexSeconds string `json:"timestamp"`
 		HexNumber  string `json:"number"`
 	}
@@ -150,18 +150,18 @@ func parseFinalizedBlock(body []byte) (*common.FinalizedBlock, error) {
 	if err != nil {
 		return nil, err
 	}
-	seconds, err := common.HexStringToDecimal(resp.Block.HexSeconds)
+	seconds, err := c.HexStringToDecimal(resp.Block.HexSeconds)
 	if err != nil {
 		err = fmt.Errorf("failed to convert block timestamp, %w", err)
 		return nil, err
 	}
-	number, err := common.HexStringToDecimal(resp.Block.HexNumber)
+	number, err := c.HexStringToDecimal(resp.Block.HexNumber)
 	if err != nil {
 		err = fmt.Errorf("failed to convert block number, %w", err)
 		return nil, err
 	}
 	ts := time.Unix(seconds.IntPart(), 0)
-	result := common.FinalizedBlock{
+	result := c.FinalizedBlock{
 		BaseFeePerGas: resp.Block.BaseFeePerGas,
 		GasLimit:      resp.Block.GasLimit,
 		GasUsed:       resp.Block.GasUsed,

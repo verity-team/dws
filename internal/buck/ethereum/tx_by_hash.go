@@ -7,17 +7,16 @@ import (
 	"github.com/goccy/go-json"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/verity-team/dws/internal/common"
 	c "github.com/verity-team/dws/internal/common"
 )
 
 type TxByHashBody struct {
-	Jsonrpc string           `json:"jsonrpc"`
-	ID      int              `json:"id"`
-	Result  *common.TxByHash `json:"result"`
+	Jsonrpc string      `json:"jsonrpc"`
+	ID      int         `json:"id"`
+	Result  *c.TxByHash `json:"result"`
 }
 
-func addFBData(ctxt common.Context, txs []common.TxByHash) error {
+func addFBData(ctxt c.Context, txs []c.TxByHash) error {
 	blocks := make(map[uint64]bool)
 	for _, tx := range txs {
 		if _, exists := blocks[tx.BlockNumber]; !exists {
@@ -25,7 +24,7 @@ func addFBData(ctxt common.Context, txs []common.TxByHash) error {
 		}
 	}
 	// get the block times for the blocks that finalize the given transactions
-	fbs := make(map[uint64]common.FinalizedBlock)
+	fbs := make(map[uint64]c.FinalizedBlock)
 	fbHashes := make(map[uint64]map[string]bool)
 	for bn := range blocks {
 		fb, err := GetFinalizedBlock(ctxt, bn)
@@ -53,7 +52,7 @@ func addFBData(ctxt common.Context, txs []common.TxByHash) error {
 
 type TXBHFetcher struct{}
 
-func (txbh TXBHFetcher) Fetch(ctxt common.Context, hs []c.Hashable) ([]common.TxByHash, error) {
+func (txbh TXBHFetcher) Fetch(ctxt c.Context, hs []c.Hashable) ([]c.TxByHash, error) {
 	if len(hs) == 0 {
 		return nil, nil
 	}
@@ -72,11 +71,11 @@ func (txbh TXBHFetcher) Fetch(ctxt common.Context, hs []c.Hashable) ([]common.Tx
 		return nil, err
 	}
 
-	params := common.HTTPParams{
+	params := c.HTTPParams{
 		URL:         ctxt.ETHRPCURL,
 		RequestBody: requestBytes,
 	}
-	body, err := common.HTTPPost(params)
+	body, err := c.HTTPPost(params)
 	if err != nil {
 		return nil, err
 	}
@@ -93,13 +92,13 @@ func (txbh TXBHFetcher) Fetch(ctxt common.Context, hs []c.Hashable) ([]common.Tx
 	return result, nil
 }
 
-func parseTxByHash(body []byte) ([]common.TxByHash, error) {
+func parseTxByHash(body []byte) ([]c.TxByHash, error) {
 	var resp []TxByHashBody
 	err := json.Unmarshal(body, &resp)
 	if err != nil {
 		return nil, err
 	}
-	var res []common.TxByHash = make([]common.TxByHash, len(resp))
+	var res []c.TxByHash = make([]c.TxByHash, len(resp))
 	for i, d := range resp {
 		if d.Result != nil {
 			res[i] = *d.Result

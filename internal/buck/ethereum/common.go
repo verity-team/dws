@@ -7,7 +7,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/verity-team/dws/internal/common"
+	c "github.com/verity-team/dws/internal/common"
 )
 
 type EthGetBlockByNumberRequest struct {
@@ -33,7 +33,7 @@ func createDirectoryIfNotExists(dirPath string) error {
 	return nil
 }
 
-func getFinalizedBlockFromCache(ctxt common.Context, bn uint64) ([]byte, error) {
+func getFinalizedBlockFromCache(ctxt c.Context, bn uint64) ([]byte, error) {
 	if ctxt.BlockCache == "" {
 		return nil, nil
 	}
@@ -41,9 +41,9 @@ func getFinalizedBlockFromCache(ctxt common.Context, bn uint64) ([]byte, error) 
 	return os.ReadFile(fp)
 }
 
-func writeBlockToFile(ctxt common.Context, bn uint64, json []byte) error {
+func writeBlockToFile(ctxt c.Context, bn uint64, json []byte) error {
 	var err error
-	if ctxt.BlockCache != "" && ctxt.CrawlerType == common.Finalized {
+	if ctxt.BlockCache != "" && ctxt.CrawlerType == c.Finalized {
 		// write block to finalized block cache
 		// failures are returned as errors
 		err = createDirectoryIfNotExists(ctxt.BlockCache)
@@ -77,7 +77,7 @@ func writeBlockToFile(ctxt common.Context, bn uint64, json []byte) error {
 	return nil
 }
 
-func writeTxReceiptsToFile(ctxt common.Context, epoch int64, json []byte) {
+func writeTxReceiptsToFile(ctxt c.Context, epoch int64, json []byte) {
 	// write transaction receipts to debug data store, errors are tolerated
 	if ctxt.DebugDataStore != "" {
 		err := createDirectoryIfNotExists(ctxt.DebugDataStore)
@@ -94,7 +94,7 @@ func writeTxReceiptsToFile(ctxt common.Context, epoch int64, json []byte) {
 	}
 }
 
-func writeTxsToFile(ctxt common.Context, epoch int64, json []byte) {
+func writeTxsToFile(ctxt c.Context, epoch int64, json []byte) {
 	// write transaction objects to debug data store, errors are tolerated
 	if ctxt.DebugDataStore != "" {
 		err := createDirectoryIfNotExists(ctxt.DebugDataStore)

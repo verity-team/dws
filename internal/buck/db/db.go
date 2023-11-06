@@ -9,7 +9,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
-	"github.com/verity-team/dws/internal/common"
+	c "github.com/verity-team/dws/internal/common"
 )
 
 func GetLastBlock(dbh *sqlx.DB, chain string, label string) (uint64, error) {
@@ -33,7 +33,7 @@ func GetLastBlock(dbh *sqlx.DB, chain string, label string) (uint64, error) {
 	return result, nil
 }
 
-func SetLastBlock(ctxt common.Context, chain string, lbn uint64) error {
+func SetLastBlock(ctxt c.Context, chain string, lbn uint64) error {
 	if !ctxt.UpdateLastBlock {
 		return nil
 	}
@@ -42,7 +42,7 @@ func SetLastBlock(ctxt common.Context, chain string, lbn uint64) error {
 		q   string
 	)
 
-	if ctxt.CrawlerType != common.Latest && ctxt.CrawlerType != common.Finalized {
+	if ctxt.CrawlerType != c.Latest && ctxt.CrawlerType != c.Finalized {
 		err = fmt.Errorf("invalid crawler type: %s", ctxt.CrawlerType)
 		log.Error(err)
 		return err
@@ -64,10 +64,10 @@ func SetLastBlock(ctxt common.Context, chain string, lbn uint64) error {
 	return nil
 }
 
-func PersistTxs(ctxt common.Context, bn uint64, ethPrice decimal.Decimal, txs []common.Transaction) error {
+func PersistTxs(ctxt c.Context, bn uint64, ethPrice decimal.Decimal, txs []c.Transaction) error {
 	var err error
 
-	if ctxt.CrawlerType != common.Latest && ctxt.CrawlerType != common.Finalized {
+	if ctxt.CrawlerType != c.Latest && ctxt.CrawlerType != c.Finalized {
 		err = fmt.Errorf("invalid crawler type: %s", ctxt.CrawlerType)
 		log.Error(err)
 		return err
@@ -109,7 +109,7 @@ func PersistTxs(ctxt common.Context, bn uint64, ethPrice decimal.Decimal, txs []
 		}
 	}
 
-	if ctxt.CrawlerType == common.Finalized {
+	if ctxt.CrawlerType == c.Finalized {
 		total, newTokens, oldTokens, err := updateDonationStats(dtx, ctxt)
 		if err != nil {
 			return err
@@ -154,15 +154,15 @@ func updateLastBlock(dbt *sqlx.Tx, chain string, label string, lbn uint64) error
 	return nil
 }
 
-func persistTx(dtx *sqlx.Tx, tx common.Transaction, ct common.CrawlerType) error {
+func persistTx(dtx *sqlx.Tx, tx c.Transaction, ct c.CrawlerType) error {
 	var err error
-	if ct != common.Latest && ct != common.Finalized {
+	if ct != c.Latest && ct != c.Finalized {
 		err = fmt.Errorf("invalid crawler type: %s", ct)
 		log.Error(err)
 		return err
 	}
 	var q string
-	if ct == common.Finalized {
+	if ct == c.Finalized {
 		q = `
 		INSERT INTO donation(
 			address, amount, usd_amount, asset, tokens, price, tx_hash, status,
@@ -202,7 +202,7 @@ func persistTx(dtx *sqlx.Tx, tx common.Transaction, ct common.CrawlerType) error
 	return nil
 }
 
-func calcTokens(tx common.Transaction, tokenPrice, ethPrice decimal.Decimal) (decimal.Decimal, decimal.Decimal, error) {
+func calcTokens(tx c.Transaction, tokenPrice, ethPrice decimal.Decimal) (decimal.Decimal, decimal.Decimal, error) {
 	var amount decimal.Decimal
 	amount, err := decimal.NewFromString(tx.Value)
 	if err != nil {
@@ -221,7 +221,7 @@ func calcTokens(tx common.Transaction, tokenPrice, ethPrice decimal.Decimal) (de
 	return amount.Div(tokenPrice).Ceil(), amount, nil
 }
 
-func getTokenPrice(ctxt common.Context) (decimal.Decimal, error) {
+func getTokenPrice(ctxt c.Context) (decimal.Decimal, error) {
 	// select price as follows:
 	// - if there are multiple rows than return the most recent one
 	//   that is at least two minutes old
@@ -254,7 +254,7 @@ func getTokenPrice(ctxt common.Context) (decimal.Decimal, error) {
 	return result, nil
 }
 
-func PersistFailedBlock(dbh *sqlx.DB, b common.Block) error {
+func PersistFailedBlock(dbh *sqlx.DB, b c.Block) error {
 	q := `
 		INSERT INTO failed_block(
 			block_number, block_hash, block_time)
@@ -271,7 +271,7 @@ func PersistFailedBlock(dbh *sqlx.DB, b common.Block) error {
 	return nil
 }
 
-func PersistFailedTx(dbh *sqlx.DB, b common.Block, tx common.Transaction) error {
+func PersistFailedTx(dbh *sqlx.DB, b c.Block, tx c.Transaction) error {
 	q := `
 		INSERT INTO failed_tx(
 			block_number, block_hash, block_time, tx_hash)
@@ -312,7 +312,7 @@ func GetOldestUnconfirmed(dbh *sqlx.DB) (uint64, error) {
 	return result, nil
 }
 
-func updateDonationStats(dtx *sqlx.Tx, ctxt common.Context) (decimal.Decimal, decimal.Decimal, decimal.Decimal, error) {
+func updateDonationStats(dtx *sqlx.Tx, ctxt c.Context) (decimal.Decimal, decimal.Decimal, decimal.Decimal, error) {
 	q1 := `
 		WITH DonationSum AS (
 			 SELECT
@@ -380,7 +380,7 @@ func updateTokenPrice(dtx *sqlx.Tx, ntp decimal.Decimal) error {
 	return nil
 }
 
-func RequestPrice(ctxt common.Context, asset string, ts time.Time) error {
+func RequestPrice(ctxt c.Context, asset string, ts time.Time) error {
 	q := `
 		INSERT INTO price_req(what_asset, what_time) VALUES($1, $2)
 	   ON CONFLICT(what_asset, what_time) DO NOTHING
@@ -419,7 +419,7 @@ func GetOldUnconfirmed(dbh *sqlx.DB) ([]string, error) {
 	return hashes, nil
 }
 
-func FinalizeTx(ctxt common.Context, tx common.TxByHash) error {
+func FinalizeTx(ctxt c.Context, tx c.TxByHash) error {
 	var err error
 	// start transaction
 	dtx, err := ctxt.DB.Beginx()
@@ -461,7 +461,7 @@ func FinalizeTx(ctxt common.Context, tx common.TxByHash) error {
 	return nil
 }
 
-func confirmSingleTx(dtx *sqlx.Tx, tx common.TxByHash) (decimal.Decimal, decimal.Decimal, error) {
+func confirmSingleTx(dtx *sqlx.Tx, tx c.TxByHash) (decimal.Decimal, decimal.Decimal, error) {
 	q := `
 		UPDATE donation SET
 			block_number=$1,
@@ -482,7 +482,7 @@ func confirmSingleTx(dtx *sqlx.Tx, tx common.TxByHash) (decimal.Decimal, decimal
 	return amount, tokens, nil
 }
 
-func FailTx(ctxt common.Context, tx common.TxByHash) error {
+func FailTx(ctxt c.Context, tx c.TxByHash) error {
 	var err error
 	// start transaction
 	dtx, err := ctxt.DB.Beginx()
@@ -509,7 +509,7 @@ func FailTx(ctxt common.Context, tx common.TxByHash) error {
 	return nil
 }
 
-func failTx(dtx *sqlx.Tx, tx common.TxByHash) error {
+func failTx(dtx *sqlx.Tx, tx c.TxByHash) error {
 	q1 := `
 		INSERT INTO failed_tx(
 			block_number, block_hash, block_time, tx_hash)
