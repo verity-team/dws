@@ -86,6 +86,14 @@ func (c Context) NewTokenPrice(oldTokens, newTokens decimal.Decimal) (bool, deci
 	return newP.GreaterThan(currentP), newP
 }
 
+type Hashable interface {
+	GetHash() string
+}
+
+type Fetchable[R TxReceipt | TxByHash] interface {
+	Fetch(Context, []Hashable) ([]R, error)
+}
+
 type Block struct {
 	Hash         string        `db:"block_hash" json:"hash"`
 	Number       uint64        `db:"block_number" json:"-"`
@@ -131,6 +139,21 @@ func (b *Block) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type TxReceipt struct {
+	BlockHash         string `json:"blockHash"`
+	BlockNumber       string `json:"blockNumber"`
+	ContractAddress   string `json:"contractAddress"`
+	CumulativeGasUsed string `json:"cumulativeGasUsed"`
+	EffectiveGasPrice string `json:"effectiveGasPrice"`
+	From              string `json:"from"`
+	GasUsed           string `json:"gasUsed"`
+	Status            string `json:"status"`
+	To                string `json:"to"`
+	TransactionHash   string `json:"transactionHash"`
+	TransactionIndex  string `json:"transactionIndex"`
+	Type              string `json:"type"`
+}
+
 type Transaction struct {
 	Hash        string          `db:"tx_hash" json:"hash"`
 	From        string          `db:"address" json:"from"`
@@ -148,6 +171,10 @@ type Transaction struct {
 	BlockNumber uint64          `db:"block_number" json:"-"`
 	BlockHash   string          `db:"block_hash" json:"blockhash"`
 	BlockTime   time.Time       `db:"block_time" json:"-"`
+}
+
+func (tx Transaction) GetHash() string {
+	return tx.Hash
 }
 
 type FinalizedBlock struct {

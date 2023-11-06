@@ -77,7 +77,7 @@ func writeBlockToFile(ctxt common.Context, bn uint64, json []byte) error {
 	return nil
 }
 
-func writeTxReceiptsToFile(ctxt common.Context, bn uint64, json []byte) {
+func writeTxReceiptsToFile(ctxt common.Context, epoch int64, json []byte) {
 	// write transaction receipts to debug data store, errors are tolerated
 	if ctxt.DebugDataStore != "" {
 		err := createDirectoryIfNotExists(ctxt.DebugDataStore)
@@ -85,10 +85,10 @@ func writeTxReceiptsToFile(ctxt common.Context, bn uint64, json []byte) {
 			log.Warn(err)
 			return
 		}
-		fp := filepath.Join(ctxt.DebugDataStore, fmt.Sprintf("txr-%d-%d.json", bn, time.Now().UnixMilli()))
+		fp := filepath.Join(ctxt.DebugDataStore, fmt.Sprintf("txr-%d-%d.json", epoch, time.Now().UnixMilli()))
 		err = os.WriteFile(fp, json, 0600)
 		if err != nil {
-			err = fmt.Errorf("failed to write transaction receipts for block #%d, %w", bn, err)
+			err = fmt.Errorf("failed to write transaction receipts for epoch #%d, %w", epoch, err)
 			log.Warn(err)
 		}
 	}
