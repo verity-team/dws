@@ -22,7 +22,7 @@ func tx2hashable(txs []c.Transaction) []c.Hashable {
 	return res
 }
 
-func GetData[R c.TxReceipt | c.TxByHash](ctxt c.Context, hs []c.Hashable, fr c.Fetcher[R]) ([]R, error) {
+func GetData[R c.Fetchable](ctxt c.Context, hs []c.Hashable, fr c.Fetcher[R]) ([]R, error) {
 	if len(hs) == 0 {
 		return nil, nil
 	}
@@ -46,9 +46,9 @@ func GetData[R c.TxReceipt | c.TxByHash](ctxt c.Context, hs []c.Hashable, fr c.F
 	return res, nil
 }
 
-type TRXFetcher struct{}
+type txrFetcher struct{}
 
-func (txfr TRXFetcher) Fetch(ctxt c.Context, txs []c.Hashable) ([]c.TxReceipt, error) {
+func (txfr txrFetcher) Fetch(ctxt c.Context, txs []c.Hashable) ([]c.TxReceipt, error) {
 	if len(txs) == 0 {
 		return nil, nil
 	}

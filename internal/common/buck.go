@@ -86,6 +86,10 @@ func (c Context) NewTokenPrice(oldTokens, newTokens decimal.Decimal) (bool, deci
 	return newP.GreaterThan(currentP), newP
 }
 
+type Fetchable interface {
+	TxReceipt | TxByHash
+}
+
 type Hashable interface {
 	GetHash() string
 }
