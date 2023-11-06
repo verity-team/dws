@@ -94,6 +94,14 @@ type Hashable interface {
 	GetHash() string
 }
 
+func ToHashable[H Hashable](hs []H) []Hashable {
+	var res []Hashable
+	for _, h := range hs {
+		res = append(res, h)
+	}
+	return res
+}
+
 type Fetcher[R TxReceipt | TxByHash] interface {
 	Fetch(Context, []Hashable) ([]R, error)
 }

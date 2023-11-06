@@ -112,7 +112,7 @@ func filterTransactions(ctxt c.Context, b c.Block) ([]c.Transaction, error) {
 
 func markFailedTxs(ctxt c.Context, bn uint64, txs []c.Transaction) error {
 	// check whether any of the _filtered_ transactions have failed
-	rcpts, err := GetData[c.TxReceipt](ctxt, tx2hashable(txs), txrFetcher{})
+	rcpts, err := GetData[c.TxReceipt](ctxt, c.ToHashable(txs), txrFetcher{})
 	if err != nil {
 		err = fmt.Errorf("failed to get tx receipts for block %d, %w", bn, err)
 		log.Error(err)

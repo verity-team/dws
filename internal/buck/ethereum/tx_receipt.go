@@ -14,14 +14,6 @@ type TxReceiptBody struct {
 	Result  c.TxReceipt `json:"result"`
 }
 
-func tx2hashable(txs []c.Transaction) []c.Hashable {
-	var res []c.Hashable
-	for _, tx := range txs {
-		res = append(res, tx)
-	}
-	return res
-}
-
 func GetData[R c.Fetchable](ctxt c.Context, hs []c.Hashable, fr c.Fetcher[R]) ([]R, error) {
 	if len(hs) == 0 {
 		return nil, nil
