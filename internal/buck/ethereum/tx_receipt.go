@@ -5,32 +5,39 @@ import (
 
 	"github.com/goccy/go-json"
 
-	"github.com/verity-team/dws/internal/common"
+	c "github.com/verity-team/dws/internal/common"
 )
 
 type TxReceiptBody struct {
-	Jsonrpc string           `json:"jsonrpc"`
-	ID      int              `json:"id"`
-	Result  common.TxReceipt `json:"result"`
+	Jsonrpc string      `json:"jsonrpc"`
+	ID      int         `json:"id"`
+	Result  c.TxReceipt `json:"result"`
 }
 
-func GetTxReceipts(ctxt common.Context, txs []common.Transaction) ([]common.TxReceipt, error) {
-	if len(txs) == 0 {
+func tx2hashable(txs []c.Transaction) []c.Hashable {
+	var res []c.Hashable
+	for _, tx := range txs {
+		res = append(res, tx)
+	}
+	return res
+}
+
+func GetData[R c.TxReceipt | c.TxByHash](ctxt c.Context, hs []c.Hashable, fr c.Fetcher[R]) ([]R, error) {
+	if len(hs) == 0 {
 		return nil, nil
 	}
-	var res []common.TxReceipt
+	var res []R
 	batchSize := 127
 
-	for i := 0; i < len(txs); i += batchSize {
+	for i := 0; i < len(hs); i += batchSize {
 		end := i + batchSize
-		if end > len(txs) {
-			end = len(txs)
+		if end > len(hs) {
+			end = len(hs)
 		}
 
-		batch := txs[i:end]
+		batch := hs[i:end]
 
-		// Process the batch
-		br, err := doGetTxReceipts(ctxt, batch)
+		br, err := fr.Fetch(ctxt, batch)
 		if err != nil {
 			return nil, err
 		}
@@ -39,7 +46,9 @@ func GetTxReceipts(ctxt common.Context, txs []common.Transaction) ([]common.TxRe
 	return res, nil
 }
 
-func doGetTxReceipts[H common.Hashable](ctxt common.Context, txs []H) ([]common.TxReceipt, error) {
+type TRXFetcher struct{}
+
+func (txfr TRXFetcher) Fetch(ctxt c.Context, txs []c.Hashable) ([]c.TxReceipt, error) {
 	if len(txs) == 0 {
 		return nil, nil
 	}
@@ -58,11 +67,11 @@ func doGetTxReceipts[H common.Hashable](ctxt common.Context, txs []H) ([]common.
 		return nil, err
 	}
 
-	params := common.HTTPParams{
+	params := c.HTTPParams{
 		URL:         ctxt.ETHRPCURL,
 		RequestBody: requestBytes,
 	}
-	body, err := common.HTTPPost(params)
+	body, err := c.HTTPPost(params)
 	if err != nil {
 		return nil, err
 	}
@@ -75,13 +84,13 @@ func doGetTxReceipts[H common.Hashable](ctxt common.Context, txs []H) ([]common.
 	return result, nil
 }
 
-func parseTxReceipt(body []byte) ([]common.TxReceipt, error) {
+func parseTxReceipt(body []byte) ([]c.TxReceipt, error) {
 	var resp []TxReceiptBody
 	err := json.Unmarshal(body, &resp)
 	if err != nil {
 		return nil, err
 	}
-	var res = make([]common.TxReceipt, len(resp))
+	var res = make([]c.TxReceipt, len(resp))
 	for i, d := range resp {
 		res[i] = d.Result
 	}

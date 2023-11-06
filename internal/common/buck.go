@@ -90,7 +90,7 @@ type Hashable interface {
 	GetHash() string
 }
 
-type Fetchable[R TxReceipt | TxByHash] interface {
+type Fetcher[R TxReceipt | TxByHash] interface {
 	Fetch(Context, []Hashable) ([]R, error)
 }
 

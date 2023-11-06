@@ -8,41 +8,13 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/verity-team/dws/internal/common"
+	c "github.com/verity-team/dws/internal/common"
 )
 
 type TxByHashBody struct {
 	Jsonrpc string           `json:"jsonrpc"`
 	ID      int              `json:"id"`
 	Result  *common.TxByHash `json:"result"`
-}
-
-func GetTxsByHash(ctxt common.Context, hashes []string) ([]common.TxByHash, error) {
-	if len(hashes) == 0 {
-		return nil, nil
-	}
-	var txs []common.TxByHash
-	batchSize := 127
-
-	for i := 0; i < len(hashes); i += batchSize {
-		end := i + batchSize
-		if end > len(hashes) {
-			end = len(hashes)
-		}
-
-		batch := hashes[i:end]
-
-		// Process the batch
-		br, err := doGetTxsByHash(ctxt, batch)
-		if err != nil {
-			return nil, err
-		}
-		txs = append(txs, br...)
-	}
-	err := addFBData(ctxt, txs)
-	if err != nil {
-		return nil, err
-	}
-	return txs, nil
 }
 
 func addFBData(ctxt common.Context, txs []common.TxByHash) error {
@@ -79,7 +51,9 @@ func addFBData(ctxt common.Context, txs []common.TxByHash) error {
 	return nil
 }
 
-func doGetTxsByHash(ctxt common.Context, hashes []string) ([]common.TxByHash, error) {
+type TXBHFetcher struct{}
+
+func (txbh TXBHFetcher) Fetch(ctxt common.Context, hashes []c.Hashable) ([]common.TxByHash, error) {
 	if len(hashes) == 0 {
 		return nil, nil
 	}
@@ -112,6 +86,10 @@ func doGetTxsByHash(ctxt common.Context, hashes []string) ([]common.TxByHash, er
 	}
 	writeTxsToFile(ctxt, time.Now().Unix(), body)
 
+	err = addFBData(ctxt, result)
+	if err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
