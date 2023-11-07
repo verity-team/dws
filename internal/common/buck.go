@@ -45,6 +45,26 @@ type ERC20 struct {
 	Scale   int32
 }
 
+type Hashable interface {
+	GetHash() string
+}
+
+func ToHashable[H Hashable](hs []H) []Hashable {
+	var res []Hashable
+	for _, h := range hs {
+		res = append(res, h)
+	}
+	return res
+}
+
+type Fetchable interface {
+	TxReceipt | TxByHash
+}
+
+type Fetcher[R Fetchable] interface {
+	Fetch(Context, []Hashable) ([]R, error)
+}
+
 type Context struct {
 	ABI              map[string]abi.ABI
 	BlockCache       string
@@ -131,8 +151,31 @@ func (b *Block) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type TxReceipt struct {
+	BlockHash         string `json:"blockHash"`
+	BlockNumber       string `json:"blockNumber"`
+	ContractAddress   string `json:"contractAddress"`
+	CumulativeGasUsed string `json:"cumulativeGasUsed"`
+	EffectiveGasPrice string `json:"effectiveGasPrice"`
+	From              string `json:"from"`
+	GasUsed           string `json:"gasUsed"`
+	Status            string `json:"status"`
+	To                string `json:"to"`
+	TransactionHash   string `json:"transactionHash"`
+	TransactionIndex  string `json:"transactionIndex"`
+	Type              string `json:"type"`
+}
+
+type TXH struct {
+	Hash string `db:"tx_hash" json:"hash"`
+}
+
+func (tx TXH) GetHash() string {
+	return tx.Hash
+}
+
 type Transaction struct {
-	Hash        string          `db:"tx_hash" json:"hash"`
+	TXH
 	From        string          `db:"address" json:"from"`
 	To          string          `db:"-" json:"to"`
 	Value       string          `db:"amount" json:"value"`

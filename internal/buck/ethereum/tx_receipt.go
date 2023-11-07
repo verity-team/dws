@@ -1,49 +1,36 @@
 package ethereum
 
 import (
+	"time"
+
 	"github.com/goccy/go-json"
 
-	"github.com/verity-team/dws/internal/common"
+	c "github.com/verity-team/dws/internal/common"
 )
 
 type TxReceiptBody struct {
-	Jsonrpc string    `json:"jsonrpc"`
-	ID      int       `json:"id"`
-	Result  TxReceipt `json:"result"`
+	Jsonrpc string      `json:"jsonrpc"`
+	ID      int         `json:"id"`
+	Result  c.TxReceipt `json:"result"`
 }
 
-type TxReceipt struct {
-	BlockHash         string `json:"blockHash"`
-	BlockNumber       string `json:"blockNumber"`
-	ContractAddress   string `json:"contractAddress"`
-	CumulativeGasUsed string `json:"cumulativeGasUsed"`
-	EffectiveGasPrice string `json:"effectiveGasPrice"`
-	From              string `json:"from"`
-	GasUsed           string `json:"gasUsed"`
-	Status            string `json:"status"`
-	To                string `json:"to"`
-	TransactionHash   string `json:"transactionHash"`
-	TransactionIndex  string `json:"transactionIndex"`
-	Type              string `json:"type"`
-}
+const batchSize = 127
 
-func GetTxReceipts(ctxt common.Context, txs []common.Transaction) ([]TxReceipt, error) {
-	if len(txs) == 0 {
+func GetData[R c.Fetchable](ctxt c.Context, hs []c.Hashable, fr c.Fetcher[R]) ([]R, error) {
+	if len(hs) == 0 {
 		return nil, nil
 	}
-	var res []TxReceipt
-	batchSize := 127
+	var res []R
 
-	for i := 0; i < len(txs); i += batchSize {
+	for i := 0; i < len(hs); i += batchSize {
 		end := i + batchSize
-		if end > len(txs) {
-			end = len(txs)
+		if end > len(hs) {
+			end = len(hs)
 		}
 
-		batch := txs[i:end]
+		batch := hs[i:end]
 
-		// Process the batch
-		br, err := doGetTxReceipts(ctxt, batch)
+		br, err := fr.Fetch(ctxt, batch)
 		if err != nil {
 			return nil, err
 		}
@@ -51,16 +38,19 @@ func GetTxReceipts(ctxt common.Context, txs []common.Transaction) ([]TxReceipt, 
 	}
 	return res, nil
 }
-func doGetTxReceipts(ctxt common.Context, txs []common.Transaction) ([]TxReceipt, error) {
-	if len(txs) == 0 {
+
+type txrFetcher struct{}
+
+func (txfr txrFetcher) Fetch(ctxt c.Context, hs []c.Hashable) ([]c.TxReceipt, error) {
+	if len(hs) == 0 {
 		return nil, nil
 	}
-	rd := make([]map[string]interface{}, len(txs))
-	for idx, tx := range txs {
+	rd := make([]map[string]interface{}, len(hs))
+	for idx, h := range hs {
 		rq := map[string]interface{}{
 			"jsonrpc": "2.0",
 			"method":  "eth_getTransactionReceipt",
-			"params":  []interface{}{tx.Hash},
+			"params":  []interface{}{h.GetHash()},
 			"id":      idx + 1,
 		}
 		rd[idx] = rq
@@ -70,11 +60,11 @@ func doGetTxReceipts(ctxt common.Context, txs []common.Transaction) ([]TxReceipt
 		return nil, err
 	}
 
-	params := common.HTTPParams{
+	params := c.HTTPParams{
 		URL:         ctxt.ETHRPCURL,
 		RequestBody: requestBytes,
 	}
-	body, err := common.HTTPPost(params)
+	body, err := c.HTTPPost(params)
 	if err != nil {
 		return nil, err
 	}
@@ -82,18 +72,18 @@ func doGetTxReceipts(ctxt common.Context, txs []common.Transaction) ([]TxReceipt
 	if err != nil {
 		return nil, err
 	}
-	writeTxReceiptsToFile(ctxt, txs[0].BlockNumber, body)
+	writeTxReceiptsToFile(ctxt, time.Now().UTC().Unix(), body)
 
 	return result, nil
 }
 
-func parseTxReceipt(body []byte) ([]TxReceipt, error) {
+func parseTxReceipt(body []byte) ([]c.TxReceipt, error) {
 	var resp []TxReceiptBody
 	err := json.Unmarshal(body, &resp)
 	if err != nil {
 		return nil, err
 	}
-	var res = make([]TxReceipt, len(resp))
+	var res = make([]c.TxReceipt, len(resp))
 	for i, d := range resp {
 		res[i] = d.Result
 	}

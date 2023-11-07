@@ -7,12 +7,12 @@ import (
 	"github.com/goccy/go-json"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/verity-team/dws/internal/common"
+	c "github.com/verity-team/dws/internal/common"
 )
 
-func MostRecentBlockNumber(ctxt common.Context) (uint64, error) {
+func MostRecentBlockNumber(ctxt c.Context) (uint64, error) {
 	label := "finalized"
-	if ctxt.CrawlerType == common.Latest {
+	if ctxt.CrawlerType == c.Latest {
 		label = "latest"
 	}
 	request := EthGetBlockByNumberRequest{
@@ -26,12 +26,12 @@ func MostRecentBlockNumber(ctxt common.Context) (uint64, error) {
 		return 0, err
 	}
 
-	params := common.HTTPParams{
+	params := c.HTTPParams{
 		URL:              ctxt.ETHRPCURL,
 		RequestBody:      requestBytes,
 		MaxWaitInSeconds: ctxt.MaxWaitInSeconds,
 	}
-	body, err := common.HTTPPost(params)
+	body, err := c.HTTPPost(params)
 	if err != nil {
 		return 0, err
 	}

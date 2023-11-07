@@ -16,8 +16,8 @@ import (
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
 	"github.com/verity-team/dws/internal/buck/db"
-	"github.com/verity-team/dws/internal/buck/ethereum"
-	"github.com/verity-team/dws/internal/common"
+	eth "github.com/verity-team/dws/internal/buck/ethereum"
+	c "github.com/verity-team/dws/internal/common"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 )
@@ -56,7 +56,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	ctxt, err := common.GetContext(erc20Json, saleParamJSON)
+	ctxt, err := c.GetContext(erc20Json, saleParamJSON)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func main() {
 		ctxt.BlockCache = blockCache
 	}
 
-	dsn := common.GetDSN()
+	dsn := c.GetDSN()
 	dbh, err := sqlx.Open("postgres", dsn)
 	if err != nil {
 		log.Fatal(err)
@@ -101,7 +101,7 @@ func main() {
 		"--monitor-old-unconfirmed": *monitorOld,
 	}
 
-	abi, err := ethereum.InitABI()
+	abi, err := eth.InitABI()
 	if err != nil {
 		return
 	}
@@ -109,15 +109,15 @@ func main() {
 
 	// latest blocks
 	latestCtxt := *ctxt
-	latestCtxt.CrawlerType = common.Latest
+	latestCtxt.CrawlerType = c.Latest
 
 	// finalized blocks
 	finalCtxt := *ctxt
-	finalCtxt.CrawlerType = common.Finalized
+	finalCtxt.CrawlerType = c.Finalized
 
 	// old, unconfirmed blocks
 	oldCtxt := *ctxt
-	oldCtxt.CrawlerType = common.OldUnconfirmed
+	oldCtxt.CrawlerType = c.OldUnconfirmed
 
 	if (*lbn > -1) && (*fbn > -1) {
 		log.Error("pick either -set-latest XOR -set-final but not both")
@@ -172,7 +172,7 @@ func main() {
 	g, ctx := errgroup.WithContext(context.Background())
 
 	if *monitorLatest {
-		_, err = s.Every("1m").Do(monitorETH, context.WithValue(ctx, common.BuckContext, &latestCtxt))
+		_, err = s.Every("1m").Do(monitorETH, context.WithValue(ctx, c.BuckContext, &latestCtxt))
 		if err != nil {
 			log.Error(err)
 			return
@@ -184,7 +184,7 @@ func main() {
 		if *port == defaultPort {
 			*port = defaultPort + 1
 		}
-		_, err = s.Every("1m").Do(monitorETH, context.WithValue(ctx, common.BuckContext, &finalCtxt))
+		_, err = s.Every("1m").Do(monitorETH, context.WithValue(ctx, c.BuckContext, &finalCtxt))
 		if err != nil {
 			log.Error(err)
 			return
@@ -197,7 +197,7 @@ func main() {
 			*port = defaultPort + 2
 		}
 		oldCtxt.UpdateLastBlock = false
-		_, err = s.Every("15m").Do(monitorOldUnconfirmed, context.WithValue(ctx, common.BuckContext, &oldCtxt))
+		_, err = s.Every("15m").Do(monitorOldUnconfirmed, context.WithValue(ctx, c.BuckContext, &oldCtxt))
 		if err != nil {
 			log.Error(err)
 			return
@@ -278,14 +278,14 @@ func main() {
 	log.Info("buck shutting down")
 }
 
-func runReadyProbe(ctxt common.Context) error {
+func runReadyProbe(ctxt c.Context) error {
 	err := ctxt.DB.Ping()
 	if err != nil {
 		log.Error(err)
 		return err
 	}
 	ctxt.MaxWaitInSeconds = 1
-	_, err = ethereum.MostRecentBlockNumber(ctxt)
+	_, err = eth.MostRecentBlockNumber(ctxt)
 	if err != nil {
 		log.Error(err)
 	}
@@ -293,12 +293,12 @@ func runReadyProbe(ctxt common.Context) error {
 }
 
 func monitorETH(ctx context.Context) error {
-	ctxt, ok := ctx.Value(common.BuckContext).(*common.Context)
+	ctxt, ok := ctx.Value(c.BuckContext).(*c.Context)
 	if !ok {
 		return errors.New("invalid buck context")
 	}
 	// most recent ETH block published
-	mrbn, err := ethereum.MostRecentBlockNumber(*ctxt)
+	mrbn, err := eth.MostRecentBlockNumber(*ctxt)
 	if err != nil {
 		log.Error(err)
 		return err
@@ -337,8 +337,8 @@ func monitorETH(ctx context.Context) error {
 	return nil
 }
 
-func processETH(ctxt common.Context, bn uint64) error {
-	txs, err := ethereum.GetTransactions(ctxt, bn)
+func processETH(ctxt c.Context, bn uint64) error {
+	txs, err := eth.GetTransactions(ctxt, bn)
 	if err != nil {
 		log.Error(err)
 		return err
@@ -355,7 +355,7 @@ func processETH(ctxt common.Context, bn uint64) error {
 	// we only get the ETH price if we need to persist transactions
 	// get ETH price at the time the block was published
 	blockTime := txs[0].BlockTime
-	ethPrice, err := common.GetETHPrice(ctxt.DB, blockTime)
+	ethPrice, err := c.GetETHPrice(ctxt.DB, blockTime)
 	if err != nil {
 		// request the missing price and let's hope it is avaiable next time we
 		// need it
@@ -376,7 +376,7 @@ func processETH(ctxt common.Context, bn uint64) error {
 }
 
 func monitorOldUnconfirmed(ctx context.Context) error {
-	ctxt, ok := ctx.Value(common.BuckContext).(*common.Context)
+	ctxt, ok := ctx.Value(c.BuckContext).(*c.Context)
 	if !ok {
 		return errors.New("buck/old-unconfirmed invalid buck context")
 	}
@@ -391,13 +391,13 @@ func monitorOldUnconfirmed(ctx context.Context) error {
 	log.Infof("##### old unconfirmed txs: %v", hashes)
 
 	// most recent *finalized* ETH block published
-	mfbn, err := ethereum.MostRecentBlockNumber(*ctxt)
+	mfbn, err := eth.MostRecentBlockNumber(*ctxt)
 	if err != nil {
 		return err
 	}
 	log.Infof("##### max finalized ETH block: %d", mfbn)
 
-	txs, err := ethereum.GetTxsByHash(*ctxt, hashes)
+	txs, err := eth.GetData[c.TxByHash](*ctxt, c.ToHashable(hashes), eth.TXBHFetcher{})
 	if err != nil {
 		return err
 	}

@@ -14,10 +14,10 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/verity-team/dws/api"
 	"github.com/verity-team/dws/internal/buck/db"
-	"github.com/verity-team/dws/internal/common"
+	c "github.com/verity-team/dws/internal/common"
 )
 
-func GetTransactions(ctxt common.Context, blockNumber uint64) ([]common.Transaction, error) {
+func GetTransactions(ctxt c.Context, blockNumber uint64) ([]c.Transaction, error) {
 	block, err := GetBlock(ctxt, blockNumber)
 	if err != nil {
 		return nil, err
@@ -37,8 +37,8 @@ func GetTransactions(ctxt common.Context, blockNumber uint64) ([]common.Transact
 	return result, nil
 }
 
-func filterTransactions(ctxt common.Context, b common.Block) ([]common.Transaction, error) {
-	var result []common.Transaction
+func filterTransactions(ctxt c.Context, b c.Block) ([]c.Transaction, error) {
+	var result []c.Transaction
 	for _, tx := range b.Transactions {
 		var txBelongsToUs bool
 		if tx.Input == "0x" {
@@ -48,7 +48,7 @@ func filterTransactions(ctxt common.Context, b common.Block) ([]common.Transacti
 				continue
 			}
 			tx.Asset = "eth"
-			amount, err := common.HexStringToDecimal(tx.Value)
+			amount, err := c.HexStringToDecimal(tx.Value)
 			if err != nil {
 				err = fmt.Errorf("failed to process ETH tx '%s', %w", tx.Hash, err)
 				log.Error(err)
@@ -99,7 +99,7 @@ func filterTransactions(ctxt common.Context, b common.Block) ([]common.Transacti
 		if txBelongsToUs {
 			tx.BlockNumber = b.Number
 			tx.BlockTime = b.Timestamp
-			if ctxt.CrawlerType == common.Finalized {
+			if ctxt.CrawlerType == c.Finalized {
 				tx.Status = string(api.Confirmed)
 			} else {
 				tx.Status = string(api.Unconfirmed)
@@ -110,9 +110,9 @@ func filterTransactions(ctxt common.Context, b common.Block) ([]common.Transacti
 	return result, nil
 }
 
-func markFailedTxs(ctxt common.Context, bn uint64, txs []common.Transaction) error {
+func markFailedTxs(ctxt c.Context, bn uint64, txs []c.Transaction) error {
 	// check whether any of the _filtered_ transactions have failed
-	rcpts, err := GetTxReceipts(ctxt, txs)
+	rcpts, err := GetData[c.TxReceipt](ctxt, c.ToHashable(txs), txrFetcher{})
 	if err != nil {
 		err = fmt.Errorf("failed to get tx receipts for block %d, %w", bn, err)
 		log.Error(err)
