@@ -45,6 +45,26 @@ type ERC20 struct {
 	Scale   int32
 }
 
+type Hashable interface {
+	GetHash() string
+}
+
+func ToHashable[H Hashable](hs []H) []Hashable {
+	var res []Hashable
+	for _, h := range hs {
+		res = append(res, h)
+	}
+	return res
+}
+
+type Fetchable interface {
+	TxReceipt | TxByHash
+}
+
+type Fetcher[R Fetchable] interface {
+	Fetch(Context, []Hashable) ([]R, error)
+}
+
 type Context struct {
 	ABI              map[string]abi.ABI
 	BlockCache       string
@@ -84,26 +104,6 @@ func (c Context) NewTokenPrice(oldTokens, newTokens decimal.Decimal) (bool, deci
 	newP := c.priceBucket(newTokens)
 
 	return newP.GreaterThan(currentP), newP
-}
-
-type Hashable interface {
-	GetHash() string
-}
-
-func ToHashable[H Hashable](hs []H) []Hashable {
-	var res []Hashable
-	for _, h := range hs {
-		res = append(res, h)
-	}
-	return res
-}
-
-type Fetchable interface {
-	TxReceipt | TxByHash
-}
-
-type Fetcher[R Fetchable] interface {
-	Fetch(Context, []Hashable) ([]R, error)
 }
 
 type Block struct {

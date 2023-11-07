@@ -14,12 +14,13 @@ type TxReceiptBody struct {
 	Result  c.TxReceipt `json:"result"`
 }
 
+const batchSize = 127
+
 func GetData[R c.Fetchable](ctxt c.Context, hs []c.Hashable, fr c.Fetcher[R]) ([]R, error) {
 	if len(hs) == 0 {
 		return nil, nil
 	}
 	var res []R
-	batchSize := 127
 
 	for i := 0; i < len(hs); i += batchSize {
 		end := i + batchSize
