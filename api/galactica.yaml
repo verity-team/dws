@@ -1,0 +1,117 @@
+openapi: 3.0.3
+info:
+  title: galactica (meme management backend)
+  version: '1.0.0'
+  contact:
+    name: API support
+    url: https://support.tm.io
+    email: info@verity.team
+  license:
+    name: GNU Affero General Public License v3 (AGPL-3.0)
+    url: https://www.gnu.org/licenses/agpl-3.0.en.html
+  description: |
+    The galactica backend provides all the functions needed to
+    manage memes.
+
+servers:
+- url: https://api.tm.io/galactica/v1
+  description: galactica (meme management backend)
+
+paths:
+  /meme:
+    post:
+      summary: post a meme
+      description: |
+         Call this endpoint to post a meme
+      operationId: postMeme
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - userId
+                - description
+                - fileName
+              properties:
+                userId:
+                  type: string
+                description:
+                  type: string
+                lang:
+                  type: string
+                  enum: [en, de, fr]
+                  example: "en"
+                tags:
+                  type: array
+                  description: tags that apply to meme
+                  items:
+                    type: string
+                fileName:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: |
+            Bad input parameter; error message provides details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+        "5XX":
+          description: |
+            Servers are not working as expected. The request is probably valid
+            but needs to be retried later.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+  /live:
+    get:
+      summary: is the service alive?
+      description: is the service alive?
+      operationId: alive
+      responses:
+        "200":
+          description: OK
+  /ready:
+    get:
+      summary: is the service alive and ready to do work?
+      description: is the service alive and ready to do work?
+      operationId: ready
+      responses:
+        "200":
+          description: OK
+        "503":
+          description: something's wrong
+  /version:
+    get:
+      summary: what is the version of this service?
+      description: what is the version of this service?
+      operationId: version
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: string
+                example: {"version": "galactica::2023-11-02T13:23:50Z::63b7dd8b2d6e"}
+components:
+  schemas:
+    error:
+      required:
+      - code
+      - message
+      properties:
+        code:
+          type: integer
+          description: error code
+          example: 115
+        message:
+          type: string
+          maxLength: 1024
+          description: error message
+          example: all your bytes are wrong
