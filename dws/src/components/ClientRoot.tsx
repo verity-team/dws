@@ -25,7 +25,7 @@ import {
   signMessage,
 } from "@wagmi/core";
 import { EstimateGasExecutionError, parseEther } from "viem";
-import { wagmiConfig, web3ModalConfig } from "./wallet/WalletConnectProvider";
+import { wagmiConfig, web3ModalConfig } from "./wallet/config";
 
 interface ClientRootProps {
   children: ReactNode;
@@ -106,38 +106,19 @@ const ClientRoot = ({
 
   const requestTransaction = useCallback(
     async (amount: number, token: AvailableToken) => {
-      if (provider === "MetaMask") {
-        const txHash = await donate(account, amount, token);
+      try {
+        const txHash = await donate(account, amount, token, provider);
         if (txHash == null) {
-          return "";
+          // Will be catch under
+          throw new Error();
         }
         return txHash;
-      }
-
-      if (provider === "WalletConnect") {
-        const receiver = process.env.NEXT_PUBLIC_DONATE_PUBKEY;
-        if (!receiver) {
-          console.warn("Receive wallet not set");
-          return "";
+      } catch (error: any) {
+        if (error instanceof EstimateGasExecutionError) {
+          toast.error("Insufficient fund");
         }
-
-        try {
-          const txConfig = await prepareSendTransaction({
-            to: receiver,
-            value: parseEther(amount.toString()),
-          });
-
-          const { hash } = await sendTransaction(txConfig);
-          return hash;
-        } catch (error: any) {
-          if (error instanceof EstimateGasExecutionError) {
-            toast.error("Insufficient fund");
-          }
-          return "";
-        }
+        return "";
       }
-
-      return "";
     },
     [provider, account]
   );
@@ -158,7 +139,6 @@ const ClientRoot = ({
           return signature;
         } catch (error: any) {
           console.warn(error);
-          return "";
         }
       }
 

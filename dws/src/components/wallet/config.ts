@@ -1,9 +1,5 @@
 import { InjectedConnector } from "@wagmi/core";
-import {
-  walletConnectProvider,
-  EIP6963Connector,
-  createWeb3Modal,
-} from "@web3modal/wagmi";
+import { walletConnectProvider, EIP6963Connector } from "@web3modal/wagmi";
 import { configureChains, mainnet, sepolia, createConfig } from "wagmi";
 import { CoinbaseWalletConnector } from "wagmi/connectors/coinbaseWallet";
 import { WalletConnectConnector } from "wagmi/connectors/walletConnect";
