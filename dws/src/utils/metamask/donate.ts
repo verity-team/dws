@@ -1,9 +1,22 @@
 import { toWei } from "web3-utils";
 import { Maybe, Nullable } from "../types";
-import { AvailableToken, TokenInfo, multipleOrderOf10 } from "../token";
+import {
+  AvailableToken,
+  AvailableWallet,
+  TokenInfo,
+  multipleOrderOf10,
+} from "../token";
 import { encodeFunctionCall } from "web3-eth-abi";
 import { BN } from "bn.js";
-import Decimal from "decimal.js";
+import {
+  erc20ABI,
+  prepareSendTransaction,
+  prepareWriteContract,
+  sendTransaction,
+  writeContract,
+} from "@wagmi/core";
+import { parseEther } from "viem";
+import { usePrepareContractWrite } from "wagmi";
 
 const contractAddrMap = new Map<AvailableToken, TokenInfo>([
   [
@@ -44,19 +57,27 @@ const getContractData = (
 export const donate = async (
   from: string,
   amount: number,
-  token: AvailableToken
-): Promise<Nullable<string>> => {
+  token: AvailableToken,
+  provider: AvailableWallet = "MetaMask"
+): Promise<Maybe<string>> => {
   let txHash = null;
 
-  if (token === "ETH") {
-    txHash = await donateETH(from, amount);
-  } else {
-    txHash = await donateERC(from, token, amount);
+  if (provider === "MetaMask") {
+    if (token === "ETH") {
+      txHash = await donateETH(from, amount);
+    } else {
+      txHash = await donateERC(from, token, amount);
+    }
   }
 
-  if (txHash == null) {
-    return null;
+  if (provider === "WalletConnect") {
+    if (token === "ETH") {
+      txHash = await donateETHWagmi(amount);
+    } else {
+      txHash = await donateERCWagmi(token, amount);
+    }
   }
+
   return txHash;
 };
 
@@ -76,24 +97,37 @@ export const donateETH = async (
     return null;
   }
 
-  try {
-    return await ethereum.request({
-      method: "eth_sendTransaction",
-      params: [
-        {
-          from,
-          to: receiveWallet,
-          value: parseInt(toWei(amount, "ether")).toString(16),
-          // gasLimit: '0x5028', // Customizable by the user during MetaMask confirmation.
-          // maxPriorityFeePerGas: '0x3b9aca00', // Customizable by the user during MetaMask confirmation.
-          // maxFeePerGas: '0x2540be400', // Customizable by the user during MetaMask confirmation.
-        },
-      ],
-    });
-  } catch (err: any) {
-    console.warn(err.message);
+  return await ethereum.request({
+    method: "eth_sendTransaction",
+    params: [
+      {
+        from,
+        to: receiveWallet,
+        value: parseInt(toWei(amount, "ether")).toString(16),
+        // gasLimit: '0x5028', // Customizable by the user during MetaMask confirmation.
+        // maxPriorityFeePerGas: '0x3b9aca00', // Customizable by the user during MetaMask confirmation.
+        // maxFeePerGas: '0x2540be400', // Customizable by the user during MetaMask confirmation.
+      },
+    ],
+  });
+};
+
+export const donateETHWagmi = async (
+  amount: number
+): Promise<Maybe<string>> => {
+  const receiveWallet = process.env.NEXT_PUBLIC_DONATE_PUBKEY;
+  if (receiveWallet == null) {
+    console.warn("Receive wallet not set");
     return null;
   }
+
+  const txConfig = await prepareSendTransaction({
+    to: receiveWallet,
+    value: parseEther(amount.toString()),
+  });
+
+  const { hash } = await sendTransaction(txConfig);
+  return hash;
 };
 
 export const donateERC = async (
@@ -117,24 +151,45 @@ export const donateERC = async (
     return null;
   }
 
-  try {
-    return await ethereum.request({
-      method: "eth_sendTransaction",
-      params: [
-        {
-          from,
-          to: tokenInfo.contractAddress,
-          data: getContractData(receiveWallet, amount, tokenInfo.decimals),
-          // gasLimit: '0x5028', // Customizable by the user during MetaMask confirmation.
-          // maxPriorityFeePerGas: '0x3b9aca00', // Customizable by the user during MetaMask confirmation.
-          // maxFeePerGas: '0x2540be400', // Customizable by the user during MetaMask confirmation.
-        },
-      ],
-    });
-  } catch (err: any) {
-    console.warn(err.message);
+  return await ethereum.request({
+    method: "eth_sendTransaction",
+    params: [
+      {
+        from,
+        to: tokenInfo.contractAddress,
+        data: getContractData(receiveWallet, amount, tokenInfo.decimals),
+        // gasLimit: '0x5028', // Customizable by the user during MetaMask confirmation.
+        // maxPriorityFeePerGas: '0x3b9aca00', // Customizable by the user during MetaMask confirmation.
+        // maxFeePerGas: '0x2540be400', // Customizable by the user during MetaMask confirmation.
+      },
+    ],
+  });
+};
+
+export const donateERCWagmi = async (
+  token: AvailableToken,
+  amount: number
+): Promise<Maybe<string>> => {
+  const receiveWallet = process.env.NEXT_PUBLIC_DONATE_PUBKEY;
+  if (receiveWallet == null) {
     return null;
   }
+
+  const tokenInfo = contractAddrMap.get(token);
+  if (tokenInfo == null) {
+    console.warn("Unknown ERC-20 contract address");
+    return null;
+  }
+
+  const { request } = await prepareWriteContract({
+    address: tokenInfo.contractAddress as any,
+    abi: erc20ABI,
+    functionName: "transfer",
+    args: [receiveWallet as any, parseEther(amount.toString())],
+  });
+
+  const { hash } = await writeContract(request);
+  return hash;
 };
 
 // TODO: Check number boundary. Use BN if needed

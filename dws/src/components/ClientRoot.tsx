@@ -14,9 +14,8 @@ import toast, { Toaster } from "react-hot-toast";
 import { connectWalletWithAffiliate } from "@/utils/api/client/affiliateAPI";
 import ConnectModalV2 from "./wallet/ConnectModalv2";
 import { AvailableToken, AvailableWallet } from "@/utils/token";
-import { createWeb3Modal, defaultWagmiConfig } from "@web3modal/wagmi/react";
-import { mainnet, sepolia } from "viem/chains";
-import { WagmiConfig, useAccount, useSendTransaction } from "wagmi";
+import { createWeb3Modal } from "@web3modal/wagmi/react";
+import { WagmiConfig } from "wagmi";
 import { requestSignature } from "@/utils/metamask/sign";
 import { donate } from "@/utils/metamask/donate";
 import {
@@ -25,7 +24,8 @@ import {
   sendTransaction,
   signMessage,
 } from "@wagmi/core";
-import { BaseError, EstimateGasExecutionError, parseEther } from "viem";
+import { EstimateGasExecutionError, parseEther } from "viem";
+import { wagmiConfig, web3ModalConfig } from "./wallet/config";
 
 interface ClientRootProps {
   children: ReactNode;
@@ -54,36 +54,8 @@ export const WalletUtils = createContext<WalletUtils>({
   requestWalletSignature: () => Promise.resolve(""),
 });
 
-const projectId = process.env.NEXT_PUBLIC_WC_PROJECT_ID ?? "";
-const metadata = {
-  name: "TruthMemes",
-  description: "TruthMemes",
-  url: "https://truthmemes.io/",
-  icons: ["https://avatars.githubusercontent.com/u/37784886"],
-};
-const chains = [mainnet, sepolia];
-const wagmiConfig = defaultWagmiConfig({ chains, projectId, metadata });
-
-createWeb3Modal({
-  wagmiConfig,
-  projectId,
-  chains,
-  themeVariables: {
-    "--w3m-z-index": 1400,
-  },
-  excludeWalletIds: [
-    // MetaMask
-    "c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96",
-  ],
-  featuredWalletIds: [
-    // TrustWallet
-    "4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0",
-    // Safe
-    "225affb176778569276e484e1b92637ad061b01e13a048b35a9d280c3b58970f",
-    // Ledger Live
-    "19177a98252e07ddfc9af2083ba8e07ef627cb6103467ffebb3f8f4205fd7927",
-  ],
-});
+// Init Web3Modal
+createWeb3Modal(web3ModalConfig);
 
 // For importing provider and all kind of wrapper for client components
 const ClientRoot = ({
@@ -134,38 +106,19 @@ const ClientRoot = ({
 
   const requestTransaction = useCallback(
     async (amount: number, token: AvailableToken) => {
-      if (provider === "MetaMask") {
-        const txHash = await donate(account, amount, token);
+      try {
+        const txHash = await donate(account, amount, token, provider);
         if (txHash == null) {
-          return "";
+          // Will be catch under
+          throw new Error();
         }
         return txHash;
-      }
-
-      if (provider === "WalletConnect") {
-        const receiver = process.env.NEXT_PUBLIC_DONATE_PUBKEY;
-        if (!receiver) {
-          console.warn("Receive wallet not set");
-          return "";
+      } catch (error: any) {
+        if (error instanceof EstimateGasExecutionError) {
+          toast.error("Insufficient fund");
         }
-
-        try {
-          const txConfig = await prepareSendTransaction({
-            to: receiver,
-            value: parseEther(amount.toString()),
-          });
-
-          const { hash } = await sendTransaction(txConfig);
-          return hash;
-        } catch (error: any) {
-          if (error instanceof EstimateGasExecutionError) {
-            toast.error("Insufficient fund");
-          }
-          return "";
-        }
+        return "";
       }
-
-      return "";
     },
     [provider, account]
   );
@@ -186,7 +139,6 @@ const ClientRoot = ({
           return signature;
         } catch (error: any) {
           console.warn(error);
-          return "";
         }
       }
 
