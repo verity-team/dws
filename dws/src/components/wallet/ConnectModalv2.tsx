@@ -54,7 +54,7 @@ const ConnectModalV2 = ({
   const [connectStatus, setConnectStatus] =
     useState<WalletConnectStatus>("connecting");
 
-  const { open } = useWeb3Modal();
+  const { open: openWC } = useWeb3Modal();
   const { disconnectAsync } = useDisconnect();
 
   const { chain } = useNetwork();
@@ -161,8 +161,8 @@ const ConnectModalV2 = ({
   const handleConnectWC = useCallback(async () => {
     // Disconnect so user can change to another wallet without extra steps
     await disconnectAsync();
-    open();
-  }, [open, disconnectAsync]);
+    openWC();
+  }, [openWC, disconnectAsync]);
 
   const handleRetry = useCallback(async () => {
     setConnectStatus("connecting");
