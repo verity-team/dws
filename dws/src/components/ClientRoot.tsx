@@ -14,18 +14,24 @@ import toast, { Toaster } from "react-hot-toast";
 import { connectWalletWithAffiliate } from "@/utils/api/client/affiliateAPI";
 import ConnectModalV2 from "./wallet/ConnectModalv2";
 import { AvailableToken, AvailableWallet } from "@/utils/token";
-import { createWeb3Modal, defaultWagmiConfig } from "@web3modal/wagmi/react";
+import { createWeb3Modal } from "@web3modal/wagmi/react";
 import { mainnet, sepolia } from "viem/chains";
-import { WagmiConfig, useAccount, useSendTransaction } from "wagmi";
+import { WagmiConfig, createConfig } from "wagmi";
 import { requestSignature } from "@/utils/metamask/sign";
 import { donate } from "@/utils/metamask/donate";
 import {
+  configureChains,
   disconnect,
   prepareSendTransaction,
   sendTransaction,
   signMessage,
 } from "@wagmi/core";
-import { BaseError, EstimateGasExecutionError, parseEther } from "viem";
+import { EstimateGasExecutionError, parseEther } from "viem";
+import { walletConnectProvider, EIP6963Connector } from "@web3modal/wagmi";
+import { publicProvider } from "wagmi/providers/public";
+import { CoinbaseWalletConnector } from "wagmi/connectors/coinbaseWallet";
+import { InjectedConnector } from "wagmi/connectors/injected";
+import { WalletConnectConnector } from "wagmi/connectors/walletConnect";
 
 interface ClientRootProps {
   children: ReactNode;
@@ -54,16 +60,41 @@ export const WalletUtils = createContext<WalletUtils>({
   requestWalletSignature: () => Promise.resolve(""),
 });
 
+// WalletConnect Project ID
 const projectId = process.env.NEXT_PUBLIC_WC_PROJECT_ID ?? "";
+
+// Wagmi Config
+const { chains, publicClient } = configureChains(
+  [mainnet, sepolia],
+  [walletConnectProvider({ projectId }), publicProvider()]
+);
+
+// TruthMemes Website Metadata
 const metadata = {
   name: "TruthMemes",
   description: "TruthMemes",
   url: "https://truthmemes.io/",
   icons: ["https://avatars.githubusercontent.com/u/37784886"],
 };
-const chains = [mainnet, sepolia];
-const wagmiConfig = defaultWagmiConfig({ chains, projectId, metadata });
 
+const wagmiConfig = createConfig({
+  autoConnect: false,
+  connectors: [
+    new WalletConnectConnector({
+      chains,
+      options: { projectId, showQrModal: false, metadata },
+    }),
+    new EIP6963Connector({ chains }),
+    new InjectedConnector({ chains, options: { shimDisconnect: true } }),
+    new CoinbaseWalletConnector({
+      chains,
+      options: { appName: metadata.name },
+    }),
+  ],
+  publicClient,
+});
+
+// Create WalletConnect modal
 createWeb3Modal({
   wagmiConfig,
   projectId,
