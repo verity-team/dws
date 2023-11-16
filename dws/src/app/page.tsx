@@ -2,6 +2,7 @@ import ClientRoot from "@/components/ClientRoot";
 import Banner from "@/components/landing/banner/Banner";
 import BannerSection from "@/components/landing/banner/BannerSection";
 import MemeSlideshow from "@/components/landing/carousel/MemeSlideshow";
+import UploadMemeButton from "@/components/landing/carousel/UploadMemeBtn";
 import LandingFooter from "@/components/landing/footer/LandingFooter";
 import Navbar from "@/components/landing/navbar/Navbar";
 import Newsletter from "@/components/landing/newsletter/Newsletter";
@@ -24,6 +25,9 @@ export default function Home() {
         </div>
       </div>
       <Banner />
+      <div className="my-2">
+        <UploadMemeButton />
+      </div>
       <MemeSlideshow />
       <Roadmap />
       <BannerSection className="bg-white">
