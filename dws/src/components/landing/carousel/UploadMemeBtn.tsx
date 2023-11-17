@@ -17,9 +17,7 @@ interface UploadMemeFormData {
 const UploadMemeButton = () => {
   const [uploadFormOpen, setUploadFormOpen] = useState(false);
 
-  const [currentMeme, setCurrentMeme] = useState<string>("");
-
-  const { register, handleSubmit } = useForm<UploadMemeFormData>();
+  const [currentMeme, setCurrentMeme] = useState<Maybe<File>>(null);
 
   const handleOpenUploadForm = useCallback(() => {
     setUploadFormOpen(true);
@@ -34,16 +32,21 @@ const UploadMemeButton = () => {
     if (newMeme == null) {
       return;
     }
-
-    const newMemeUrl = URL.createObjectURL(newMeme);
-    setCurrentMeme(newMemeUrl);
+    setCurrentMeme(newMeme);
   };
 
   const handleMemeRemove = () => {
-    setCurrentMeme("");
+    setCurrentMeme(null);
   };
 
-  const handleUploadMeme = (data: UploadMemeFormData) => {};
+  const handleMemeUpload = async (event: FormEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (currentMeme == null) {
+      return;
+    }
+  };
 
   return (
     <div className="flex justify-center items-center">
@@ -59,7 +62,7 @@ const UploadMemeButton = () => {
         fullWidth
       >
         <DialogContent>
-          <form onSubmit={handleSubmit(handleUploadMeme)}>
+          <form>
             <div className="flex justify-center items-center text-2xl mb-4">
               Upload your meme
             </div>
@@ -73,7 +76,7 @@ const UploadMemeButton = () => {
                     <CloseIcon fontSize="medium" htmlColor="white" />
                   </button>
                   <Image
-                    src={currentMeme}
+                    src={URL.createObjectURL(currentMeme)}
                     alt="meme"
                     width={100}
                     height={100}
@@ -84,8 +87,8 @@ const UploadMemeButton = () => {
                 <>
                   <label htmlFor="meme">
                     <div className="p-16 flex flex-col items-center justify-center border-2 border-black rounded-lg cursor-pointer">
-                      <AddIcon fontSize="medium" />
-                      <div>Add your meme here</div>
+                      <AddIcon fontSize="large" />
+                      <div className="mt-2">*Add your meme here</div>
                     </div>
                   </label>
                   <input
@@ -93,9 +96,6 @@ const UploadMemeButton = () => {
                     accept="image/jpeg, image/png, image/gif"
                     id="meme"
                     className="hidden"
-                    {...register("meme", {
-                      required: true,
-                    })}
                     onChange={handleMemeChange}
                   />
                 </>
@@ -114,8 +114,10 @@ const UploadMemeButton = () => {
               />
             </div>
             <button
-              type="submit"
-              className="w-full px-4 py-2 border-2 border-black text-cred bg-white rounded-lg"
+              type="button"
+              className="w-full px-4 py-2 border-2 border-black text-cred bg-white rounded-lg disabled:opacity-70 disabled:cursor-not-allowed"
+              disabled={!currentMeme}
+              onClick={handleMemeUpload}
             >
               Upload
             </button>
