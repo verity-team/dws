@@ -8,16 +8,19 @@ import CloseIcon from "@mui/icons-material/Close";
 import { useForm } from "react-hook-form";
 import { Maybe } from "@/utils/types";
 import Image from "next/image";
+import { uploadMeme } from "@/utils/api/client/memeAPI";
+import toast from "react-hot-toast";
 
 interface UploadMemeFormData {
   caption: string;
-  meme: File;
 }
 
 const UploadMemeButton = () => {
   const [uploadFormOpen, setUploadFormOpen] = useState(false);
 
   const [currentMeme, setCurrentMeme] = useState<Maybe<File>>(null);
+
+  const { register, handleSubmit } = useForm<UploadMemeFormData>();
 
   const handleOpenUploadForm = useCallback(() => {
     setUploadFormOpen(true);
@@ -39,13 +42,20 @@ const UploadMemeButton = () => {
     setCurrentMeme(null);
   };
 
-  const handleMemeUpload = async (event: FormEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-
+  const handleMemeUpload = async (data: UploadMemeFormData) => {
     if (currentMeme == null) {
       return;
     }
+
+    const isUploaded = await uploadMeme(data.caption, currentMeme);
+    if (!isUploaded) {
+      toast.error("Upload failed");
+      setUploadFormOpen(false);
+      return;
+    }
+
+    toast.success("Your meme have been uploaded");
+    setUploadFormOpen(false);
   };
 
   return (
@@ -62,7 +72,7 @@ const UploadMemeButton = () => {
         fullWidth
       >
         <DialogContent>
-          <form>
+          <form onSubmit={handleSubmit(handleMemeUpload)}>
             <div className="flex justify-center items-center text-2xl mb-4">
               Upload your meme
             </div>
@@ -107,17 +117,16 @@ const UploadMemeButton = () => {
               </label>
               <input
                 id="caption"
-                name="caption"
                 type="text"
                 className="my-2 py-2 w-full outline-none text-xl border-b focus:border-black"
                 placeholder="What's the meme about?"
+                {...register("caption", { required: true, maxLength: 128 })}
               />
             </div>
             <button
-              type="button"
+              type="submit"
               className="w-full px-4 py-2 border-2 border-black text-cred bg-white rounded-lg disabled:opacity-70 disabled:cursor-not-allowed"
               disabled={!currentMeme}
-              onClick={handleMemeUpload}
             >
               Upload
             </button>

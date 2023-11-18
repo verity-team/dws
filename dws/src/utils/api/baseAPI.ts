@@ -111,3 +111,43 @@ export const clientBaseRequest = async (
 
   return baseRequest(url, method, { host: apiHost, timeout }, body);
 };
+
+export const baseFormRequest = async (
+  url: string,
+  body: FormData
+): Promise<Maybe<Response>> => {
+  const apiHost = window.location.origin;
+  if (apiHost == null) {
+    console.log("API_URL not set");
+    return null;
+  }
+
+  let timeout: number = Number(process.env.NEXT_PUBLIC_API_TIMEOUT);
+  if (isNaN(timeout)) {
+    console.log("API_TIMEOUT not set. Using fallback value");
+    timeout = 10000;
+  }
+
+  // Use signal to avoid running the request for too long
+  // Docs for canceling fetch API request
+  // https://javascript.info/fetch-abort
+  const controller = new AbortController();
+  const timerId = setTimeout(() => controller.abort(), timeout);
+
+  const requestConfig = {
+    method: "POST",
+    headers: new Headers(),
+    body,
+    signal: controller.signal,
+  };
+
+  console.log(
+    `Requesting to ${apiHost}${url} with config ${JSON.stringify(
+      requestConfig
+    )}`
+  );
+
+  const response = await fetch(`${apiHost}${url}`, requestConfig);
+  clearTimeout(timerId);
+  return response;
+};
