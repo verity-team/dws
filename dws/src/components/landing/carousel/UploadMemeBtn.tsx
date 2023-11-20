@@ -20,7 +20,7 @@ const UploadMemeButton = () => {
 
   const [currentMeme, setCurrentMeme] = useState<Maybe<File>>(null);
 
-  const { register, handleSubmit } = useForm<UploadMemeFormData>();
+  const { register, handleSubmit, reset } = useForm<UploadMemeFormData>();
 
   const handleOpenUploadForm = useCallback(() => {
     setUploadFormOpen(true);
@@ -28,6 +28,10 @@ const UploadMemeButton = () => {
 
   const handleCloseUploadForm = useCallback(() => {
     setUploadFormOpen(false);
+
+    // Clear form data
+    setCurrentMeme(null);
+    reset();
   }, []);
 
   const handleMemeChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -49,13 +53,13 @@ const UploadMemeButton = () => {
 
     const isUploaded = await uploadMeme(data.caption, currentMeme);
     if (!isUploaded) {
+      // Toast failed but don't close the form yet
       toast.error("Upload failed");
-      setUploadFormOpen(false);
       return;
     }
 
     toast.success("Your meme have been uploaded");
-    setUploadFormOpen(false);
+    handleCloseUploadForm();
   };
 
   return (
@@ -73,8 +77,11 @@ const UploadMemeButton = () => {
       >
         <DialogContent>
           <form onSubmit={handleSubmit(handleMemeUpload)}>
-            <div className="flex justify-center items-center text-2xl mb-4">
-              Upload your meme
+            <div className="flex items-center justify-between text-2xl mb-8">
+              <div>Upload meme</div>
+              <button onClick={handleCloseUploadForm}>
+                <CloseIcon fontSize="medium" />
+              </button>
             </div>
             <div className="mt-2 mb-4 relative">
               {!!currentMeme ? (
@@ -85,13 +92,15 @@ const UploadMemeButton = () => {
                   >
                     <CloseIcon fontSize="medium" htmlColor="white" />
                   </button>
-                  <Image
-                    src={URL.createObjectURL(currentMeme)}
-                    alt="meme"
-                    width={100}
-                    height={100}
-                    className="w-full"
-                  />
+                  <div className="flex items-center justify-center">
+                    <Image
+                      src={URL.createObjectURL(currentMeme)}
+                      alt="meme"
+                      width={400}
+                      height={400}
+                      className="max-h-[400px]"
+                    />
+                  </div>
                 </>
               ) : (
                 <>
@@ -106,6 +115,7 @@ const UploadMemeButton = () => {
                     accept="image/jpeg, image/png, image/gif"
                     id="meme"
                     className="hidden"
+                    autoComplete="off"
                     onChange={handleMemeChange}
                   />
                 </>
@@ -120,7 +130,8 @@ const UploadMemeButton = () => {
                 type="text"
                 className="my-2 py-2 w-full outline-none text-xl border-b focus:border-black"
                 placeholder="What's the meme about?"
-                {...register("caption", { required: true, maxLength: 128 })}
+                autoComplete="off"
+                {...register("caption", { required: false, maxLength: 128 })}
               />
             </div>
             <button

@@ -56,6 +56,35 @@ export const baseRequest = async (
   return response;
 };
 
+export const baseFormRequest = async (
+  url: string,
+  config: RequestConfig,
+  body: FormData
+): Promise<Maybe<Response>> => {
+  const { host, timeout } = config;
+
+  // Use signal to avoid running the request for too long
+  // Docs for canceling fetch API request
+  // https://javascript.info/fetch-abort
+  const controller = new AbortController();
+  const timerId = setTimeout(() => controller.abort(), timeout);
+
+  const requestConfig = {
+    method: "POST",
+    headers: new Headers(),
+    body,
+    signal: controller.signal,
+  };
+
+  console.log(
+    `Requesting to ${host}${url} with config ${JSON.stringify(requestConfig)}`
+  );
+
+  const response = await fetch(`${host}${url}`, requestConfig);
+  clearTimeout(timerId);
+  return response;
+};
+
 /**
  *
  * @param url
@@ -72,8 +101,6 @@ export const serverBaseRequest = async (
   headers?: Headers
 ): Promise<Nullable<Response>> => {
   // Read configurations
-
-  // Endpoint should be the same with current host
   const apiHost = process.env.API_URL;
   if (apiHost == null) {
     console.log("API_URL not set");
@@ -87,6 +114,23 @@ export const serverBaseRequest = async (
   }
 
   return baseRequest(url, method, { host: apiHost, timeout }, body, headers);
+};
+
+export const serverFormRequest = async (url: string, body: FormData) => {
+  // Read configurations
+  const apiHost = process.env.API_URL;
+  if (apiHost == null) {
+    console.log("API_URL not set");
+    return null;
+  }
+
+  let timeout: number = Number(process.env.API_TIMEOUT);
+  if (isNaN(timeout)) {
+    console.log("API_TIMEOUT not set. Using fallback value");
+    timeout = 10000;
+  }
+
+  return baseFormRequest(url, { host: apiHost, timeout }, body);
 };
 
 export const clientBaseRequest = async (
@@ -112,7 +156,7 @@ export const clientBaseRequest = async (
   return baseRequest(url, method, { host: apiHost, timeout }, body);
 };
 
-export const baseFormRequest = async (
+export const clientFormRequest = async (
   url: string,
   body: FormData
 ): Promise<Maybe<Response>> => {
@@ -128,26 +172,5 @@ export const baseFormRequest = async (
     timeout = 10000;
   }
 
-  // Use signal to avoid running the request for too long
-  // Docs for canceling fetch API request
-  // https://javascript.info/fetch-abort
-  const controller = new AbortController();
-  const timerId = setTimeout(() => controller.abort(), timeout);
-
-  const requestConfig = {
-    method: "POST",
-    headers: new Headers(),
-    body,
-    signal: controller.signal,
-  };
-
-  console.log(
-    `Requesting to ${apiHost}${url} with config ${JSON.stringify(
-      requestConfig
-    )}`
-  );
-
-  const response = await fetch(`${apiHost}${url}`, requestConfig);
-  clearTimeout(timerId);
-  return response;
+  return await baseFormRequest(url, { host: apiHost, timeout }, body);
 };
