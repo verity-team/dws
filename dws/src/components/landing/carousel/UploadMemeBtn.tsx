@@ -20,7 +20,7 @@ const UploadMemeButton = () => {
 
   const [currentMeme, setCurrentMeme] = useState<Maybe<File>>(null);
 
-  const { register, handleSubmit } = useForm<UploadMemeFormData>();
+  const { register, handleSubmit, reset } = useForm<UploadMemeFormData>();
 
   const handleOpenUploadForm = useCallback(() => {
     setUploadFormOpen(true);
@@ -28,6 +28,10 @@ const UploadMemeButton = () => {
 
   const handleCloseUploadForm = useCallback(() => {
     setUploadFormOpen(false);
+
+    // Clear form data
+    setCurrentMeme(null);
+    reset();
   }, []);
 
   const handleMemeChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -49,13 +53,13 @@ const UploadMemeButton = () => {
 
     const isUploaded = await uploadMeme(data.caption, currentMeme);
     if (!isUploaded) {
+      // Toast failed but don't close the form yet
       toast.error("Upload failed");
-      setUploadFormOpen(false);
       return;
     }
 
     toast.success("Your meme have been uploaded");
-    setUploadFormOpen(false);
+    handleCloseUploadForm();
   };
 
   return (
@@ -120,7 +124,7 @@ const UploadMemeButton = () => {
                 type="text"
                 className="my-2 py-2 w-full outline-none text-xl border-b focus:border-black"
                 placeholder="What's the meme about?"
-                {...register("caption", { required: true, maxLength: 128 })}
+                {...register("caption", { required: false, maxLength: 128 })}
               />
             </div>
             <button
