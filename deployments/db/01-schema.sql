@@ -8,6 +8,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TYPE IF EXISTS asset_enum CASCADE;
 CREATE TYPE asset_enum AS ENUM ('eth', 'truth', 'usdc', 'usdt');
 
 --- wallet_connection ----------------------------------------------------
@@ -21,6 +22,7 @@ CREATE TABLE wallet_connection (
 );
 
 --- donation ----------------------------------------------------
+DROP TYPE IF EXISTS donation_status_enum CASCADE;
 CREATE TYPE donation_status_enum AS ENUM ('confirmed', 'unconfirmed', 'failed');
 DROP TABLE IF EXISTS donation;
 CREATE TABLE donation (
@@ -83,6 +85,7 @@ FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
 
 --- donation_stats ----------------------------------------------------
+DROP TYPE IF EXISTS donation_stats_status_enum CASCADE;
 CREATE TYPE donation_stats_status_enum AS ENUM ('open', 'paused', 'closed');
 DROP TABLE IF EXISTS donation_stats;
 CREATE TABLE donation_stats (
@@ -102,6 +105,7 @@ EXECUTE PROCEDURE trigger_update_modified_at();
 INSERT INTO donation_stats(total, tokens) VALUES(0, 0);
 
 --- user_data ----------------------------------------------------
+DROP TYPE IF EXISTS user_data_status_enum CASCADE;
 CREATE TYPE user_data_status_enum AS ENUM ('none', 'staking', 'unstaking');
 DROP TABLE IF EXISTS user_data;
 CREATE TABLE user_data (
@@ -157,6 +161,7 @@ FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
 
 --- price_req ----------------------------------------------------
+DROP TYPE IF EXISTS price_req_status_enum CASCADE;
 CREATE TYPE price_req_status_enum AS ENUM ('new', 'succeeded', 'failed');
 DROP TABLE IF EXISTS price_req;
 CREATE TABLE price_req (
