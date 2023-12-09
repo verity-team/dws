@@ -12,7 +12,7 @@ import React, {
 } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import { connectWalletWithAffiliate } from "@/utils/api/client/affiliateAPI";
-import ConnectModalV2 from "./wallet/ConnectModalv2";
+import ConnectModalV2 from "./walletconnect/ConnectModalv2";
 import { AvailableToken, AvailableWallet } from "@/utils/token";
 import { createWeb3Modal } from "@web3modal/wagmi/react";
 import { WagmiConfig } from "wagmi";
@@ -25,7 +25,7 @@ import {
   signMessage,
 } from "@wagmi/core";
 import { EstimateGasExecutionError, parseEther } from "viem";
-import { wagmiConfig, web3ModalConfig } from "./wallet/config";
+import { wagmiConfig, web3ModalConfig } from "./walletconnect/config";
 
 interface ClientRootProps {
   children: ReactNode;
