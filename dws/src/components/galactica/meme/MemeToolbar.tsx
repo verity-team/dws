@@ -18,7 +18,7 @@ const MemeToolbar = ({
         <PhotoOutlinedIcon className="text-2xl text-blue-400" />
       </div>
       <button
-        className="px-6 py-2 rounded-2xl bg-blue-300 hover:bg-blue-500 text-white disabled:cursor-not-allowed disabled:hover:bg-blue-300"
+        className="px-6 py-2 rounded-2xl bg-red-500 hover:bg-red-600 disabled:bg-red-300 disabled:hover:bg-red-300 text-white disabled:cursor-not-allowed"
         disabled={!canSubmit}
         onClick={onPostBtnClick}
       >

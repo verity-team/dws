@@ -255,7 +255,7 @@ const ConnectModalV2 = ({
           {/* Here I use hidden instead of conditional rendering to better support user redo */}
           <div className="col-span-8">
             <div className="px-4" hidden={currentStep !== 0}>
-              <div className="text-xl p-2">Available Wallets (3)</div>
+              <div className="text-xl p-2">Available Wallets (2)</div>
               <div className="grid grid-cols-2 gap-4 p-2">
                 <ConnectOption
                   icon="/icons/metamask.svg"

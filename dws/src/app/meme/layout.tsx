@@ -1,3 +1,6 @@
+"use client";
+
+import ClientRoot from "@/components/ClientRoot";
 import { ReactElement, ReactNode } from "react";
 
 interface MemePageLayoutProps {
@@ -7,5 +10,9 @@ interface MemePageLayoutProps {
 export default function MemePageLayout({
   children,
 }: MemePageLayoutProps): ReactElement<MemePageLayoutProps> {
-  return <div className="container mt-12 mx-auto">{children}</div>;
+  return (
+    <ClientRoot onWalletConnect={() => {}}>
+      <div className="container mt-12 mx-auto">{children}</div>;
+    </ClientRoot>
+  );
 }

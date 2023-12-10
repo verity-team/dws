@@ -1,7 +1,5 @@
 "use client";
 
-import { Nullable } from "@/utils/types";
-import { useSearchParams } from "next/navigation";
 import React, {
   ReactElement,
   ReactNode,
@@ -11,24 +9,20 @@ import React, {
   useState,
 } from "react";
 import toast, { Toaster } from "react-hot-toast";
-import { connectWalletWithAffiliate } from "@/utils/api/client/affiliateAPI";
 import ConnectModalV2 from "./walletconnect/ConnectModalv2";
 import { AvailableToken, AvailableWallet } from "@/utils/token";
 import { createWeb3Modal } from "@web3modal/wagmi/react";
 import { WagmiConfig } from "wagmi";
 import { requestSignature } from "@/utils/metamask/sign";
 import { donate } from "@/utils/metamask/donate";
-import {
-  disconnect,
-  prepareSendTransaction,
-  sendTransaction,
-  signMessage,
-} from "@wagmi/core";
-import { EstimateGasExecutionError, parseEther } from "viem";
+import { disconnect, signMessage } from "@wagmi/core";
+import { EstimateGasExecutionError } from "viem";
 import { wagmiConfig, web3ModalConfig } from "./walletconnect/config";
+import { useAffiliateCode } from "@/hooks/affiliateCode";
 
 interface ClientRootProps {
   children: ReactNode;
+  onWalletConnect: (address: string) => void;
 }
 
 interface WalletUtils {
@@ -41,8 +35,6 @@ interface WalletUtils {
   requestWalletSignature: (message: string) => Promise<string>;
 }
 
-// Affiliate code
-export const ClientAFC = createContext<Nullable<string>>(null);
 // Wallet address
 export const ClientWallet = createContext<string>("");
 
@@ -60,10 +52,9 @@ createWeb3Modal(web3ModalConfig);
 // For importing provider and all kind of wrapper for client components
 const ClientRoot = ({
   children,
+  onWalletConnect,
 }: ClientRootProps): ReactElement<ClientRootProps> => {
-  // Get affiliate code from URL
-  const searchParams = useSearchParams();
-  const affiliateCode = searchParams.get("afc");
+  const affiliateCode = useAffiliateCode();
 
   const [account, setAccount] = useState("");
   const [provider, setProvider] = useState<AvailableWallet>("MetaMask");
@@ -88,12 +79,8 @@ const ClientRoot = ({
     if (account === "") {
       return;
     }
-
-    connectWalletWithAffiliate({
-      address: account,
-      code: affiliateCode ?? "none",
-    }).catch(console.warn);
-  }, [account]);
+    onWalletConnect(account);
+  }, [account, onWalletConnect]);
 
   const connectWallet = useCallback(() => {
     setConnectWalletFormOpen(true);
@@ -163,9 +150,7 @@ const ClientRoot = ({
           }}
         >
           <ClientWallet.Provider value={account}>
-            <ClientAFC.Provider value={affiliateCode}>
-              {children}
-            </ClientAFC.Provider>
+            {children}
           </ClientWallet.Provider>
         </WalletUtils.Provider>
         <Toaster />

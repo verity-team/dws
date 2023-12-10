@@ -1,4 +1,3 @@
-import ClientRoot from "@/components/ClientRoot";
 import Banner from "@/components/landing/banner/Banner";
 import BannerSection from "@/components/landing/banner/BannerSection";
 import MemeSlideshow from "@/components/landing/carousel/MemeSlideshow";
@@ -8,6 +7,7 @@ import Newsletter from "@/components/landing/newsletter/Newsletter";
 import Roadmap from "@/components/landing/roadmap/Roadmap";
 import Donate from "@/components/ico/donatev2/Donate";
 import dynamic from "next/dynamic";
+import LandingClientRoot from "@/components/landing/LandingClientRoot";
 
 const LaunchTimer = dynamic(
   () => import("@/components/landing/banner/LaunchTimer"),
@@ -38,11 +38,11 @@ export default function Home() {
           truth-seeking: Meme-Artists and crypto-lovers.
         </h1>
       </BannerSection>
-      <ClientRoot>
+      <LandingClientRoot>
         <div className="flex items-center justify-center mb-8">
           <Donate />
         </div>
-      </ClientRoot>
+      </LandingClientRoot>
       <Newsletter />
       <LandingFooter />
     </>
