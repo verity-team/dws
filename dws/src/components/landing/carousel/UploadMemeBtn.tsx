@@ -7,7 +7,7 @@ import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
 import { useForm } from "react-hook-form";
 import Image from "next/image";
-import { uploadMeme } from "@/utils/api/client/memeAPI";
+import { uploadMeme } from "@/api/memeAPI";
 import toast from "react-hot-toast";
 import { Maybe } from "@/utils";
 

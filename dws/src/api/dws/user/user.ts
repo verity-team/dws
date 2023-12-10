@@ -1,74 +1,9 @@
-"use client";
-
+import { Nullable } from "@/utils";
+import { CustomError } from "@/utils/api/types";
+import { swrFetcher, handleErrorRetry } from "@/utils/baseAPI";
 import { useMemo, useState, useEffect } from "react";
 import useSWRImmutable from "swr/immutable";
-import {
-  UserDonationData,
-  CustomError,
-  CampaignStatus,
-  DonationData,
-  DonationStats,
-  TokenPrice,
-} from "../types";
-import { fetcher, handleErrorRetry } from "./clientAPI";
-import { Nullable } from "@/utils";
-
-export const useDonationData = () => {
-  // Exponential backoff
-  const { data, error, isLoading } = useSWRImmutable<DonationData, CustomError>(
-    "/api/donation/data",
-    fetcher,
-    {
-      // Refresh once per minute
-      refreshInterval: 60000,
-      onErrorRetry: handleErrorRetry,
-    }
-  );
-
-  const tokenPrices: TokenPrice[] = useMemo(() => {
-    if (data == null) {
-      return [];
-    }
-
-    return data.prices;
-  }, [data]);
-
-  const donationStat: DonationStats = useMemo(() => {
-    if (data == null) {
-      return {
-        total: "Not available",
-        tokens: "Not available",
-      };
-    }
-
-    return data.stats;
-  }, [data]);
-
-  const receivingWallet: string = useMemo(() => {
-    if (data == null) {
-      return "Unavailable";
-    }
-    return data.receiving_address;
-  }, [data]);
-
-  // Temporarily paused if cannot connect to server, or cannot get latest data
-  const status: CampaignStatus = useMemo(() => {
-    if (data == null) {
-      return "paused";
-    }
-
-    return data.status;
-  }, [data]);
-
-  return {
-    tokenPrices,
-    donationStat,
-    receivingWallet,
-    status,
-    error,
-    isLoading,
-  };
-};
+import { UserDonationData } from "./user.type";
 
 // For data revalidation when sending new donations
 export const getUserDonationDataKey = (account: string) =>
@@ -110,7 +45,7 @@ export const useUserDonationData = (account: string) => {
   const { data, error, isLoading } = useSWRImmutable<
     UserDonationData,
     CustomError
-  >(getUserDonationDataKey(account), fetcher, {
+  >(getUserDonationDataKey(account), swrFetcher, {
     refreshInterval: waitTime,
     onErrorRetry: handleErrorRetry,
   });
@@ -140,7 +75,7 @@ export const getUserDonationData = async (
   account: string
 ): Promise<Nullable<UserDonationData>> => {
   try {
-    const response = await fetcher(getUserDonationDataKey(account));
+    const response = await swrFetcher(getUserDonationDataKey(account));
     return response;
   } catch {
     return null;

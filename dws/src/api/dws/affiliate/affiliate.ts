@@ -1,13 +1,13 @@
 "use client";
 
 import { sleep, getExponentialWaitTime } from "@/utils/utils";
-import { clientBaseRequest, HttpMethod } from "../baseAPI";
-import { UserDonationData } from "../types";
+import { clientBaseRequest, HttpMethod } from "../../../utils/baseAPI";
+import { UserDonationData } from "../../../utils/api/types";
 import {
   WalletAffiliateRequest,
   GenAffiliateRequest,
   GenAffiliateResponse,
-} from "../types/affiliate.type";
+} from "../../../utils/api/types/affiliate.type";
 import { Nullable, Maybe } from "@/utils";
 
 export const connectWalletWithAffiliate = async (

@@ -3,7 +3,7 @@
 import { useAffiliateCode } from "@/hooks/useAffiliateCode";
 import ClientRoot from "../ClientRoot";
 import { ReactElement, ReactNode, createContext, useCallback } from "react";
-import { connectWalletWithAffiliate } from "@/utils/api/client/affiliateAPI";
+import { connectWalletWithAffiliate } from "@/api/dws/affiliate/affiliate";
 import { Nullable } from "@/utils";
 
 interface LandingClientRootProps {

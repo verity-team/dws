@@ -1,8 +1,19 @@
 import { SiweMessage } from "siwe";
 
-export const createSiweMesage = (address: string): string => {
+export interface NonceInfo {
+  nonce: string;
+  expirationTime: string;
+  issuedAt: string;
+}
+
+export const createSiweMesage = (
+  address: string,
+  { nonce, expirationTime, issuedAt }: NonceInfo
+): string => {
   const domain = window.location.host;
   const origin = window.location.origin;
+
+  address = address.toLowerCase();
 
   let targetNetwork = 1;
   try {
@@ -17,11 +28,14 @@ export const createSiweMesage = (address: string): string => {
   const statement = "Welcome to Truth Memes";
   const message = new SiweMessage({
     domain,
-    address,
+    address: "0x62e662Ffb36Ffb465378Bc8cAEd807a9181a1561",
     statement,
     uri: origin,
-    version: "1.0.0",
+    version: "1",
     chainId: targetNetwork,
+    nonce,
+    issuedAt,
+    expirationTime,
   });
 
   return message.prepareMessage();

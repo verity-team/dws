@@ -1,4 +1,8 @@
-import { HttpMethod, baseRequest, getDefaultHeaders } from "../baseAPI";
+import {
+  HttpMethod,
+  baseRequest,
+  getDefaultHeaders,
+} from "../../../utils/baseAPI";
 
 export const subscribeEmail = async (email: string): Promise<void> => {
   const emailAPIHost = process.env.NEXT_PUBLIC_EMAIL_API_URL;

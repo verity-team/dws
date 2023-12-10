@@ -1,6 +1,6 @@
 "use client";
 
-import { useDonationData } from "@/utils/api/client/donationAPI";
+import { useDonationData } from "@/api/dws/donation/donation";
 
 const DonationStat = () => {
   const { tokenPrices, donationStat, receivingWallet, status, error } =

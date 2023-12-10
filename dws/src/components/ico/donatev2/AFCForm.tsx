@@ -19,11 +19,11 @@ import {
 } from "react";
 import toast from "react-hot-toast";
 import { ClientWallet, WalletUtils } from "@/components/ClientRoot";
-import { requestNewAffiliateCode } from "@/utils/api/client/affiliateAPI";
+import { requestNewAffiliateCode } from "@/api/dws/affiliate/affiliate";
 import {
   useUserDonationData,
   getUserDonationData,
-} from "@/utils/api/client/donationAPI";
+} from "@/api/dws/donation/donation";
 import { Maybe } from "@/utils";
 
 const AFCForm = (): ReactElement => {

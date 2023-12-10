@@ -17,6 +17,10 @@ const SignInBtn = () => {
   }, [walletAddress]);
 
   useEffect(() => {
+    if (walletAddress == null || walletAddress === "") {
+      return;
+    }
+
     const handleSignIn = async () => {
       const accessToken = localStorage.getItem("dws-at");
       if (accessToken != null && accessToken !== "") {
@@ -31,9 +35,14 @@ const SignInBtn = () => {
       }
 
       // Request nonce and generate message
+      const nonce = await Promise.resolve("somerandomnonce");
 
       // Request signature
-      const message = createSiweMesage(walletAddress);
+      const message = createSiweMesage(walletAddress, {
+        nonce,
+        expirationTime: new Date().toISOString(),
+        issuedAt: new Date().toISOString(),
+      });
       await requestWalletSignature(message);
     };
 
@@ -43,9 +52,8 @@ const SignInBtn = () => {
   return (
     <div>
       <button
-        className="px-4 py-2 rounded-2xl bg-red-500 hover:bg-red-600 text-white"
+        className="px-4 py-2 rounded-2xl bg-red-500 hover:bg-red-600 text-white cursor-pointer disabled:cursor-not-allowed"
         onClick={connect}
-        disabled={!connected}
       >
         Sign in
       </button>

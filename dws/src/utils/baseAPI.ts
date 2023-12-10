@@ -1,4 +1,6 @@
-import { Maybe, Nullable } from "../utils";
+import { Nullable, Maybe } from "@/utils";
+import { Revalidator } from "swr";
+import { getExponentialWaitTime } from "./utils";
 
 export enum HttpMethod {
   GET = "GET",
@@ -8,6 +10,16 @@ export enum HttpMethod {
 export interface RequestConfig {
   host: string;
   timeout: number;
+}
+
+export interface FailedResponse {
+  code: string;
+  message: string;
+}
+
+export interface CustomError extends Error {
+  info: FailedResponse;
+  status: number;
 }
 
 export const getDefaultHeaders = () => {
@@ -173,4 +185,63 @@ export const clientFormRequest = async (
   }
 
   return await baseFormRequest(url, { host: apiHost, timeout }, body);
+};
+
+export const swrFetcher = async (url: string) => {
+  if (url == null || url.trim() === "") {
+    return null;
+  }
+
+  const response = await clientBaseRequest(url, HttpMethod.GET);
+
+  if (response == null) {
+    throw new Error("Client setup is wrong. Check log for more info");
+  }
+
+  if (!response.ok) {
+    const error = new Error() as any;
+    try {
+      error.info = await response.json();
+    } catch {
+      error.info = {
+        code: "unknown",
+        message: "Cannot parse response body. Check log for more info",
+      };
+    }
+
+    error.status = response.status;
+    throw error;
+  }
+
+  // Avoid error when parsing empty request body
+  try {
+    const result = await response.json();
+    return result;
+  } catch {
+    // Ingore error and return empty object
+    return null;
+  }
+};
+
+export const handleErrorRetry = (
+  err: CustomError,
+  key: string,
+  config: any,
+  revalidate: Revalidator,
+  { retryCount }: { retryCount: number }
+) => {
+  // Avoid retrying bad request or not found request
+  if (err.status === 400 || err.status === 404) {
+    return;
+  }
+
+  // Give up after 10 tries
+  if (retryCount >= 5) {
+    return;
+  }
+
+  setTimeout(
+    () => revalidate({ retryCount }),
+    getExponentialWaitTime(1000, retryCount)
+  );
 };

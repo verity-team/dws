@@ -18,7 +18,7 @@ import { ClientWallet, WalletUtils } from "@/components/ClientRoot";
 import {
   useDonationData,
   getUserDonationDataKey,
-} from "@/utils/api/client/donationAPI";
+} from "@/api/dws/donation/donation";
 
 export interface DonateFormData {
   payAmount: number;
