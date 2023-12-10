@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Maybe } from "@/utils/types";
 
@@ -8,6 +8,7 @@ import Image from "next/image";
 import CloseIcon from "@mui/icons-material/Close";
 import MemeDropArea from "./MemeDropArea";
 import MemeToolbar from "./MemeToolbar";
+import toast from "react-hot-toast";
 
 interface MemeFormData {
   caption: string;
@@ -29,27 +30,38 @@ const MemeInput = () => {
 
   const [meme, setMeme] = useState<Maybe<File>>(null);
 
-  const handleMemeChange = (meme: Maybe<File>) => {
+  const handleMemeChange = useCallback((meme: Maybe<File>) => {
     setMeme(meme);
-  };
+  }, []);
 
-  const handleMemeRemove = () => {
+  const handleMemeRemove = useCallback(() => {
     setMeme(null);
-  };
+  }, []);
 
-  const handleImageBtnClick = () => {
+  const handleImageBtnClick = useCallback(() => {
     if (memeInputRef == null || memeInputRef.current == null) {
       return;
     }
 
     memeInputRef.current.click();
-  };
+  }, []);
 
   const handlePostBtnClick = () => {
     handleSubmit(handleMemeUpload);
   };
 
-  const handleMemeUpload = (data: MemeFormData) => {};
+  const handleMemeUpload = (data: MemeFormData) => {
+    // Use API to upload meme to server
+
+    // Clear form
+    reset();
+    setMeme(null);
+
+    // Toast
+    toast.success("Post uploaded");
+
+    // Append current post to the top of history, using SWR mutate
+  };
 
   const canPost = useMemo(() => {
     // No images uploaded
