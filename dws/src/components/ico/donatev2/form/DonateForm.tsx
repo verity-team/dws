@@ -1,7 +1,7 @@
-import { donate, exchangeToReward } from "@/utils/metamask/donate";
+import { exchangeToReward } from "@/utils/wallet/donate";
 import ConnectButton from "./ConnectBtn";
 import TokenSelector from "./TokenSelector";
-import { AvailableToken, stableCoinPrice } from "@/utils/token";
+import { AvailableToken, stableCoinPrice } from "@/utils/wallet/token";
 import {
   useState,
   useCallback,
@@ -15,10 +15,8 @@ import toast from "react-hot-toast";
 import { mutate } from "swr";
 import TextError from "@/components/common/TextError";
 import { ClientWallet, WalletUtils } from "@/components/ClientRoot";
-import {
-  useDonationData,
-  getUserDonationDataKey,
-} from "@/api/dws/donation/donation";
+import { useDonationData } from "@/api/dws/donation/donation";
+import { getUserDonationDataKey } from "@/api/dws/user/user";
 
 export interface DonateFormData {
   payAmount: number;

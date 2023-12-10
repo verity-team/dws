@@ -1,4 +1,4 @@
-import { Maybe } from "../utils";
+import { Maybe } from "@/utils";
 
 export const requestSignature = async (
   account: string,

@@ -10,10 +10,10 @@ import {
   useState,
 } from "react";
 import ConnectOption from "./ConnectOption";
-import { AvailableWallet } from "@/utils/token";
+import { AvailableWallet } from "@/utils/wallet/token";
 import ConnectStatus from "./ConnectStatus";
 import TextButton from "../common/TextButton";
-import { getWalletShorthand, requestAccounts } from "@/utils/metamask/wallet";
+import { getWalletShorthand, requestAccounts } from "@/utils/wallet/wallet";
 import WalletOption from "./WalletOption";
 import CloseIcon from "@mui/icons-material/Close";
 import { sleep } from "@/utils/utils";

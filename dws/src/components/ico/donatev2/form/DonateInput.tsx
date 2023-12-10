@@ -1,4 +1,4 @@
-import { AvailableToken } from "@/utils/token";
+import { AvailableToken } from "@/utils/wallet/token";
 import { ReactElement, memo } from "react";
 import { UseFormRegister } from "react-hook-form";
 import { DonateFormData } from "./DonateForm";

@@ -1,6 +1,5 @@
 import { Nullable } from "@/utils";
-import { CustomError } from "@/utils/api/types";
-import { swrFetcher, handleErrorRetry } from "@/utils/baseAPI";
+import { swrFetcher, handleErrorRetry, CustomError } from "@/utils/baseAPI";
 import { useMemo, useState, useEffect } from "react";
 import useSWRImmutable from "swr/immutable";
 import { UserDonationData } from "./user.type";

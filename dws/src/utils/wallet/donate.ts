@@ -1,11 +1,10 @@
 import { toWei } from "web3-utils";
-import { Maybe, Nullable } from "../utils";
 import {
   AvailableToken,
   AvailableWallet,
   TokenInfo,
   multipleOrderOf10,
-} from "../token";
+} from "./token";
 import { encodeFunctionCall } from "web3-eth-abi";
 import { BN } from "bn.js";
 import {
@@ -16,7 +15,7 @@ import {
   writeContract,
 } from "@wagmi/core";
 import { parseEther } from "viem";
-import { usePrepareContractWrite } from "wagmi";
+import { Maybe } from "@/utils";
 
 const contractAddrMap = new Map<AvailableToken, TokenInfo>([
   [

@@ -4,14 +4,14 @@ import { useAffiliateCode } from "@/hooks/useAffiliateCode";
 import ClientRoot from "../ClientRoot";
 import { ReactElement, ReactNode, createContext, useCallback } from "react";
 import { connectWalletWithAffiliate } from "@/api/dws/affiliate/affiliate";
-import { Nullable } from "@/utils";
+import { Maybe } from "@/utils";
 
 interface LandingClientRootProps {
   children: ReactNode;
 }
 
 // Affiliate code
-export const ClientAFC = createContext<Nullable<string>>(null);
+export const ClientAFC = createContext<Maybe<string>>(null);
 
 const LandingClientRoot = ({
   children,
@@ -30,7 +30,7 @@ const LandingClientRoot = ({
   );
 
   return (
-    <ClientAFC.Provider>
+    <ClientAFC.Provider value={affiliateCode}>
       <ClientRoot onWalletConnect={handleWalletConnect}>{children}</ClientRoot>
     </ClientAFC.Provider>
   );

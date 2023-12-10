@@ -10,11 +10,11 @@ import React, {
 } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import ConnectModalV2 from "./walletconnect/ConnectModalv2";
-import { AvailableToken, AvailableWallet } from "@/utils/token";
+import { AvailableToken, AvailableWallet } from "@/utils/wallet/token";
 import { createWeb3Modal } from "@web3modal/wagmi/react";
 import { WagmiConfig } from "wagmi";
-import { requestSignature } from "@/utils/metamask/sign";
-import { donate } from "@/utils/metamask/donate";
+import { requestSignature } from "@/utils/wallet/sign";
+import { donate } from "@/utils/wallet/donate";
 import { disconnect, signMessage } from "@wagmi/core";
 import { EstimateGasExecutionError } from "viem";
 import { wagmiConfig, web3ModalConfig } from "./walletconnect/config";

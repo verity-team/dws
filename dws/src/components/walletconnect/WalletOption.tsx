@@ -1,4 +1,4 @@
-import { getWalletShorthand } from "@/utils/metamask/wallet";
+import { getWalletShorthand } from "@/utils/wallet/wallet";
 import { ReactElement, memo, useCallback } from "react";
 
 interface WalletOptionProps {

@@ -1,10 +1,8 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo } from "react";
 import useSWRImmutable from "swr/immutable";
-import { Nullable } from "@/utils";
-import { swrFetcher, handleErrorRetry } from "@/utils/baseAPI";
-import { CustomError, UserDonationData } from "@/utils/api/types";
+import { swrFetcher, handleErrorRetry, CustomError } from "@/utils/baseAPI";
 import {
   DonationData,
   TokenPrice,

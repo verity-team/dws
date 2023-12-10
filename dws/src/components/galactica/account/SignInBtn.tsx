@@ -2,7 +2,7 @@
 
 import { ClientWallet, WalletUtils } from "@/components/ClientRoot";
 import { Maybe } from "@/utils";
-import { createSiweMesage } from "@/utils/siwe";
+import { createSiweMesage } from "@/utils/wallet/siwe";
 import { useContext, useEffect, useMemo, useState } from "react";
 
 const SignInBtn = () => {

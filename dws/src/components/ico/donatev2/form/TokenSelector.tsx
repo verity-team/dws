@@ -1,4 +1,4 @@
-import { AvailableToken, availableTokens } from "@/utils/token";
+import { AvailableToken, availableTokens } from "@/utils/wallet/token";
 import { ReactElement, memo } from "react";
 
 interface TokenSelectorProps {

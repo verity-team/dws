@@ -1,6 +1,6 @@
 "use client";
 
-import { connectWallet } from "@/utils/metamask/wallet";
+import { connectWallet } from "@/utils/wallet/wallet";
 import { getRFC3339String } from "@/utils/utils";
 import {
   Dialog,
@@ -20,11 +20,8 @@ import {
 import toast from "react-hot-toast";
 import { ClientWallet, WalletUtils } from "@/components/ClientRoot";
 import { requestNewAffiliateCode } from "@/api/dws/affiliate/affiliate";
-import {
-  useUserDonationData,
-  getUserDonationData,
-} from "@/api/dws/donation/donation";
 import { Maybe } from "@/utils";
+import { useUserDonationData, getUserDonationData } from "@/api/dws/user/user";
 
 const AFCForm = (): ReactElement => {
   const account = useContext(ClientWallet);

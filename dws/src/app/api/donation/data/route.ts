@@ -1,4 +1,4 @@
-import { HttpMethod, serverBaseRequest } from "@/utils/api/baseAPI";
+import { serverBaseRequest, HttpMethod } from "@/utils/baseAPI";
 import { NextRequest, NextResponse } from "next/server";
 
 export const revalidate = 60; // seconds
