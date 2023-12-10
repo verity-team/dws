@@ -6,7 +6,7 @@ import LandingFooter from "@/components/landing/footer/LandingFooter";
 import Navbar from "@/components/landing/navbar/Navbar";
 import Newsletter from "@/components/landing/newsletter/Newsletter";
 import Roadmap from "@/components/landing/roadmap/Roadmap";
-import Donate from "@/components/metamask/donatev2/Donate";
+import Donate from "@/components/ico/donatev2/Donate";
 import dynamic from "next/dynamic";
 
 const LaunchTimer = dynamic(
