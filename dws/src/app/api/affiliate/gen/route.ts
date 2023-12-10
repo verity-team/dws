@@ -1,3 +1,4 @@
+import { Nullable } from "@/utils";
 import {
   HttpMethod,
   getDefaultHeaders,
@@ -5,7 +6,6 @@ import {
 } from "@/utils/api/baseAPI";
 import { FailedResponse } from "@/utils/api/types";
 import { GenAffiliateRequest } from "@/utils/api/types/affiliate.type";
-import { Nullable } from "@/utils/types";
 import { NextResponse } from "next/server";
 import { isAddress } from "web3-validator";
 

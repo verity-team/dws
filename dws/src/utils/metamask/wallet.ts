@@ -1,5 +1,5 @@
+import { Maybe } from "@/utils";
 import toast from "react-hot-toast";
-import { Maybe } from "../types";
 
 export const connectWallet = async (): Promise<Maybe<string>> => {
   const ethereum = window?.ethereum;

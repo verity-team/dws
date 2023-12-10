@@ -2,13 +2,13 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
-import { Maybe } from "@/utils/types";
 
 import Image from "next/image";
 import CloseIcon from "@mui/icons-material/Close";
 import MemeDropArea from "./MemeDropArea";
 import MemeToolbar from "./MemeToolbar";
 import toast from "react-hot-toast";
+import { Maybe } from "@/utils";
 
 interface MemeFormData {
   caption: string;

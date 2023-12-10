@@ -1,4 +1,4 @@
-import { Maybe } from "@/utils/types";
+import { Maybe } from "@/utils";
 import { useSearchParams } from "next/navigation";
 
 export const useAffiliateCode = (): Maybe<string> => {

@@ -1,6 +1,5 @@
 "use client";
 
-import { Nullable } from "@/utils/types";
 import { useMemo, useState, useEffect } from "react";
 import useSWRImmutable from "swr/immutable";
 import {
@@ -12,6 +11,7 @@ import {
   TokenPrice,
 } from "../types";
 import { fetcher, handleErrorRetry } from "./clientAPI";
+import { Nullable } from "@/utils";
 
 export const useDonationData = () => {
   // Exponential backoff

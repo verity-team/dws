@@ -1,4 +1,4 @@
-import { Maybe } from "@/utils/types";
+import { Maybe } from "@/utils";
 import { CustomError, UserDonationData } from ".";
 
 export type AffiliateCode = string | "none";

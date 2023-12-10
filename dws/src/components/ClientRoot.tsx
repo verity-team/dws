@@ -18,11 +18,11 @@ import { donate } from "@/utils/metamask/donate";
 import { disconnect, signMessage } from "@wagmi/core";
 import { EstimateGasExecutionError } from "viem";
 import { wagmiConfig, web3ModalConfig } from "./walletconnect/config";
-import { useAffiliateCode } from "@/hooks/affiliateCode";
+import { useAffiliateCode } from "@/hooks/useAffiliateCode";
 
 interface ClientRootProps {
   children: ReactNode;
-  onWalletConnect: (address: string) => void;
+  onWalletConnect?: (address: string) => void;
 }
 
 interface WalletUtils {
@@ -79,7 +79,7 @@ const ClientRoot = ({
     if (account === "") {
       return;
     }
-    onWalletConnect(account);
+    onWalletConnect?.(account);
   }, [account, onWalletConnect]);
 
   const connectWallet = useCallback(() => {

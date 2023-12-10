@@ -1,10 +1,10 @@
 "use client";
 
-import { useAffiliateCode } from "@/hooks/affiliateCode";
+import { useAffiliateCode } from "@/hooks/useAffiliateCode";
 import ClientRoot from "../ClientRoot";
 import { ReactElement, ReactNode, createContext, useCallback } from "react";
 import { connectWalletWithAffiliate } from "@/utils/api/client/affiliateAPI";
-import { Nullable } from "@/utils/types";
+import { Nullable } from "@/utils";
 
 interface LandingClientRootProps {
   children: ReactNode;

@@ -1,7 +1,6 @@
 "use client";
 
 import { connectWallet } from "@/utils/metamask/wallet";
-import { Maybe } from "@/utils/types";
 import { getRFC3339String } from "@/utils/utils";
 import {
   Dialog,
@@ -25,6 +24,7 @@ import {
   useUserDonationData,
   getUserDonationData,
 } from "@/utils/api/client/donationAPI";
+import { Maybe } from "@/utils";
 
 const AFCForm = (): ReactElement => {
   const account = useContext(ClientWallet);

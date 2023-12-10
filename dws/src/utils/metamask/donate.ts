@@ -1,5 +1,5 @@
 import { toWei } from "web3-utils";
-import { Maybe, Nullable } from "../types";
+import { Maybe, Nullable } from "../utils";
 import {
   AvailableToken,
   AvailableWallet,

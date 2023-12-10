@@ -1,7 +1,7 @@
+import { Nullable } from "@/utils";
 import { HttpMethod, serverBaseRequest } from "@/utils/api/baseAPI";
 import { FailedResponse } from "@/utils/api/types";
 import { WalletAffiliateRequest } from "@/utils/api/types/affiliate.type";
-import { Nullable } from "@/utils/types";
 import { NextResponse } from "next/server";
 import { isAddress } from "web3-validator";
 

@@ -1,7 +1,14 @@
 "use client";
 
 import { ClientWallet, WalletUtils } from "@/components/ClientRoot";
+import { Maybe } from "@/utils";
 import { useContext, useEffect, useMemo, useState } from "react";
+
+// Try to get access token from local storage
+const getAccessToken = (): Maybe<string> => {
+  // TODO: Move this key to .env
+  return localStorage.getItem("dws-at");
+};
 
 const SignInBtn = () => {
   const { connect } = useContext(WalletUtils);
@@ -13,6 +20,8 @@ const SignInBtn = () => {
     }
     return true;
   }, [wallet]);
+
+  useEffect(() => {}, [wallet]);
 
   const handleSignIn = () => {
     connect();

@@ -1,6 +1,5 @@
 "use client";
 
-import { Nullable, Maybe } from "@/utils/types";
 import { sleep, getExponentialWaitTime } from "@/utils/utils";
 import { clientBaseRequest, HttpMethod } from "../baseAPI";
 import { UserDonationData } from "../types";
@@ -9,6 +8,7 @@ import {
   GenAffiliateRequest,
   GenAffiliateResponse,
 } from "../types/affiliate.type";
+import { Nullable, Maybe } from "@/utils";
 
 export const connectWalletWithAffiliate = async (
   walletAffiliateRequest: WalletAffiliateRequest

@@ -1,4 +1,4 @@
-import { Maybe } from "../types";
+import { Maybe } from "../utils";
 
 export const requestSignature = async (
   account: string,
