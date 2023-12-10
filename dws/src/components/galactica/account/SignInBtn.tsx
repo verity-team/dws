@@ -2,36 +2,50 @@
 
 import { ClientWallet, WalletUtils } from "@/components/ClientRoot";
 import { Maybe } from "@/utils";
+import { createSiweMesage } from "@/utils/siwe";
 import { useContext, useEffect, useMemo, useState } from "react";
 
-// Try to get access token from local storage
-const getAccessToken = (): Maybe<string> => {
-  // TODO: Move this key to .env
-  return localStorage.getItem("dws-at");
-};
-
 const SignInBtn = () => {
-  const { connect } = useContext(WalletUtils);
-  const wallet = useContext(ClientWallet);
+  const { connect, requestWalletSignature } = useContext(WalletUtils);
+  const walletAddress = useContext(ClientWallet);
 
   const connected = useMemo(() => {
-    if (wallet == null || wallet === "") {
+    if (walletAddress == null || walletAddress === "") {
       return false;
     }
     return true;
-  }, [wallet]);
+  }, [walletAddress]);
 
-  useEffect(() => {}, [wallet]);
+  useEffect(() => {
+    const handleSignIn = async () => {
+      const accessToken = localStorage.getItem("dws-at");
+      if (accessToken != null && accessToken !== "") {
+        // Verify access token with current wallet address
+        const isAcessTokenValid = true;
+        if (isAcessTokenValid) {
+          return;
+        }
 
-  const handleSignIn = () => {
-    connect();
-  };
+        // If current wallet address and access token's wallet address mismatch
+        localStorage.removeItem("dws-at");
+      }
+
+      // Request nonce and generate message
+
+      // Request signature
+      const message = createSiweMesage(walletAddress);
+      await requestWalletSignature(message);
+    };
+
+    handleSignIn();
+  }, [walletAddress]);
 
   return (
     <div>
       <button
         className="px-4 py-2 rounded-2xl bg-red-500 hover:bg-red-600 text-white"
-        onClick={handleSignIn}
+        onClick={connect}
+        disabled={!connected}
       >
         Sign in
       </button>

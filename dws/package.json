@@ -25,6 +25,7 @@
     "react-hook-form": "^7.47.0",
     "react-hot-toast": "^2.4.1",
     "react-qr-code": "^2.0.12",
+    "siwe": "^2.1.4",
     "swr": "^2.2.4",
     "viem": "^1.18.3",
     "wagmi": "^1.4.5",
