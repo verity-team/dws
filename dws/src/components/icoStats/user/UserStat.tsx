@@ -1,5 +1,5 @@
-import { useUserDonationData } from "@/utils/api/client/clientAPI";
-import { ReactElement, useEffect } from "react";
+import { useUserDonationData } from "@/utils/api/client/donationAPI";
+import { ReactElement } from "react";
 
 interface UserStatProps {
   account: string;
@@ -13,7 +13,7 @@ const UserStat = ({ account }: UserStatProps): ReactElement<UserStatProps> => {
     return <div className="mt-4 text-xl">User data not available</div>;
   }
 
-  const { total, tokens, staked, reward, status } = userDonationData.stats;
+  const { total, tokens, staked, reward, status } = userDonationData.user_data;
 
   return (
     <div className="mt-4">

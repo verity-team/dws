@@ -54,7 +54,7 @@ const Navbar = (): ReactElement => {
           <NavbarItem text="home" isActive={true} href="#" />
           <NavbarItem text="community" href="#" />
           <NavbarItem text="staking" href="#" />
-          <NavbarItem text="memes" href="#" />
+          <NavbarItem text="memes" href="/meme" />
           <NavbarDropdown
             title="about"
             options={aboutOptions}
