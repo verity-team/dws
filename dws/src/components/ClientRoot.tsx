@@ -54,8 +54,6 @@ const ClientRoot = ({
   children,
   onWalletConnect,
 }: ClientRootProps): ReactElement<ClientRootProps> => {
-  const affiliateCode = useAffiliateCode();
-
   const [account, setAccount] = useState("");
   const [provider, setProvider] = useState<AvailableWallet>("MetaMask");
   const [connectWalletFormOpen, setConnectWalletFormOpen] = useState(false);

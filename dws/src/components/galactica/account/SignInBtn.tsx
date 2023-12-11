@@ -1,39 +1,53 @@
 "use client";
 
-import { requestNonce } from "@/api/galactica/account/account";
+import {
+  requestNonce,
+  verifyAccessToken,
+  verifySignature,
+} from "@/api/galactica/account/account";
 import { ClientWallet, WalletUtils } from "@/components/ClientRoot";
 import { createSiweMesage } from "@/utils/wallet/siwe";
 import { getWalletShorthand } from "@/utils/wallet/wallet";
-import { useContext, useEffect, useMemo } from "react";
+import { Dialog, DialogContent, DialogTitle } from "@mui/material";
+import { useContext, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import toast from "react-hot-toast";
 
 const SignInBtn = () => {
-  const { connect, requestWalletSignature } = useContext(WalletUtils);
+  const { connect, disconnect, requestWalletSignature } =
+    useContext(WalletUtils);
   const walletAddress = useContext(ClientWallet);
 
-  const connected = useMemo(() => {
-    if (walletAddress == null || walletAddress === "") {
-      return false;
-    }
-    return true;
-  }, [walletAddress]);
+  const [siweMessageOpen, setSiweMessageOpen] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (walletAddress == null || walletAddress === "") {
       return;
     }
 
+    console.log(walletAddress);
+
     const handleSignIn = async () => {
       const accessToken = localStorage.getItem("dws-at");
       if (accessToken != null && accessToken !== "") {
         // Verify access token with current wallet address
-        const isAcessTokenValid = true;
+        const isAcessTokenValid = await verifyAccessToken({
+          accessToken,
+          address: walletAddress,
+        });
+
         if (isAcessTokenValid) {
+          // No need to sign-in againt
           return;
         }
 
         // If current wallet address and access token's wallet address mismatch
         localStorage.removeItem("dws-at");
       }
+
+      setSiweMessageOpen(true);
 
       // Request nonce and generate message
       const nonce = await requestNonce();
@@ -44,11 +58,39 @@ const SignInBtn = () => {
 
       // Request signature
       const message = createSiweMesage(walletAddress, nonce);
-      await requestWalletSignature(message);
+
+      let signature = "";
+      try {
+        signature = await requestWalletSignature(message);
+      } catch (error) {
+        setFailed(true);
+        setTimeout(() => {
+          handleCloseSiweMessage();
+          disconnect();
+        }, 2000);
+      }
+
+      console.log(message, signature);
+      const verifyResult = await verifySignature({ message, signature });
+      if (verifyResult == null) {
+        return;
+      }
+
+      // Store access token
+      localStorage.setItem("dws-at", verifyResult.accessToken);
+      handleCloseSiweMessage();
+      setConnected(true);
+      toast.success("Welcome to TruthMemes");
     };
 
     handleSignIn();
-  }, [walletAddress]);
+  }, [walletAddress, requestWalletSignature, disconnect]);
+
+  const handleCloseSiweMessage = () => {
+    setSiweMessageOpen(false);
+    // To avoid message change when Dialog fade away
+    setTimeout(() => setFailed(false), 1000);
+  };
 
   return (
     <div>
@@ -60,7 +102,38 @@ const SignInBtn = () => {
           Sign in
         </button>
       )}
-      {connected && <div>Welcome {getWalletShorthand(walletAddress)}</div>}
+      {connected && (
+        <div className="text-2xl">
+          Welcome {getWalletShorthand(walletAddress)}
+        </div>
+      )}
+      <Dialog
+        open={siweMessageOpen}
+        onClose={handleCloseSiweMessage}
+        fullWidth={true}
+        maxWidth="sm"
+        className="rounded-xl"
+      >
+        <DialogContent>
+          <div className="flex flex-col items-center justify-center">
+            <Image
+              src="/images/logo.png"
+              alt="eye of truth"
+              width={64}
+              height={64}
+            />
+            {failed ? (
+              <div className="text-xl leading-10">
+                Sign-in request declined. Please try again later
+              </div>
+            ) : (
+              <div className="text-xl leading-10">
+                Please approve the sign-in request using your wallet
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
