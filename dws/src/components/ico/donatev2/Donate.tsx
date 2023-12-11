@@ -14,7 +14,6 @@ const Donate = () => {
             src="/images/givememoney.jpeg"
             alt="shut up and take my money"
             fill
-            sizes="100vw 100vh"
             className="rounded-t-xl object-cover"
           />
         </div>

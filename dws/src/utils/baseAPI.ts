@@ -59,9 +59,7 @@ export const baseRequest = async (
     signal: controller.signal,
   };
 
-  console.log(
-    `Requesting to ${host}${url} with config ${JSON.stringify(requestConfig)}`
-  );
+  console.log(`Requesting to ${host}${url}`);
 
   const response = await fetch(`${host}${url}`, requestConfig);
   clearTimeout(timerId);

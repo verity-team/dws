@@ -1,9 +1,9 @@
 "use client";
 
 import { ClientWallet, WalletUtils } from "@/components/ClientRoot";
-import { Maybe } from "@/utils";
 import { createSiweMesage } from "@/utils/wallet/siwe";
-import { useContext, useEffect, useMemo, useState } from "react";
+import { getWalletShorthand } from "@/utils/wallet/wallet";
+import { useContext, useEffect, useMemo } from "react";
 
 const SignInBtn = () => {
   const { connect, requestWalletSignature } = useContext(WalletUtils);
@@ -51,12 +51,15 @@ const SignInBtn = () => {
 
   return (
     <div>
-      <button
-        className="px-4 py-2 rounded-2xl bg-red-500 hover:bg-red-600 text-white cursor-pointer disabled:cursor-not-allowed"
-        onClick={connect}
-      >
-        Sign in
-      </button>
+      {!connected && (
+        <button
+          className="px-4 py-2 rounded-2xl bg-red-500 hover:bg-red-600 text-white cursor-pointer disabled:cursor-not-allowed"
+          onClick={connect}
+        >
+          Sign in
+        </button>
+      )}
+      {connected && <div>Welcome {getWalletShorthand(walletAddress)}</div>}
     </div>
   );
 };

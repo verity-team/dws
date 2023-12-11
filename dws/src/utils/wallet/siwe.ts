@@ -1,10 +1,5 @@
+import { NonceInfo } from "@/api/meme/account/account.type";
 import { SiweMessage } from "siwe";
-
-export interface NonceInfo {
-  nonce: string;
-  expirationTime: string;
-  issuedAt: string;
-}
 
 export const createSiweMesage = (
   address: string,
