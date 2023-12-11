@@ -146,12 +146,13 @@ export const serverFormRequest = async (url: string, body: FormData) => {
 export const clientBaseRequest = async (
   url: string,
   method: HttpMethod,
-  body?: any
+  body?: any,
+  host?: string
 ): Promise<Nullable<Response>> => {
   // Read configurations
 
   // Endpoint should be the same with current host
-  const apiHost = window.location.origin;
+  const apiHost = host ?? window.location.origin;
   if (apiHost == null) {
     console.log("API_URL not set");
     return null;

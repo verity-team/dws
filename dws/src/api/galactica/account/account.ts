@@ -8,7 +8,12 @@ import {
 } from "./account.type";
 
 export const requestNonce = async (): Promise<Maybe<NonceInfo>> => {
-  const response = await clientBaseRequest("/api/auth/nonce", HttpMethod.GET);
+  const response = await clientBaseRequest(
+    "/api/auth/nonce",
+    HttpMethod.GET,
+    null,
+    process.env.NEXT_PUBLIC_GALACTICA_API_URL
+  );
 
   if (response == null || !response.ok) {
     return null;
@@ -28,7 +33,8 @@ export const verifyAccessToken = async (
   const response = await clientBaseRequest(
     "/api/auth/verify/jwt",
     HttpMethod.POST,
-    payload
+    payload,
+    process.env.NEXT_PUBLIC_GALACTICA_API_URL
   );
   if (response == null || !response.ok) {
     return false;
@@ -44,7 +50,8 @@ export const verifySignature = async (
   const response = await clientBaseRequest(
     "api/auth/verify/siwe",
     HttpMethod.POST,
-    payload
+    payload,
+    process.env.NEXT_PUBLIC_GALACTICA_API_URL
   );
   if (response == null || !response.ok) {
     return null;

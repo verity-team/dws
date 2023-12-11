@@ -1,5 +1,6 @@
 "use client";
 
+import { requestNonce } from "@/api/galactica/account/account";
 import { ClientWallet, WalletUtils } from "@/components/ClientRoot";
 import { createSiweMesage } from "@/utils/wallet/siwe";
 import { getWalletShorthand } from "@/utils/wallet/wallet";
@@ -35,14 +36,14 @@ const SignInBtn = () => {
       }
 
       // Request nonce and generate message
-      const nonce = await Promise.resolve("somerandomnonce");
+      const nonce = await requestNonce();
+      if (nonce == null) {
+        // TODO: Maybe show some toast so user know the server is busy
+        return;
+      }
 
       // Request signature
-      const message = createSiweMesage(walletAddress, {
-        nonce,
-        expirationTime: new Date().toISOString(),
-        issuedAt: new Date().toISOString(),
-      });
+      const message = createSiweMesage(walletAddress, nonce);
       await requestWalletSignature(message);
     };
 

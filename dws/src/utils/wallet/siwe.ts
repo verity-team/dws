@@ -1,4 +1,4 @@
-import { NonceInfo } from "@/api/meme/account/account.type";
+import { NonceInfo } from "@/api/galactica/account/account.type";
 import { SiweMessage } from "siwe";
 
 export const createSiweMesage = (
