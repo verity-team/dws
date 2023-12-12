@@ -9,7 +9,7 @@ export const uploadMeme = async ({
   const formData = new FormData();
 
   // Construct formData
-  formData.append("language", "en");
+  formData.append("lang", "en");
   formData.append("tags", "#meme");
 
   formData.append("userId", userId);
@@ -20,7 +20,8 @@ export const uploadMeme = async ({
   const response = await clientFormRequest(
     "/meme",
     formData,
-    process.env.NEXT_PUBLIC_GALACTICA_API_URL
+    process.env.NEXT_PUBLIC_GALACTICA_API_URL,
+    true
   );
   if (response == null || !response.ok) {
     return false;

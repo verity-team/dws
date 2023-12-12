@@ -1,34 +1,31 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
-import { useForm } from "react-hook-form";
-
+import {
+  ChangeEvent,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Image from "next/image";
 import CloseIcon from "@mui/icons-material/Close";
 import MemeDropArea from "./MemeDropArea";
 import MemeToolbar from "./MemeToolbar";
 import toast from "react-hot-toast";
 import { Maybe } from "@/utils";
-
-interface MemeFormData {
-  caption: string;
-}
+import { uploadMeme } from "@/api/galactica/meme/meme";
+import { ClientWallet } from "@/components/ClientRoot";
+import { register } from "module";
+import { debounce } from "@mui/material";
 
 const MemeInput = () => {
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<MemeFormData>({
-    values: {
-      caption: "",
-    },
-  });
+  const walletAddress = useContext(ClientWallet);
 
   const memeInputRef = useRef<HTMLInputElement>(null);
 
   const [meme, setMeme] = useState<Maybe<File>>(null);
+  const [caption, setCaption] = useState("");
 
   const handleMemeChange = useCallback((meme: Maybe<File>) => {
     setMeme(meme);
@@ -46,15 +43,38 @@ const MemeInput = () => {
     memeInputRef.current.click();
   }, []);
 
-  const handlePostBtnClick = () => {
-    handleSubmit(handleMemeUpload);
-  };
+  const onCaptionChange = useCallback(
+    debounce((event: ChangeEvent<HTMLInputElement>) => {
+      setCaption(event.target.value);
+    }, 200),
+    []
+  );
 
-  const handleMemeUpload = (data: MemeFormData) => {
+  const handleMemeUpload = async () => {
+    if (meme == null) {
+      toast.error("You have not upload any image");
+      return;
+    }
+
+    if (walletAddress == null || walletAddress === "") {
+      // TODO: Open pop-up to prompt user to sign in
+      toast.error("You need to sign-in first");
+      return;
+    }
+
     // Use API to upload meme to server
+    const uploaded = await uploadMeme({
+      meme,
+      caption,
+      userId: walletAddress,
+    });
+    if (!uploaded) {
+      toast.error("Failed to upload. Please try again later");
+      return;
+    }
 
     // Clear form
-    reset();
+    setCaption("");
     setMeme(null);
 
     // Toast
@@ -75,7 +95,6 @@ const MemeInput = () => {
   return (
     <div>
       <div className="w-full p-2 border-2 border-gray-100">
-        <form onSubmit={handleSubmit(handleMemeUpload)}></form>
         <MemeDropArea
           onMemeChange={handleMemeChange}
           fileInputRef={memeInputRef}
@@ -85,9 +104,8 @@ const MemeInput = () => {
             <input
               className="px-4 py-2 w-full outline-none my-2 text-lg"
               placeholder="Unveil the truth ?!"
-              {...register("caption", {
-                required: true,
-              })}
+              onChange={onCaptionChange}
+              value={caption}
             />
           </div>
         </MemeDropArea>
@@ -102,9 +120,9 @@ const MemeInput = () => {
             <Image
               src={URL.createObjectURL(meme)}
               alt="meme upload image"
-              width={4000}
+              width={0}
               height={0}
-              className="object-cover w-full h-full"
+              className="object-contain w-auto max-w-full max-h-full"
             />
           </div>
         )}
@@ -112,7 +130,7 @@ const MemeInput = () => {
           <MemeToolbar
             canSubmit={canPost}
             onImageBtnClick={handleImageBtnClick}
-            onPostBtnClick={handlePostBtnClick}
+            onPostBtnClick={handleMemeUpload}
           />
         </div>
       </div>
