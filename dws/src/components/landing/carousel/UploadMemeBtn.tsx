@@ -1,15 +1,14 @@
 "use client";
 
 import TextButton from "@/components/common/TextButton";
-import { Dialog, DialogContent, DialogTitle } from "@mui/material";
-import { ChangeEvent, FormEvent, useCallback, useState } from "react";
+import { Dialog, DialogContent } from "@mui/material";
+import { ChangeEvent, useCallback, useState } from "react";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
 import { useForm } from "react-hook-form";
-import { Maybe } from "@/utils/types";
 import Image from "next/image";
-import { uploadMeme } from "@/utils/api/client/memeAPI";
 import toast from "react-hot-toast";
+import { Maybe } from "@/utils";
 
 interface UploadMemeFormData {
   caption: string;
@@ -51,12 +50,12 @@ const UploadMemeButton = () => {
       return;
     }
 
-    const isUploaded = await uploadMeme(data.caption, currentMeme);
-    if (!isUploaded) {
-      // Toast failed but don't close the form yet
-      toast.error("Upload failed");
-      return;
-    }
+    // const isUploaded = await uploadMeme(data.caption, currentMeme);
+    // if (!isUploaded) {
+    //   // Toast failed but don't close the form yet
+    //   toast.error("Upload failed");
+    //   return;
+    // }
 
     toast.success("Your meme have been uploaded");
     handleCloseUploadForm();

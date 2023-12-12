@@ -1,5 +1,4 @@
-import { serverFormRequest } from "@/utils/api/baseAPI";
-import { FailedResponse } from "@/utils/api/types";
+import { serverFormRequest, FailedResponse } from "@/utils/baseAPI";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request): Promise<Response> {

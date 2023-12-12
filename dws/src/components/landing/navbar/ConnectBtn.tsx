@@ -1,7 +1,7 @@
 "use client";
 
-import { connectWallet } from "@/utils/metamask/wallet";
-import { Nullable } from "@/utils/types";
+import { Nullable } from "@/utils";
+import { connectWallet } from "@/utils/wallet/wallet";
 import { useState } from "react";
 import toast from "react-hot-toast";
 

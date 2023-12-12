@@ -2,11 +2,11 @@
 
 import { Menu, MenuItem } from "@mui/material";
 import { ReactElement, MouseEvent, useState, useMemo } from "react";
-import { Nullable } from "@/utils/types";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import NavbarDropdownItem, {
   NavbarDropdownItemProps,
 } from "./NavbarDropdownItem";
+import { Nullable } from "@/utils";
 
 interface NavbarDropdownProps {
   title: string;

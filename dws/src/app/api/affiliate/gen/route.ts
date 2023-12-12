@@ -1,11 +1,11 @@
+import { GenAffiliateRequest } from "@/api/dws/affiliate/affiliate.type";
+import { Nullable } from "@/utils";
 import {
-  HttpMethod,
   getDefaultHeaders,
   serverBaseRequest,
-} from "@/utils/api/baseAPI";
-import { FailedResponse } from "@/utils/api/types";
-import { GenAffiliateRequest } from "@/utils/api/types/affiliate.type";
-import { Nullable } from "@/utils/types";
+  HttpMethod,
+  FailedResponse,
+} from "@/utils/baseAPI";
 import { NextResponse } from "next/server";
 import { isAddress } from "web3-validator";
 

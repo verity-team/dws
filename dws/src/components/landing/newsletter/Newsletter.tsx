@@ -1,6 +1,6 @@
 "use client";
 
-import { subscribeEmail } from "@/utils/api/client/emailAPI";
+import { subscribeEmail } from "@/api/dws/email/email";
 import { FormEvent, useRef, useState } from "react";
 import toast from "react-hot-toast";
 

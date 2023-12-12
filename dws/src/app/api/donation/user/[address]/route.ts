@@ -1,5 +1,5 @@
-import { HttpMethod, serverBaseRequest } from "@/utils/api/baseAPI";
-import { FailedResponse, UserDonationData } from "@/utils/api/types";
+import { UserDonationData } from "@/api/dws/user/user.type";
+import { serverBaseRequest, HttpMethod, FailedResponse } from "@/utils/baseAPI";
 import { NextResponse } from "next/server";
 import { isAddress } from "web3-validator";
 
