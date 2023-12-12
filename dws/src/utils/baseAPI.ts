@@ -181,9 +181,10 @@ export const clientBaseRequest = async (
 
 export const clientFormRequest = async (
   url: string,
-  body: FormData
+  body: FormData,
+  host?: string
 ): Promise<Maybe<Response>> => {
-  const apiHost = window.location.origin;
+  const apiHost = host ?? window.location.origin;
   if (apiHost == null) {
     console.log("API_URL not set");
     return null;
