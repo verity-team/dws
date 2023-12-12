@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogTitle } from "@mui/material";
 import { useContext, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import toast from "react-hot-toast";
+import { sleep } from "@/utils/utils";
 
 const SignInBtn = () => {
   const { connect, disconnect, requestWalletSignature } =
@@ -27,19 +28,15 @@ const SignInBtn = () => {
       return;
     }
 
-    console.log(walletAddress);
-
-    const handleSignIn = async () => {
+    const handleSignIn = async (walletAddress: string) => {
       const accessToken = localStorage.getItem("dws-at");
       if (accessToken != null && accessToken !== "") {
         // Verify access token with current wallet address
-        const isAcessTokenValid = await verifyAccessToken({
-          accessToken,
-          address: walletAddress,
-        });
+        const isAcessTokenValid = await verifyAccessToken(walletAddress);
 
         if (isAcessTokenValid) {
-          // No need to sign-in againt
+          // No need to sign-in again
+          handleConnectSuccess();
           return;
         }
 
@@ -47,6 +44,7 @@ const SignInBtn = () => {
         localStorage.removeItem("dws-at");
       }
 
+      await sleep(2000);
       setSiweMessageOpen(true);
 
       // Request nonce and generate message
@@ -70,7 +68,6 @@ const SignInBtn = () => {
         }, 2000);
       }
 
-      console.log(message, signature);
       const verifyResult = await verifySignature({ message, signature });
       if (verifyResult == null) {
         return;
@@ -78,18 +75,22 @@ const SignInBtn = () => {
 
       // Store access token
       localStorage.setItem("dws-at", verifyResult.accessToken);
-      handleCloseSiweMessage();
-      setConnected(true);
-      toast.success("Welcome to TruthMemes");
+      handleConnectSuccess();
     };
 
-    handleSignIn();
+    console.log(walletAddress);
+
+    handleSignIn(walletAddress);
   }, [walletAddress, requestWalletSignature, disconnect]);
+
+  const handleConnectSuccess = () => {
+    handleCloseSiweMessage();
+    setConnected(true);
+    toast.success("Welcome to TruthMemes");
+  };
 
   const handleCloseSiweMessage = () => {
     setSiweMessageOpen(false);
-    // To avoid message change when Dialog fade away
-    setTimeout(() => setFailed(false), 1000);
   };
 
   return (
@@ -127,7 +128,7 @@ const SignInBtn = () => {
                 Sign-in request declined. Please try again later
               </div>
             ) : (
-              <div className="text-xl leading-10">
+              <div className="text-lg leading-10">
                 Please approve the sign-in request using your wallet
               </div>
             )}

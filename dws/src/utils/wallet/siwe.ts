@@ -1,5 +1,6 @@
 import { NonceInfo } from "@/api/galactica/account/account.type";
 import { SiweMessage } from "siwe";
+import { getAddress } from "viem";
 
 export const createSiweMesage = (
   address: string,
@@ -7,8 +8,6 @@ export const createSiweMesage = (
 ): string => {
   const domain = window.location.host;
   const origin = window.location.origin;
-
-  address = address.toLowerCase();
 
   let targetNetwork = 1;
   try {
@@ -23,7 +22,7 @@ export const createSiweMesage = (
   const statement = "Welcome to Truth Memes";
   const message = new SiweMessage({
     domain,
-    address: "0x62e662Ffb36Ffb465378Bc8cAEd807a9181a1561",
+    address: getAddress(address),
     statement,
     uri: origin,
     version: "1",

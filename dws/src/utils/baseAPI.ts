@@ -147,7 +147,8 @@ export const clientBaseRequest = async (
   url: string,
   method: HttpMethod,
   body?: any,
-  host?: string
+  host?: string,
+  auth?: boolean
 ): Promise<Nullable<Response>> => {
   // Read configurations
 
@@ -158,10 +159,21 @@ export const clientBaseRequest = async (
     return null;
   }
 
-  let timeout: number = Number(process.env.NEXT_PUBLIC_API_TIMEOUT);
+  let timeout: number = Number(process.env.API_TIMEOUT);
   if (isNaN(timeout)) {
     console.log("API_TIMEOUT not set. Using fallback value");
     timeout = 10000;
+  }
+
+  if (auth) {
+    const headers = getDefaultHeaders();
+    const accessToken = localStorage.getItem("dws-at");
+    if (!accessToken) {
+      console.log("Cannot send auth request without access token");
+      return null;
+    }
+    headers.append("Authorization", "Bearer " + accessToken);
+    return baseRequest(url, method, { host: apiHost, timeout }, body, headers);
   }
 
   return baseRequest(url, method, { host: apiHost, timeout }, body);

@@ -110,6 +110,8 @@ const ClientRoot = ({
 
   const requestWalletSignature = useCallback(
     async (message: string): Promise<string> => {
+      console.log(account);
+
       if (provider === "MetaMask") {
         const signature = await requestSignature(account, message);
         if (signature == null) {

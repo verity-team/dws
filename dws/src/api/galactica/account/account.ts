@@ -27,14 +27,13 @@ export const requestNonce = async (): Promise<Maybe<NonceInfo>> => {
   }
 };
 
-export const verifyAccessToken = async (
-  payload: VerifyAccessTokenPayload
-): Promise<boolean> => {
+export const verifyAccessToken = async (address: string): Promise<boolean> => {
   const response = await clientBaseRequest(
     "/auth/verify/jwt",
     HttpMethod.POST,
-    payload,
-    process.env.NEXT_PUBLIC_GALACTICA_API_URL
+    { address },
+    process.env.NEXT_PUBLIC_GALACTICA_API_URL,
+    true
   );
   if (response == null || !response.ok) {
     return false;
