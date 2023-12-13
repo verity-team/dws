@@ -1,5 +1,10 @@
-import { clientFormRequest } from "@/utils/baseAPI";
-import { MemeUploadDTO } from "./meme.type";
+import {
+  HttpMethod,
+  clientBaseRequest,
+  clientFormRequest,
+} from "@/utils/baseAPI";
+import { MemeUpload, MemeUploadDTO } from "./meme.type";
+import { PaginationRequest, PaginationResponse } from "@/utils";
 
 export const uploadMeme = async ({
   meme,
@@ -28,4 +33,41 @@ export const uploadMeme = async ({
   }
 
   return true;
+};
+
+export const getLatestMeme = async (
+  pagination: PaginationRequest
+): Promise<PaginationResponse<MemeUpload>> => {
+  const response = await clientBaseRequest(
+    "/meme/latest?" +
+      new URLSearchParams({
+        offset: pagination.offset.toString(),
+        limit: pagination.limit.toString(),
+      }),
+    HttpMethod.GET,
+    null,
+    process.env.NEXT_PUBLIC_GALACTICA_API_URL,
+    true
+  );
+
+  const defaultData = {
+    data: [],
+    pagination: {
+      ...pagination,
+      total: 0,
+    },
+  };
+
+  if (response == null || !response.ok) {
+    console.error("Failed to get latest memes");
+    return defaultData;
+  }
+
+  try {
+    const data = await response.json();
+    return data;
+  } catch {
+    console.error("Failed to parse data");
+    return defaultData;
+  }
 };

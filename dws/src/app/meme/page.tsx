@@ -1,6 +1,7 @@
 import ClientRoot from "@/components/ClientRoot";
 import SignInBtn from "@/components/galactica/account/SignInBtn";
 import MemeInput from "@/components/galactica/meme/MemeInput";
+import MemeList from "@/components/galactica/meme/MemeList";
 
 const MemePage = () => {
   return (
@@ -14,6 +15,9 @@ const MemePage = () => {
           </div>
           <div className="mt-4">
             <MemeInput />
+          </div>
+          <div>
+            <MemeList />
           </div>
         </ClientRoot>
       </div>
