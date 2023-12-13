@@ -10,6 +10,6 @@ export interface MemeUpload {
   caption: string;
   lang: string;
   tags: string[];
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }

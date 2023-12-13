@@ -81,7 +81,7 @@ const SignInBtn = () => {
     console.log(walletAddress);
 
     handleSignIn(walletAddress);
-  }, [walletAddress, requestWalletSignature, disconnect]);
+  }, [walletAddress]);
 
   const handleConnectSuccess = () => {
     handleCloseSiweMessage();

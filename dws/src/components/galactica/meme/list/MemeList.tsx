@@ -1,12 +1,18 @@
 "use client";
 
 import { useLatestMeme } from "@/hooks/galactica/meme/useMeme";
+import MemeListItem from "./MemeListItem";
 import { useEffect } from "react";
+import { roboto } from "@/app/fonts";
 
 const MemeList = () => {
   const { memes, loadInit } = useLatestMeme();
 
   useEffect(() => {
+    if (memes.length > 0) {
+      return;
+    }
+
     loadInit();
   }, []);
 
@@ -14,12 +20,12 @@ const MemeList = () => {
     return <div>No memes for today</div>;
   }
 
-  console.log(memes);
-
   return (
-    <div>
+    <div className={roboto.className}>
       {memes.map((meme) => (
-        <div key={meme.fileId}>{meme.caption}</div>
+        <div key={meme.fileId}>
+          <MemeListItem meme={meme} />
+        </div>
       ))}
     </div>
   );

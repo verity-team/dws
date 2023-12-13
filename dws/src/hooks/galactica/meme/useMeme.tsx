@@ -1,7 +1,7 @@
-import { getLatestMeme } from "@/api/galactica/meme/meme";
+import { getLatestMeme, getMemeImage } from "@/api/galactica/meme/meme";
 import { MemeUpload } from "@/api/galactica/meme/meme.type";
 import { PaginationRequest } from "@/utils";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 const LIMIT = 10;
 
@@ -46,4 +46,28 @@ export const useLatestMeme = () => {
   };
 
   return { memes, page, total, hasNext, loadInit, loadMore };
+};
+
+export const useMemeImage = () => {
+  const [loading, setLoading] = useState(false);
+  const [url, setUrl] = useState("");
+
+  const getImage = useCallback(async (id: string) => {
+    setLoading(true);
+
+    const url = await getMemeImage(id);
+    if (url == null) {
+      setLoading(false);
+      return;
+    }
+
+    setUrl(url);
+    setLoading(false);
+  }, []);
+
+  return {
+    loading,
+    url,
+    getMemeImage: getImage,
+  };
 };

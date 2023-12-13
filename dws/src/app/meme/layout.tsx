@@ -12,7 +12,7 @@ export default function MemePageLayout({
 }: MemePageLayoutProps): ReactElement<MemePageLayoutProps> {
   return (
     <ClientRoot>
-      <div className="container mt-12 mx-auto">{children}</div>
+      <div className="container mx-auto mt-12">{children}</div>
     </ClientRoot>
   );
 }

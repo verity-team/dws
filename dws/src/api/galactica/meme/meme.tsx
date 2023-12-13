@@ -4,7 +4,7 @@ import {
   clientFormRequest,
 } from "@/utils/baseAPI";
 import { MemeUpload, MemeUploadDTO } from "./meme.type";
-import { PaginationRequest, PaginationResponse } from "@/utils";
+import { Maybe, PaginationRequest, PaginationResponse } from "@/utils";
 
 export const uploadMeme = async ({
   meme,
@@ -69,5 +69,27 @@ export const getLatestMeme = async (
   } catch {
     console.error("Failed to parse data");
     return defaultData;
+  }
+};
+
+export const getMemeImage = async (id: string): Promise<Maybe<string>> => {
+  const response = await clientBaseRequest(
+    `/meme/image/${id}`,
+    HttpMethod.GET,
+    null,
+    process.env.NEXT_PUBLIC_GALACTICA_API_URL,
+    true
+  );
+
+  if (response == null || !response.ok) {
+    return null;
+  }
+
+  try {
+    const file = await response.blob();
+    return URL.createObjectURL(file);
+  } catch {
+    console.error("Cannot parse response as blob");
+    return null;
   }
 };
