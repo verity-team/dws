@@ -6,8 +6,8 @@ import MemeList from "@/components/galactica/meme/list/MemeList";
 const MemePage = () => {
   return (
     <div className="grid grid-cols-12">
-      <div className="col-span-2"></div>
-      <div className="col-span-8">
+      <div className="col-span-3"></div>
+      <div className="col-span-6">
         <ClientRoot>
           <div className="flex items-center justify-between">
             <h1 className="text-4xl font-bold">#Truthmemes</h1>
@@ -21,7 +21,7 @@ const MemePage = () => {
           </div>
         </ClientRoot>
       </div>
-      <div className="col-span-2"></div>
+      <div className="col-span-3"></div>
     </div>
   );
 };

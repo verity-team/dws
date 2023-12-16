@@ -3,18 +3,20 @@ import { MemeUpload } from "@/api/galactica/meme/meme.type";
 import { PaginationRequest } from "@/utils";
 import { useCallback, useMemo, useState } from "react";
 
-const LIMIT = 10;
+const LIMIT = 5;
 
 export const useLatestMeme = () => {
   const [memes, setMemes] = useState<MemeUpload[]>([]);
   const [page, setPage] = useState<number>(0);
   const [total, setTotal] = useState<number>(0);
 
+  const [loading, setLoading] = useState(false);
+
   const hasNext = useMemo(() => {
     return page * LIMIT < total;
   }, [page, total]);
 
-  const loadInit = async () => {
+  const loadInit = useCallback(async () => {
     const paginationSettings: PaginationRequest = {
       offset: 0,
       limit: LIMIT,
@@ -28,9 +30,15 @@ export const useLatestMeme = () => {
     setMemes(data);
     setPage(1);
     setTotal(pagination.total);
-  };
+  }, []);
 
   const loadMore = async () => {
+    if (loading) {
+      return;
+    }
+
+    setLoading(true);
+
     const paginationSettings: PaginationRequest = {
       offset: page * LIMIT,
       limit: LIMIT,
@@ -41,11 +49,16 @@ export const useLatestMeme = () => {
       return;
     }
 
-    setMemes(data);
+    setMemes([...memes, ...data]);
     setPage((page) => page + 1);
+    setLoading(false);
   };
 
-  return { memes, page, total, hasNext, loadInit, loadMore };
+  const appendTopMeme = (meme: MemeUpload) => {
+    setMemes((memes) => [meme, ...memes]);
+  };
+
+  return { memes, hasNext, loading, loadInit, loadMore, appendTopMeme };
 };
 
 export const useMemeImage = () => {
