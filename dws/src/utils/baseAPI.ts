@@ -68,7 +68,7 @@ export const baseRequest = async (
 
 export const baseFormRequest = async (
   url: string,
-  config: RequestConfig,
+  config: RequestConfig & { auth: boolean },
   body: FormData
 ): Promise<Maybe<Response>> => {
   const { host, timeout } = config;
@@ -79,9 +79,19 @@ export const baseFormRequest = async (
   const controller = new AbortController();
   const timerId = setTimeout(() => controller.abort(), timeout);
 
+  const headers = new Headers();
+  if (config.auth) {
+    const accessToken = localStorage.getItem("dws-at");
+    if (accessToken == null) {
+      return null;
+    }
+
+    headers.append("Authorization", "Bearer " + accessToken);
+  }
+
   const requestConfig = {
     method: "POST",
-    headers: new Headers(),
+    headers,
     body,
     signal: controller.signal,
   };
@@ -140,7 +150,7 @@ export const serverFormRequest = async (url: string, body: FormData) => {
     timeout = 10000;
   }
 
-  return baseFormRequest(url, { host: apiHost, timeout }, body);
+  return baseFormRequest(url, { host: apiHost, timeout, auth: true }, body);
 };
 
 export const clientBaseRequest = async (
@@ -181,9 +191,11 @@ export const clientBaseRequest = async (
 
 export const clientFormRequest = async (
   url: string,
-  body: FormData
+  body: FormData,
+  host?: string,
+  auth?: boolean
 ): Promise<Maybe<Response>> => {
-  const apiHost = window.location.origin;
+  const apiHost = host ?? window.location.origin;
   if (apiHost == null) {
     console.log("API_URL not set");
     return null;
@@ -195,7 +207,11 @@ export const clientFormRequest = async (
     timeout = 10000;
   }
 
-  return await baseFormRequest(url, { host: apiHost, timeout }, body);
+  return await baseFormRequest(
+    url,
+    { host: apiHost, timeout, auth: !!auth },
+    body
+  );
 };
 
 export const swrFetcher = async (url: string) => {

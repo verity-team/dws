@@ -9,7 +9,7 @@ import { ClientWallet, WalletUtils } from "@/components/ClientRoot";
 import { createSiweMesage } from "@/utils/wallet/siwe";
 import { getWalletShorthand } from "@/utils/wallet/wallet";
 import { Dialog, DialogContent, DialogTitle } from "@mui/material";
-import { useContext, useEffect, useMemo, useState } from "react";
+import { memo, useContext, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import toast from "react-hot-toast";
 import { sleep } from "@/utils/utils";
@@ -81,7 +81,7 @@ const SignInBtn = () => {
     console.log(walletAddress);
 
     handleSignIn(walletAddress);
-  }, [walletAddress, requestWalletSignature, disconnect]);
+  }, [walletAddress]);
 
   const handleConnectSuccess = () => {
     handleCloseSiweMessage();
@@ -139,4 +139,4 @@ const SignInBtn = () => {
   );
 };
 
-export default SignInBtn;
+export default memo(SignInBtn);
