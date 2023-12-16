@@ -13,3 +13,11 @@ export interface MemeUpload {
   createdAt: string;
   updatedAt: string;
 }
+
+// For instantly displaying after user upload
+export interface OptimisticMemeUpload {
+  fileId: string;
+  userId: string;
+  caption: string;
+  createdAt: string;
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  ChangeEvent,
+  ReactElement,
   useCallback,
   useContext,
   useMemo,
@@ -16,16 +16,33 @@ import toast from "react-hot-toast";
 import { Maybe } from "@/utils";
 import { uploadMeme } from "@/api/galactica/meme/meme";
 import { ClientWallet } from "@/components/ClientRoot";
-import { register } from "module";
-import { debounce } from "@mui/material";
+import { useForm } from "react-hook-form";
+import {
+  MemeUploadDTO,
+  OptimisticMemeUpload,
+} from "@/api/galactica/meme/meme.type";
 
-const MemeInput = () => {
+interface MemeInputProps {
+  onUpload: (meme: OptimisticMemeUpload) => void;
+}
+
+interface MemeInputFormData {
+  caption: string;
+}
+
+const MemeInput = ({
+  onUpload,
+}: MemeInputProps): ReactElement<MemeInputProps> => {
   const walletAddress = useContext(ClientWallet);
-
   const memeInputRef = useRef<HTMLInputElement>(null);
-
   const [meme, setMeme] = useState<Maybe<File>>(null);
-  const [caption, setCaption] = useState("");
+  const {
+    register,
+    getValues,
+    reset: resetForm,
+  } = useForm<MemeInputFormData>({
+    defaultValues: { caption: "" },
+  });
 
   const handleMemeChange = useCallback((meme: Maybe<File>) => {
     setMeme(meme);
@@ -43,13 +60,6 @@ const MemeInput = () => {
     memeInputRef.current.click();
   }, []);
 
-  const onCaptionChange = useCallback(
-    debounce((event: ChangeEvent<HTMLInputElement>) => {
-      setCaption(event.target.value);
-    }, 200),
-    []
-  );
-
   const handleMemeUpload = async () => {
     if (meme == null) {
       toast.error("You have not upload any image");
@@ -63,6 +73,7 @@ const MemeInput = () => {
     }
 
     // Use API to upload meme to server
+    const caption = getValues("caption");
     const uploaded = await uploadMeme({
       meme,
       caption,
@@ -73,14 +84,19 @@ const MemeInput = () => {
       return;
     }
 
+    onUpload({
+      userId: walletAddress,
+      fileId: URL.createObjectURL(meme),
+      caption,
+      createdAt: new Date().toISOString(),
+    });
+
     // Clear form
-    setCaption("");
+    resetForm();
     setMeme(null);
 
     // Toast
     toast.success("Post uploaded");
-
-    // Append current post to the top of history, using SWR mutate
   };
 
   const canPost = useMemo(() => {
@@ -104,8 +120,7 @@ const MemeInput = () => {
             <input
               className="px-4 py-2 w-full outline-none my-2 text-lg"
               placeholder="Unveil the truth ?!"
-              onChange={onCaptionChange}
-              value={caption}
+              {...register("caption")}
             />
           </div>
         </MemeDropArea>

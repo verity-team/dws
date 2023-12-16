@@ -2,56 +2,34 @@
 
 import { useLatestMeme } from "@/hooks/galactica/meme/useMeme";
 import MemeListItem from "./MemeListItem";
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import {
+  ReactElement,
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { roboto } from "@/app/fonts";
+import { MemeUpload } from "@/api/galactica/meme/meme.type";
 
-const MemeList = () => {
-  const {
-    memes,
-    loadInit,
-    loadMore,
-    hasNext,
-    loading: memeLoading,
-  } = useLatestMeme();
+interface MemeListProps {
+  memes: MemeUpload[];
+  loadMore: () => void;
+}
 
-  // Show scroll to top sticky button
-  const [showScrollToTop, setShowScrollToTop] = useState(false);
-  const [isPending, startTransition] = useTransition();
-
-  useEffect(() => {
-    loadInit();
-  }, []);
-
-  const handleLoadMore = useCallback(async () => {
-    if (!hasNext || memeLoading) {
-      return;
-    }
-
-    await loadMore();
-  }, [hasNext, memeLoading, loadMore]);
-
-  const startLoadMoreTransition = useCallback(() => {
-    if (isPending) {
-      return;
-    }
-
-    if (
-      window.innerHeight + document.documentElement.scrollTop <
-      document.documentElement.offsetHeight * 0.9
-    ) {
-      return;
-    }
-
-    startTransition(handleLoadMore);
-  }, [handleLoadMore, isPending]);
-
+const MemeList = ({
+  memes,
+  loadMore,
+}: MemeListProps): ReactElement<MemeListProps> => {
   const observerTarget = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
-          startLoadMoreTransition();
+          loadMore();
         }
       },
       { threshold: 1 }
@@ -69,21 +47,25 @@ const MemeList = () => {
     return () => {
       observer.unobserve(flag);
     };
-  }, [observerTarget, startLoadMoreTransition]);
+  }, [observerTarget, loadMore]);
 
   if (memes.length === 0) {
-    return <div>No memes for today</div>;
+    return (
+      <div className="py-8 flex items-center justify-center">
+        No memes for today
+      </div>
+    );
   }
 
   return (
     <div className={roboto.className + " relative"}>
       {memes.map((meme) => (
-        <MemeListItem meme={meme} key={meme.fileId} />
+        <MemeListItem {...meme} isServerMeme key={meme.fileId} />
       ))}
-      {memeLoading && <p>Loading...</p>}
+
       <div ref={observerTarget}></div>
     </div>
   );
 };
 
-export default MemeList;
+export default memo(MemeList);

@@ -54,11 +54,7 @@ export const useLatestMeme = () => {
     setLoading(false);
   };
 
-  const appendTopMeme = (meme: MemeUpload) => {
-    setMemes((memes) => [meme, ...memes]);
-  };
-
-  return { memes, hasNext, loading, loadInit, loadMore, appendTopMeme };
+  return { memes, hasNext, loading, loadInit, loadMore };
 };
 
 export const useMemeImage = () => {
