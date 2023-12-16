@@ -47,7 +47,7 @@ const MemeListItem = ({
     <div className={roboto.className}>
       <div className="w-full py-8 border-t border-b border-gray-100">
         <div className="flex items-center justify-start space-x-4">
-          <Avatar size={40} name={} variant="marble" />
+          <Avatar size={40} name={userId} variant="marble" />
           <div>
             <div className="font-semibold text-sm">
               {getWalletShorthand(userId)}
