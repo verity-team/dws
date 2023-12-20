@@ -64,10 +64,7 @@ const MemeDropArea = ({
   }, [dragActive]);
 
   return (
-    <div
-      onDragEnter={handleImageDrag}
-      className="w-full h-full border-2 border-gray-100 relative"
-    >
+    <div onDragEnter={handleImageDrag} className="w-full h-full relative">
       {children}
       <input
         type="file"

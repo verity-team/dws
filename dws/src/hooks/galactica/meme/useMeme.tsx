@@ -1,11 +1,12 @@
 import { getLatestMeme, getMemeImage } from "@/api/galactica/meme/meme";
 import { MemeUpload } from "@/api/galactica/meme/meme.type";
+import { MemeFilter } from "@/components/galactica/meme/meme.type";
 import { PaginationRequest } from "@/utils";
 import { useCallback, useMemo, useState } from "react";
 
 const LIMIT = 5;
 
-export const useLatestMeme = () => {
+export const useLatestMeme = (filter?: MemeFilter) => {
   const [memes, setMemes] = useState<MemeUpload[]>([]);
   const [page, setPage] = useState<number>(0);
   const [total, setTotal] = useState<number>(0);
@@ -21,7 +22,10 @@ export const useLatestMeme = () => {
       offset: 0,
       limit: LIMIT,
     };
-    const { data, pagination } = await getLatestMeme(paginationSettings);
+    const { data, pagination } = await getLatestMeme(
+      paginationSettings,
+      filter
+    );
     if (data.length === 0) {
       // Avoid state mutation on empty data
       return;
@@ -30,7 +34,7 @@ export const useLatestMeme = () => {
     setMemes(data);
     setPage(1);
     setTotal(pagination.total);
-  }, []);
+  }, [filter]);
 
   const loadMore = async () => {
     if (loading) {

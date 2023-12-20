@@ -141,7 +141,7 @@ const MemeInput = ({
             />
           </div>
         )}
-        <div className="mt-4 p-2">
+        <div className="p-2">
           <MemeToolbar
             canSubmit={canPost}
             onImageBtnClick={handleImageBtnClick}

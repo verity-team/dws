@@ -5,18 +5,34 @@ import SignInBtn from "../account/SignInBtn";
 import MemeInput from "./MemeInput";
 import MemeList from "./list/MemeList";
 import { useLatestMeme } from "@/hooks/galactica/meme/useMeme";
-import { useEffect, useCallback, useTransition, useState } from "react";
+import {
+  useEffect,
+  useCallback,
+  useTransition,
+  useState,
+  ReactElement,
+} from "react";
 import { OptimisticMemeUpload } from "@/api/galactica/meme/meme.type";
 import MemeListItem from "./list/MemeListItem";
+import { MemeFilter, MemeUploadStatus } from "./meme.type";
 
-const MemePage = () => {
+interface MemeTimelineProps {
+  filter?: MemeFilter;
+}
+
+// Default to load latest approved memes
+const MemeTimeline = ({
+  filter = {
+    status: "APPROVED",
+  },
+}: MemeTimelineProps): ReactElement<MemeTimelineProps> => {
   const {
     memes,
     hasNext,
     loadInit,
     loadMore,
     loading: memeLoading,
-  } = useLatestMeme();
+  } = useLatestMeme(filter);
 
   const [isPending, startTransition] = useTransition();
   const [userMemes, setUserMemes] = useState<OptimisticMemeUpload[]>([]);
@@ -60,7 +76,7 @@ const MemePage = () => {
   }, []);
 
   return (
-    <ClientRoot>
+    <>
       <div className="flex items-center justify-between">
         <h1 className="text-4xl font-bold">#Truthmemes</h1>
         <SignInBtn />
@@ -79,8 +95,8 @@ const MemePage = () => {
           </div>
         )}
       </div>
-    </ClientRoot>
+    </>
   );
 };
 
-export default MemePage;
+export default MemeTimeline;

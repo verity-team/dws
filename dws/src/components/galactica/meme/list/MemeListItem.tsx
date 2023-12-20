@@ -64,7 +64,7 @@ const MemeListItem = ({
             src={isServerMeme ? url : fileId}
             width={0}
             height={0}
-            className="object-contain w-auto max-w-[80%] max-h-full"
+            className="object-contain w-auto max-w-[80%] max-h-[40vh]"
             alt={caption}
           />
         </div>
