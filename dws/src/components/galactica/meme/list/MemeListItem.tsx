@@ -1,4 +1,3 @@
-import { MemeUpload } from "@/api/galactica/meme/meme.type";
 import { useMemeImage } from "@/hooks/galactica/meme/useMeme";
 import Image from "next/image";
 import { ReactElement, useEffect, useMemo } from "react";

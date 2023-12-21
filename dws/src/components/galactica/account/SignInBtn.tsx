@@ -8,8 +8,8 @@ import {
 import { ClientWallet, WalletUtils } from "@/components/ClientRoot";
 import { createSiweMesage } from "@/utils/wallet/siwe";
 import { getWalletShorthand } from "@/utils/wallet/wallet";
-import { Dialog, DialogContent, DialogTitle } from "@mui/material";
-import { memo, useContext, useEffect, useMemo, useState } from "react";
+import { Dialog, DialogContent } from "@mui/material";
+import { memo, useContext, useEffect, useState } from "react";
 import Image from "next/image";
 import toast from "react-hot-toast";
 import { sleep } from "@/utils/utils";
