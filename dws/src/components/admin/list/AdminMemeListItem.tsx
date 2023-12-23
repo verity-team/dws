@@ -5,22 +5,26 @@ import Avatar from "boring-avatars";
 import { getWalletShorthand } from "@/utils/wallet/wallet";
 import { getTimeElapsedString } from "@/utils/utils";
 import { roboto } from "@/app/fonts";
+import AdminToolbar from "./AdminMemeToolbar";
+import { MemeUploadStatus } from "@/components/galactica/meme/meme.type";
 
-interface MemeListItemProps {
+interface AdminMemeListItemProps {
   userId: string;
   fileId: string;
   caption: string;
   createdAt: string;
+  status: MemeUploadStatus;
   isServerMeme: boolean;
 }
 
-const MemeListItem = ({
+const AdminMemeListItem = ({
   userId,
   fileId,
   caption,
   createdAt,
+  status,
   isServerMeme,
-}: MemeListItemProps): ReactElement<MemeListItemProps> => {
+}: AdminMemeListItemProps): ReactElement<AdminMemeListItemProps> => {
   const { url, loading, getMemeImage } = useMemeImage();
 
   useEffect(() => {
@@ -30,7 +34,6 @@ const MemeListItem = ({
     }
 
     getMemeImage(fileId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const dateDescription = useMemo(() => {
@@ -68,9 +71,10 @@ const MemeListItem = ({
             alt={caption}
           />
         </div>
+        <AdminToolbar memeStatus={status} />
       </div>
     </div>
   );
 };
 
-export default MemeListItem;
+export default AdminMemeListItem;

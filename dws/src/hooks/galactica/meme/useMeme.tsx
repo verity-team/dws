@@ -47,6 +47,7 @@ export const useLatestMeme = (filter?: MemeFilter) => {
     loadInit().finally(() => {
       loadingState.current = false;
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
   const loadMore = async () => {
@@ -89,24 +90,29 @@ export const useLatestMeme = (filter?: MemeFilter) => {
 };
 
 export const useMemeImage = () => {
-  const [loading, setLoading] = useState(false);
   const [url, setUrl] = useState("");
 
+  const loadingState = useRef(true);
+
   const getImage = useCallback(async (id: string) => {
-    setLoading(true);
+    loadingState.current = true;
 
-    const url = await getMemeImage(id);
-    if (url == null) {
-      setLoading(false);
-      return;
+    try {
+      const url = await getMemeImage(id);
+      if (url == null) {
+        return;
+      }
+
+      setUrl(url);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      loadingState.current = false;
     }
-
-    setUrl(url);
-    setLoading(false);
   }, []);
 
   return {
-    loading,
+    loading: loadingState.current,
     url,
     getMemeImage: getImage,
   };

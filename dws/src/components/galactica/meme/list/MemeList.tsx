@@ -4,17 +4,20 @@ import MemeListItem from "./MemeListItem";
 import { ReactElement, memo, useEffect, useRef } from "react";
 import { roboto } from "@/app/fonts";
 import { MemeUpload } from "@/api/galactica/meme/meme.type";
+import AdminMemeListItem from "@/components/admin/list/AdminMemeListItem";
 
 interface MemeListProps {
   memes: MemeUpload[];
   isLoading: boolean;
+  admin?: boolean;
   loadMore: () => void;
 }
 
 const MemeList = ({
   memes,
-  loadMore,
+  admin = false,
   isLoading,
+  loadMore,
 }: MemeListProps): ReactElement<MemeListProps> => {
   const observerTarget = useRef<HTMLDivElement>(null);
 
@@ -49,9 +52,13 @@ const MemeList = ({
 
   return (
     <div className={roboto.className + " relative"}>
-      {memes.map((meme) => (
-        <MemeListItem {...meme} isServerMeme key={meme.fileId} />
-      ))}
+      {memes.map((meme) =>
+        admin ? (
+          <AdminMemeListItem {...meme} isServerMeme key={meme.fileId} />
+        ) : (
+          <MemeListItem {...meme} isServerMeme key={meme.fileId} />
+        )
+      )}
       <div ref={observerTarget}></div>
     </div>
   );

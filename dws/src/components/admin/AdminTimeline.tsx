@@ -29,7 +29,12 @@ const AdminTimeline = ({
 
   return (
     <>
-      <MemeList memes={memes} loadMore={handleLoadMore} isLoading={isLoading} />
+      <MemeList
+        memes={memes}
+        loadMore={handleLoadMore}
+        isLoading={isLoading}
+        admin
+      />
       {isLoading && (
         <div className="py-4 flex items-center justify-center">
           Loading more...
