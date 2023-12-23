@@ -31,14 +31,16 @@ const requestChangeMemeStatus = async (
   return true;
 };
 
-export const approveMeme = async (memeId: string): Promise<boolean> => {
+export const requestApproveMeme = async (memeId: string): Promise<boolean> => {
   return await requestChangeMemeStatus(memeId, "APPROVED");
 };
 
-export const declineMeme = async (memeId: string): Promise<boolean> => {
+export const requestDeclineMeme = async (memeId: string): Promise<boolean> => {
   return await requestChangeMemeStatus(memeId, "DENIED");
 };
 
-export const revertMemeReview = async (memeId: string): Promise<boolean> => {
+export const requestRevertMemeReview = async (
+  memeId: string
+): Promise<boolean> => {
   return await requestChangeMemeStatus(memeId, "PENDING");
 };

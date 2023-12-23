@@ -12,7 +12,8 @@ const AdminTimeline = ({
     status: "PENDING",
   },
 }: AdminTimelineProps): ReactElement<AdminTimelineProps> => {
-  const { memes, hasNext, loadMore, isLoading } = useLatestMeme(filter);
+  const { memes, hasNext, loadMore, isLoading, removeMeme } =
+    useLatestMeme(filter);
 
   const handleLoadMore = async () => {
     if (
@@ -34,6 +35,7 @@ const AdminTimeline = ({
         loadMore={handleLoadMore}
         isLoading={isLoading}
         admin
+        removeMeme={removeMeme}
       />
       {isLoading && (
         <div className="py-4 flex items-center justify-center">

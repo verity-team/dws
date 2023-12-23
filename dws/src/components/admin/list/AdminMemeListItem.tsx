@@ -7,6 +7,11 @@ import { getTimeElapsedString } from "@/utils/utils";
 import { roboto } from "@/app/fonts";
 import AdminToolbar from "./AdminMemeToolbar";
 import { MemeUploadStatus } from "@/components/galactica/meme/meme.type";
+import {
+  requestApproveMeme,
+  requestDeclineMeme,
+} from "@/api/galactica/admin/admin";
+import toast from "react-hot-toast";
 
 interface AdminMemeListItemProps {
   userId: string;
@@ -15,6 +20,7 @@ interface AdminMemeListItemProps {
   createdAt: string;
   status: MemeUploadStatus;
   isServerMeme: boolean;
+  removeMeme: (memeId: string) => void;
 }
 
 const AdminMemeListItem = ({
@@ -24,6 +30,7 @@ const AdminMemeListItem = ({
   createdAt,
   status,
   isServerMeme,
+  removeMeme,
 }: AdminMemeListItemProps): ReactElement<AdminMemeListItemProps> => {
   const { url, loading, getMemeImage } = useMemeImage();
 
@@ -45,6 +52,39 @@ const AdminMemeListItem = ({
       <div className="p-12 flex items-center justify-center">Loading...</div>
     );
   }
+
+  const handleApproveMeme = async () => {
+    const succeed = await requestApproveMeme(fileId);
+    if (!succeed) {
+      toast.error("Failed to approve meme");
+      return;
+    }
+
+    toast.success("Meme approved");
+    removeMeme(fileId);
+  };
+
+  const handleDeclineMeme = async () => {
+    const succeed = await requestDeclineMeme(fileId);
+    if (!succeed) {
+      toast.error("Failed to decline meme");
+      return;
+    }
+
+    toast.success("Meme declined");
+    removeMeme(fileId);
+  };
+
+  const handleRevertMemeStatus = async () => {
+    const succeed = await requestApproveMeme(fileId);
+    if (!succeed) {
+      toast.error("Failed to revert meme's status");
+      return;
+    }
+
+    toast.success("Meme is now in the pending list");
+    removeMeme(fileId);
+  };
 
   return (
     <div className={roboto.className}>
@@ -71,7 +111,12 @@ const AdminMemeListItem = ({
             alt={caption}
           />
         </div>
-        <AdminToolbar memeStatus={status} />
+        <AdminToolbar
+          memeStatus={status}
+          onApprove={handleApproveMeme}
+          onDeny={handleDeclineMeme}
+          onRevert={handleRevertMemeStatus}
+        />
       </div>
     </div>
   );

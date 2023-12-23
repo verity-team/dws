@@ -11,6 +11,7 @@ interface MemeListProps {
   isLoading: boolean;
   admin?: boolean;
   loadMore: () => void;
+  removeMeme?: (memeId: string) => void;
 }
 
 const MemeList = ({
@@ -18,6 +19,7 @@ const MemeList = ({
   admin = false,
   isLoading,
   loadMore,
+  removeMeme = () => {},
 }: MemeListProps): ReactElement<MemeListProps> => {
   const observerTarget = useRef<HTMLDivElement>(null);
 
@@ -54,7 +56,12 @@ const MemeList = ({
     <div className={roboto.className + " relative"}>
       {memes.map((meme) =>
         admin ? (
-          <AdminMemeListItem {...meme} isServerMeme key={meme.fileId} />
+          <AdminMemeListItem
+            {...meme}
+            isServerMeme
+            key={meme.fileId}
+            removeMeme={removeMeme}
+          />
         ) : (
           <MemeListItem {...meme} isServerMeme key={meme.fileId} />
         )

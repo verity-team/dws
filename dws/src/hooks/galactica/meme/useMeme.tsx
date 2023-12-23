@@ -75,6 +75,10 @@ export const useLatestMeme = (filter?: MemeFilter) => {
     }
   };
 
+  const removeMeme = useCallback((memeId: string) => {
+    setMemes((memes) => memes.filter((meme) => meme.fileId !== memeId));
+  }, []);
+
   const clear = () => {
     setMemes([]);
   };
@@ -86,6 +90,7 @@ export const useLatestMeme = (filter?: MemeFilter) => {
     loadInit,
     loadMore,
     clear,
+    removeMeme,
   };
 };
 
