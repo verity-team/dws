@@ -11,7 +11,7 @@ export const useLatestMeme = (filter?: MemeFilter) => {
   const [page, setPage] = useState<number>(0);
   const [total, setTotal] = useState<number>(0);
 
-  const loadingState = useRef(true);
+  const loadingState = useRef(false);
 
   const hasNext = useMemo(() => {
     if (page == 0) {

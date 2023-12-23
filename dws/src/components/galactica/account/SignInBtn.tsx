@@ -13,6 +13,7 @@ import { memo, useContext, useEffect, useState } from "react";
 import Image from "next/image";
 import toast from "react-hot-toast";
 import { sleep } from "@/utils/utils";
+import { DWS_AT_KEY } from "@/utils/const";
 
 const SignInBtn = () => {
   const { connect, disconnect, requestWalletSignature } =
@@ -29,7 +30,7 @@ const SignInBtn = () => {
     }
 
     const handleSignIn = async (walletAddress: string) => {
-      const accessToken = localStorage.getItem("dws-at");
+      const accessToken = localStorage.getItem(DWS_AT_KEY);
       if (accessToken != null && accessToken !== "") {
         // Verify access token with current wallet address
         const isAcessTokenValid = await verifyAccessToken(walletAddress);
@@ -41,7 +42,7 @@ const SignInBtn = () => {
         }
 
         // If current wallet address and access token's wallet address mismatch
-        localStorage.removeItem("dws-at");
+        localStorage.removeItem(DWS_AT_KEY);
       }
 
       await sleep(2000);
@@ -74,7 +75,7 @@ const SignInBtn = () => {
       }
 
       // Store access token
-      localStorage.setItem("dws-at", verifyResult.accessToken);
+      localStorage.setItem(DWS_AT_KEY, verifyResult.accessToken);
       handleConnectSuccess();
     };
 

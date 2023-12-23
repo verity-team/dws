@@ -13,6 +13,7 @@ import {
   requestRevertMemeReview,
 } from "@/api/galactica/admin/admin";
 import toast from "react-hot-toast";
+import { DWS_ADMIN_AT_KEY } from "@/utils/const";
 
 interface AdminMemeListItemProps {
   userId: string;
@@ -56,7 +57,12 @@ const AdminMemeListItem = ({
   }
 
   const handleApproveMeme = async () => {
-    const succeed = await requestApproveMeme(fileId);
+    const accessToken = localStorage.getItem(DWS_ADMIN_AT_KEY);
+    if (!accessToken) {
+      return;
+    }
+
+    const succeed = await requestApproveMeme(accessToken, fileId);
     if (!succeed) {
       toast.error("Failed to approve meme");
       return;
@@ -67,7 +73,12 @@ const AdminMemeListItem = ({
   };
 
   const handleDeclineMeme = async () => {
-    const succeed = await requestDeclineMeme(fileId);
+    const accessToken = localStorage.getItem(DWS_ADMIN_AT_KEY);
+    if (!accessToken) {
+      return;
+    }
+
+    const succeed = await requestDeclineMeme(accessToken, fileId);
     if (!succeed) {
       toast.error("Failed to decline meme");
       return;
@@ -78,7 +89,12 @@ const AdminMemeListItem = ({
   };
 
   const handleRevertMemeStatus = async () => {
-    const succeed = await requestRevertMemeReview(fileId);
+    const accessToken = localStorage.getItem(DWS_ADMIN_AT_KEY);
+    if (!accessToken) {
+      return;
+    }
+
+    const succeed = await requestRevertMemeReview(accessToken, fileId);
     if (!succeed) {
       toast.error("Failed to revert meme's status");
       return;
