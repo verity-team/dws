@@ -5,6 +5,7 @@ import {
 } from "@/utils/baseAPI";
 import { MemeUpload, MemeUploadDTO } from "./meme.type";
 import { Maybe, PaginationRequest, PaginationResponse } from "@/utils";
+import { MemeFilter } from "@/components/galactica/meme/meme.type";
 
 export const uploadMeme = async ({
   meme,
@@ -36,14 +37,19 @@ export const uploadMeme = async ({
 };
 
 export const getLatestMeme = async (
-  pagination: PaginationRequest
+  pagination: PaginationRequest,
+  filter?: MemeFilter
 ): Promise<PaginationResponse<MemeUpload>> => {
+  const searchParams = withFilter(
+    {
+      offset: pagination.offset.toString(),
+      limit: pagination.limit.toString(),
+    },
+    filter
+  );
+
   const response = await clientBaseRequest(
-    "/meme/latest?" +
-      new URLSearchParams({
-        offset: pagination.offset.toString(),
-        limit: pagination.limit.toString(),
-      }),
+    "/meme/latest?" + new URLSearchParams(searchParams),
     HttpMethod.GET,
     null,
     process.env.NEXT_PUBLIC_GALACTICA_API_URL,
@@ -92,4 +98,15 @@ export const getMemeImage = async (id: string): Promise<Maybe<string>> => {
     console.error("Cannot parse response as blob");
     return null;
   }
+};
+
+const withFilter = (
+  searchParams: Record<string, string>,
+  filter?: MemeFilter
+): Record<string, string> => {
+  if (filter == null || filter.status == null) {
+    return searchParams;
+  }
+
+  return { ...searchParams, status: filter.status };
 };

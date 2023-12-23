@@ -17,10 +17,7 @@ import { Maybe } from "@/utils";
 import { uploadMeme } from "@/api/galactica/meme/meme";
 import { ClientWallet } from "@/components/ClientRoot";
 import { useForm } from "react-hook-form";
-import {
-  MemeUploadDTO,
-  OptimisticMemeUpload,
-} from "@/api/galactica/meme/meme.type";
+import { OptimisticMemeUpload } from "@/api/galactica/meme/meme.type";
 
 interface MemeInputProps {
   onUpload: (meme: OptimisticMemeUpload) => void;
@@ -141,7 +138,7 @@ const MemeInput = ({
             />
           </div>
         )}
-        <div className="mt-4 p-2">
+        <div className="p-2">
           <MemeToolbar
             canSubmit={canPost}
             onImageBtnClick={handleImageBtnClick}

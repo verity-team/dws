@@ -5,22 +5,35 @@ import Avatar from "boring-avatars";
 import { getWalletShorthand } from "@/utils/wallet/wallet";
 import { getTimeElapsedString } from "@/utils/utils";
 import { roboto } from "@/app/fonts";
+import AdminToolbar from "./AdminMemeToolbar";
+import { MemeUploadStatus } from "@/components/galactica/meme/meme.type";
+import {
+  requestApproveMeme,
+  requestDeclineMeme,
+  requestRevertMemeReview,
+} from "@/api/galactica/admin/admin";
+import toast from "react-hot-toast";
+import { DWS_ADMIN_AT_KEY } from "@/utils/const";
 
-interface MemeListItemProps {
+interface AdminMemeListItemProps {
   userId: string;
   fileId: string;
   caption: string;
   createdAt: string;
+  status: MemeUploadStatus;
   isServerMeme: boolean;
+  removeMeme: (memeId: string) => void;
 }
 
-const MemeListItem = ({
+const AdminMemeListItem = ({
   userId,
   fileId,
   caption,
   createdAt,
+  status,
   isServerMeme,
-}: MemeListItemProps): ReactElement<MemeListItemProps> => {
+  removeMeme,
+}: AdminMemeListItemProps): ReactElement<AdminMemeListItemProps> => {
   const { url, loading, getMemeImage } = useMemeImage();
 
   useEffect(() => {
@@ -42,6 +55,54 @@ const MemeListItem = ({
       <div className="p-12 flex items-center justify-center">Loading...</div>
     );
   }
+
+  const handleApproveMeme = async () => {
+    const accessToken = localStorage.getItem(DWS_ADMIN_AT_KEY);
+    if (!accessToken) {
+      return;
+    }
+
+    const succeed = await requestApproveMeme(accessToken, fileId);
+    if (!succeed) {
+      toast.error("Failed to approve meme");
+      return;
+    }
+
+    toast.success("Meme approved");
+    removeMeme(fileId);
+  };
+
+  const handleDeclineMeme = async () => {
+    const accessToken = localStorage.getItem(DWS_ADMIN_AT_KEY);
+    if (!accessToken) {
+      return;
+    }
+
+    const succeed = await requestDeclineMeme(accessToken, fileId);
+    if (!succeed) {
+      toast.error("Failed to decline meme");
+      return;
+    }
+
+    toast.success("Meme declined");
+    removeMeme(fileId);
+  };
+
+  const handleRevertMemeStatus = async () => {
+    const accessToken = localStorage.getItem(DWS_ADMIN_AT_KEY);
+    if (!accessToken) {
+      return;
+    }
+
+    const succeed = await requestRevertMemeReview(accessToken, fileId);
+    if (!succeed) {
+      toast.error("Failed to revert meme's status");
+      return;
+    }
+
+    toast.success("Meme is now in the pending list");
+    removeMeme(fileId);
+  };
 
   return (
     <div className={roboto.className}>
@@ -68,9 +129,15 @@ const MemeListItem = ({
             alt={caption}
           />
         </div>
+        <AdminToolbar
+          memeStatus={status}
+          onApprove={handleApproveMeme}
+          onDeny={handleDeclineMeme}
+          onRevert={handleRevertMemeStatus}
+        />
       </div>
     </div>
   );
 };
 
-export default MemeListItem;
+export default AdminMemeListItem;

@@ -29,7 +29,7 @@ export const requestNonce = async (): Promise<Maybe<NonceInfo>> => {
 
 export const verifyAccessToken = async (address: string): Promise<boolean> => {
   const response = await clientBaseRequest(
-    "/auth/verify/jwt",
+    "/auth/verify/user",
     HttpMethod.POST,
     { address },
     process.env.NEXT_PUBLIC_GALACTICA_API_URL,

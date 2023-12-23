@@ -1,6 +1,7 @@
 import { Nullable, Maybe } from "@/utils";
 import { Revalidator } from "swr";
 import { getExponentialWaitTime } from "./utils";
+import { DWS_AT_KEY } from "./const";
 
 export enum HttpMethod {
   GET = "GET",
@@ -81,7 +82,7 @@ export const baseFormRequest = async (
 
   const headers = new Headers();
   if (config.auth) {
-    const accessToken = localStorage.getItem("dws-at");
+    const accessToken = localStorage.getItem(DWS_AT_KEY);
     if (accessToken == null) {
       return null;
     }
@@ -177,7 +178,7 @@ export const clientBaseRequest = async (
 
   if (auth) {
     const headers = getDefaultHeaders();
-    const accessToken = localStorage.getItem("dws-at");
+    const accessToken = localStorage.getItem(DWS_AT_KEY);
     if (!accessToken) {
       console.log("Cannot send auth request without access token");
       return null;

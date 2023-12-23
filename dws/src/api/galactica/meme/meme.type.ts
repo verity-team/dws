@@ -1,3 +1,5 @@
+import { MemeUploadStatus } from "@/components/galactica/meme/meme.type";
+
 export interface MemeUploadDTO {
   userId: string;
   meme: File;
@@ -8,6 +10,7 @@ export interface MemeUpload {
   fileId: string;
   userId: string;
   caption: string;
+  status: MemeUploadStatus;
   lang: string;
   tags: string[];
   createdAt: string;

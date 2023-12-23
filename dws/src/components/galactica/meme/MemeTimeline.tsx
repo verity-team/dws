@@ -1,52 +1,40 @@
 "use client";
 
-import ClientRoot from "@/components/ClientRoot";
 import SignInBtn from "../account/SignInBtn";
 import MemeInput from "./MemeInput";
 import MemeList from "./list/MemeList";
 import { useLatestMeme } from "@/hooks/galactica/meme/useMeme";
-import { useEffect, useCallback, useTransition, useState } from "react";
+import { useCallback, useState, ReactElement } from "react";
 import { OptimisticMemeUpload } from "@/api/galactica/meme/meme.type";
 import MemeListItem from "./list/MemeListItem";
+import { MemeFilter } from "./meme.type";
 
-const MemePage = () => {
-  const {
-    memes,
-    hasNext,
-    loadInit,
-    loadMore,
-    loading: memeLoading,
-  } = useLatestMeme();
+interface MemeTimelineProps {
+  filter?: MemeFilter;
+}
 
-  const [isPending, startTransition] = useTransition();
+// Default to load latest approved memes
+const MemeTimeline = ({
+  filter = {
+    status: "PENDING",
+  },
+}: MemeTimelineProps): ReactElement<MemeTimelineProps> => {
+  const { memes, loadMore, isLoading, hasNext } = useLatestMeme(filter);
+
   const [userMemes, setUserMemes] = useState<OptimisticMemeUpload[]>([]);
 
-  useEffect(() => {
-    loadInit();
-  }, []);
-
-  const handleLoadMore = useCallback(async () => {
-    if (!hasNext || memeLoading) {
-      return;
-    }
-
-    await loadMore();
-  }, [hasNext, memeLoading, loadMore]);
-
-  const startLoadMoreTransition = useCallback(() => {
-    if (isPending) {
-      return;
-    }
-
+  const handleLoadMore = async () => {
     if (
+      isLoading ||
+      !hasNext ||
       window.innerHeight + document.documentElement.scrollTop <
-      document.documentElement.offsetHeight * 0.9
+        document.documentElement.offsetHeight * 0.9
     ) {
       return;
     }
 
-    startTransition(handleLoadMore);
-  }, [handleLoadMore, isPending]);
+    await loadMore();
+  };
 
   // Optimistically update the meme list UI after user upload their meme
   const handleMemeUpload = useCallback((meme: OptimisticMemeUpload) => {
@@ -60,7 +48,7 @@ const MemePage = () => {
   }, []);
 
   return (
-    <ClientRoot>
+    <>
       <div className="flex items-center justify-between">
         <h1 className="text-4xl font-bold">#Truthmemes</h1>
         <SignInBtn />
@@ -72,15 +60,15 @@ const MemePage = () => {
         {userMemes.map((meme, i) => (
           <MemeListItem {...meme} isServerMeme={false} key={i} />
         ))}
-        <MemeList memes={memes} loadMore={startLoadMoreTransition} />
-        {memeLoading && (
+        <MemeList memes={memes} loadMore={handleLoadMore} />
+        {isLoading && (
           <div className="py-4 flex items-center justify-center">
             Loading more...
           </div>
         )}
       </div>
-    </ClientRoot>
+    </>
   );
 };
 
-export default MemePage;
+export default MemeTimeline;

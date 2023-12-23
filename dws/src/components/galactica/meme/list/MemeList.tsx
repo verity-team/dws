@@ -1,27 +1,25 @@
 "use client";
 
-import { useLatestMeme } from "@/hooks/galactica/meme/useMeme";
 import MemeListItem from "./MemeListItem";
-import {
-  ReactElement,
-  memo,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useTransition,
-} from "react";
+import { ReactElement, memo, useEffect, useRef } from "react";
 import { roboto } from "@/app/fonts";
 import { MemeUpload } from "@/api/galactica/meme/meme.type";
+import AdminMemeListItem from "@/components/admin/list/AdminMemeListItem";
 
 interface MemeListProps {
   memes: MemeUpload[];
+  isLoading: boolean;
+  admin?: boolean;
   loadMore: () => void;
+  removeMeme?: (memeId: string) => void;
 }
 
 const MemeList = ({
   memes,
+  admin = false,
+  isLoading,
   loadMore,
+  removeMeme = () => {},
 }: MemeListProps): ReactElement<MemeListProps> => {
   const observerTarget = useRef<HTMLDivElement>(null);
 
@@ -40,16 +38,13 @@ const MemeList = ({
       return;
     }
 
-    if (observerTarget.current) {
-      observer.observe(flag);
-    }
-
+    observer.observe(flag);
     return () => {
       observer.unobserve(flag);
     };
-  }, [observerTarget, loadMore]);
+  }, [loadMore]);
 
-  if (memes.length === 0) {
+  if (memes.length === 0 && !isLoading) {
     return (
       <div className="py-8 flex items-center justify-center">
         No memes for today
@@ -59,10 +54,18 @@ const MemeList = ({
 
   return (
     <div className={roboto.className + " relative"}>
-      {memes.map((meme) => (
-        <MemeListItem {...meme} isServerMeme key={meme.fileId} />
-      ))}
-
+      {memes.map((meme) =>
+        admin ? (
+          <AdminMemeListItem
+            {...meme}
+            isServerMeme
+            key={meme.fileId}
+            removeMeme={removeMeme}
+          />
+        ) : (
+          <MemeListItem {...meme} isServerMeme key={meme.fileId} />
+        )
+      )}
       <div ref={observerTarget}></div>
     </div>
   );
