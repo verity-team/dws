@@ -44,9 +44,12 @@ export const useLatestMeme = (filter?: MemeFilter) => {
   };
 
   useEffect(() => {
-    loadInit().finally(() => {
+    const init = async () => {
+      await loadInit();
       loadingState.current = false;
-    });
+    };
+
+    init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 

@@ -10,6 +10,7 @@ import { MemeUploadStatus } from "@/components/galactica/meme/meme.type";
 import {
   requestApproveMeme,
   requestDeclineMeme,
+  requestRevertMemeReview,
 } from "@/api/galactica/admin/admin";
 import toast from "react-hot-toast";
 
@@ -41,6 +42,7 @@ const AdminMemeListItem = ({
     }
 
     getMemeImage(fileId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const dateDescription = useMemo(() => {
@@ -76,7 +78,7 @@ const AdminMemeListItem = ({
   };
 
   const handleRevertMemeStatus = async () => {
-    const succeed = await requestApproveMeme(fileId);
+    const succeed = await requestRevertMemeReview(fileId);
     if (!succeed) {
       toast.error("Failed to revert meme's status");
       return;

@@ -34,16 +34,16 @@ const AdminToolbar = ({
 
   return (
     <>
-      <div className="mt-12 text-2xl">Review:</div>
+      <div className="mt-12 text-xl">Review:</div>
       <div className="w-full py-2 text-white space-x-4 flex items-center justify-start">
         <button
-          className="px-6 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg"
+          className="px-6 py-2 bg-red-500 hover:bg-red-600 rounded-lg"
           onClick={onDeny}
         >
           Decline
         </button>
         <button
-          className="px-6 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg"
+          className="px-6 py-2 bg-green-500 hover:bg-green-600 rounded-lg"
           onClick={onApprove}
         >
           Approve
