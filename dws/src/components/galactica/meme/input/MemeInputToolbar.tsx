@@ -7,7 +7,7 @@ interface MemeToolbarProps {
   canSubmit: boolean;
 }
 
-const MemeToolbar = ({
+const MemeInputToolbar = ({
   canSubmit,
   onImageBtnClick,
   onPostBtnClick,
@@ -28,4 +28,4 @@ const MemeToolbar = ({
   );
 };
 
-export default MemeToolbar;
+export default MemeInputToolbar;

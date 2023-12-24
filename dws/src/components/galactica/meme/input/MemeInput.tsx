@@ -11,7 +11,7 @@ import {
 import Image from "next/image";
 import CloseIcon from "@mui/icons-material/Close";
 import MemeDropArea from "./MemeDropArea";
-import MemeToolbar from "./MemeToolbar";
+import MemeInputToolbar from "./MemeInputToolbar";
 import toast from "react-hot-toast";
 import { Maybe } from "@/utils";
 import { uploadMeme } from "@/api/galactica/meme/meme";
@@ -138,8 +138,8 @@ const MemeInput = ({
             />
           </div>
         )}
-        <div className="p-2">
-          <MemeToolbar
+        <div className="mt-4 p-2">
+          <MemeInputToolbar
             canSubmit={canPost}
             onImageBtnClick={handleImageBtnClick}
             onPostBtnClick={handleMemeUpload}

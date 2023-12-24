@@ -1,7 +1,7 @@
 "use client";
 
 import SignInBtn from "../account/SignInBtn";
-import MemeInput from "./MemeInput";
+import MemeInput from "./input/MemeInput";
 import MemeList from "./list/MemeList";
 import { useLatestMeme } from "@/hooks/galactica/meme/useMeme";
 import { useCallback, useState, ReactElement } from "react";

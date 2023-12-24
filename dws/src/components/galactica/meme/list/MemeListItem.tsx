@@ -5,6 +5,7 @@ import Avatar from "boring-avatars";
 import { getWalletShorthand } from "@/utils/wallet/wallet";
 import { getTimeElapsedString } from "@/utils/utils";
 import { roboto } from "@/app/fonts";
+import ItemToolbar from "./toolbar/ItemToolbar";
 
 interface MemeListItemProps {
   userId: string;
@@ -45,7 +46,7 @@ const MemeListItem = ({
 
   return (
     <div className={roboto.className}>
-      <div className="w-full py-8 border-t border-b border-gray-100">
+      <div className="w-full mt-6 border-t border-b border-gray-100">
         <div className="flex items-center justify-start space-x-4">
           <Avatar size={40} name={userId} variant="marble" />
           <div>
@@ -67,6 +68,9 @@ const MemeListItem = ({
             className="object-contain w-auto max-w-[80%] max-h-[40vh]"
             alt={caption}
           />
+        </div>
+        <div className="mt-2">
+          <ItemToolbar />
         </div>
       </div>
     </div>
