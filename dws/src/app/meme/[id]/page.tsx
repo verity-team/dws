@@ -12,7 +12,6 @@ import { Metadata } from "next";
 const prepareMetadata: Metadata = {
   twitter: {
     card: "summary_large_image",
-    site: "@_truthmemes_",
     description: "Join the Truthmemes army and deliver the truth to everyone!",
     images: [],
   },
@@ -39,6 +38,7 @@ const SingleMemePage = async ({
   if (prepareMetadata.twitter) {
     prepareMetadata.twitter.images = [memeImage];
     prepareMetadata.twitter.title = caption;
+    prepareMetadata.twitter.site = process.env.HOST_URL;
   }
 
   return (
@@ -53,7 +53,7 @@ const SingleMemePage = async ({
             <ArrowBackIcon fontSize="medium" />
             <p className="text-lg">Back to timeline</p>
           </a>
-          <div className="w-full mt-6 border-t border-b border-gray-100">
+          <div className="w-full mt-6 border-b border-gray-100">
             <div className="flex items-center justify-start space-x-4">
               <Avatar size={40} name={userId} variant="marble" />
               <div>
@@ -77,7 +77,9 @@ const SingleMemePage = async ({
                 priority={true}
               />
             </div>
-            <div className="mt-2">{/* <ItemToolbar /> */}</div>
+            <div className="mt-2">
+              <ItemToolbar />
+            </div>
           </div>
         </div>
       </div>

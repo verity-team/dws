@@ -2,7 +2,7 @@ import MemeTimeline from "@/components/galactica/meme/MemeTimeline";
 
 const TruthMemePage = () => {
   return (
-    <div className="grid grid-cols-12">
+    <div className="grid grid-cols-12 mt-12">
       <div className="col-span-3"></div>
       <div className="col-span-6">
         <MemeTimeline />
