@@ -6,6 +6,7 @@ import {
 import { MemeUpload, MemeUploadDTO } from "./meme.type";
 import { Maybe, PaginationRequest, PaginationResponse } from "@/utils";
 import { MemeFilter } from "@/components/galactica/meme/meme.type";
+import { baseGalacticaRequest } from "@/utils/baseApiV2";
 
 export const uploadMeme = async ({
   meme,
@@ -78,22 +79,46 @@ export const getLatestMeme = async (
   }
 };
 
-export const getMemeImage = async (id: string): Promise<Maybe<string>> => {
-  const response = await clientBaseRequest(
-    `/meme/image/${id}`,
-    HttpMethod.GET,
-    null,
-    process.env.NEXT_PUBLIC_GALACTICA_API_URL,
-    true
-  );
+export const getSingleMeme = async (id: string): Promise<Maybe<MemeUpload>> => {
+  const path = `/meme/${id}`;
 
-  if (response == null || !response.ok) {
+  let response = null;
+  try {
+    response = await baseGalacticaRequest("GET", { path });
+    if (response == null || !response.ok) {
+      return null;
+    }
+  } catch (error) {
+    console.error("Request error:", JSON.stringify(error, null, 2));
+    return null;
+  }
+
+  try {
+    const data = await response.json();
+    return data;
+  } catch {
+    console.error("Failed to parse data");
+    return null;
+  }
+};
+
+export const getMemeImage = async (id: string): Promise<Maybe<Blob>> => {
+  const path = `/meme/image/${id}`;
+
+  let response = null;
+  try {
+    response = await baseGalacticaRequest("GET", { path });
+    if (response == null || !response.ok) {
+      return null;
+    }
+  } catch (error) {
+    console.error("Request error:", JSON.stringify(error, null, 2));
     return null;
   }
 
   try {
     const file = await response.blob();
-    return URL.createObjectURL(file);
+    return file;
   } catch {
     console.error("Cannot parse response as blob");
     return null;

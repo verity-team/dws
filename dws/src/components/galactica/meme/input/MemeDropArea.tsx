@@ -9,6 +9,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import MemeInputToolbar from "./MemeInputToolbar";
 
 interface MemeDropAreaProps {
   onMemeChange: (file: File) => void;

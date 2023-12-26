@@ -5,6 +5,7 @@ export const changa_one = Changa_One({
   weight: "400",
   style: "normal",
   display: "swap",
+  variable: "--font-changa",
 });
 
 export const roboto = Roboto({
@@ -12,4 +13,5 @@ export const roboto = Roboto({
   weight: ["100", "300", "400", "500", "700"],
   style: "normal",
   display: "swap",
+  variable: "--font-roboto",
 });

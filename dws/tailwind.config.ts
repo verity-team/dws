@@ -21,6 +21,10 @@ const config: Config = {
         "loose-xl": "3.75rem",
         "loose-2xl": "5rem",
       },
+      fontFamily: {
+        changa: ["var(--font-changa)"],
+        roboto: ["var(--font-roboto)"],
+      },
     },
   },
 };
