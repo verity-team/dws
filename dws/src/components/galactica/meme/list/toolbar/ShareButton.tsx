@@ -1,12 +1,5 @@
 import { useToggle } from "@/hooks/utils/useToggle";
-import {
-  Dialog,
-  DialogContent,
-  Menu,
-  MenuItem,
-  MenuList,
-  Paper,
-} from "@mui/material";
+import { Menu, MenuItem } from "@mui/material";
 import ShareIcon from "@mui/icons-material/Share";
 import LinkIcon from "@mui/icons-material/Link";
 import { TwitterShareButton, TwitterIcon } from "react-share";
@@ -23,11 +16,11 @@ const ShareButton = () => {
   const [anchorEl, setAnchorEl] = useState<Nullable<HTMLButtonElement>>(null);
 
   const handleShareClick = (event: SyntheticEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+
     setAnchorEl(event.currentTarget);
     openShareDropdown();
   };
-
-  encodeURI;
 
   return (
     <>

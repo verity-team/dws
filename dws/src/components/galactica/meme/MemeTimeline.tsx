@@ -8,6 +8,7 @@ import { useCallback, useState, ReactElement } from "react";
 import { OptimisticMemeUpload } from "@/api/galactica/meme/meme.type";
 import MemeListItem from "./list/MemeListItem";
 import { MemeFilter } from "./meme.type";
+import { useRouter } from "next/router";
 
 interface MemeTimelineProps {
   filter?: MemeFilter;
@@ -16,11 +17,10 @@ interface MemeTimelineProps {
 // Default to load latest approved memes
 const MemeTimeline = ({
   filter = {
-    status: "PENDING",
+    status: "APPROVED",
   },
 }: MemeTimelineProps): ReactElement<MemeTimelineProps> => {
   const { memes, loadMore, isLoading, hasNext } = useLatestMeme(filter);
-
   const [userMemes, setUserMemes] = useState<OptimisticMemeUpload[]>([]);
 
   const handleLoadMore = async () => {
@@ -60,7 +60,11 @@ const MemeTimeline = ({
         {userMemes.map((meme, i) => (
           <MemeListItem {...meme} isServerMeme={false} key={i} />
         ))}
-        <MemeList memes={memes} loadMore={handleLoadMore} />
+        <MemeList
+          memes={memes}
+          loadMore={handleLoadMore}
+          isLoading={isLoading}
+        />
         {isLoading && (
           <div className="py-4 flex items-center justify-center">
             Loading more...
