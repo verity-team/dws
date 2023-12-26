@@ -106,12 +106,12 @@ export const useMemeImage = () => {
     loadingState.current = true;
 
     try {
-      const url = await getMemeImage(id);
-      if (url == null) {
+      const blob = await getMemeImage(id);
+      if (blob == null) {
         return;
       }
 
-      setUrl(url);
+      setUrl(URL.createObjectURL(blob));
     } catch (error) {
       console.error(error);
     } finally {

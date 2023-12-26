@@ -102,7 +102,7 @@ export const getSingleMeme = async (id: string): Promise<Maybe<MemeUpload>> => {
   }
 };
 
-export const getMemeImage = async (id: string): Promise<Maybe<string>> => {
+export const getMemeImage = async (id: string): Promise<Maybe<Blob>> => {
   const path = `/meme/image/${id}`;
 
   let response = null;
@@ -118,7 +118,7 @@ export const getMemeImage = async (id: string): Promise<Maybe<string>> => {
 
   try {
     const file = await response.blob();
-    return URL.createObjectURL(file);
+    return file;
   } catch {
     console.error("Cannot parse response as blob");
     return null;

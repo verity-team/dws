@@ -1,18 +1,22 @@
-"use client";
-
-import { getMemeImage, getSingleMeme } from "@/api/galactica/meme/meme";
-import { MemeUpload } from "@/api/galactica/meme/meme.type";
+import { getSingleMeme } from "@/api/galactica/meme/meme";
 import { roboto } from "@/app/fonts";
 import ItemToolbar from "@/components/galactica/meme/list/toolbar/ItemToolbar";
-import { Maybe } from "@/utils";
 import { getTimeElapsedString } from "@/utils/utils";
 import { getWalletShorthand } from "@/utils/wallet/wallet";
-import { CircularProgress } from "@mui/material";
 import Avatar from "boring-avatars";
 import Image from "next/image";
-import { ReactElement, useEffect, useState } from "react";
+import { ReactElement } from "react";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import { redirect } from "next/navigation";
+import { Metadata } from "next";
+
+const prepareMetadata: Metadata = {
+  twitter: {
+    card: "summary_large_image",
+    site: "@_truthmemes_",
+    description: "Join the Truthmemes army and deliver the truth to everyone!",
+    images: [],
+  },
+};
 
 interface SingleMemePageProps {
   params: {
@@ -20,37 +24,22 @@ interface SingleMemePageProps {
   };
 }
 
-const SingleMemePage = ({
+const SingleMemePage = async ({
   params,
-}: SingleMemePageProps): ReactElement<SingleMemePageProps> => {
-  const [memeData, setMemeData] = useState<Maybe<MemeUpload>>(null);
-  const [memeImage, setMemeImage] = useState<string>("");
-
-  useEffect(() => {
-    const loadInit = async () => {
-      const data = await getSingleMeme(params.id);
-      if (data == null) {
-        throw new Error("Cannot find meme");
-      }
-
-      const memeImage = await getMemeImage(data.fileId);
-
-      setMemeData(data);
-      setMemeImage(memeImage ?? "");
-    };
-
-    loadInit();
-  }, [params]);
-
+}: SingleMemePageProps): Promise<ReactElement<SingleMemePageProps>> => {
+  const memeData = await getSingleMeme(params.id);
   if (memeData == null) {
-    return (
-      <div className="w-full h-screen flex items-center justify-center">
-        <CircularProgress size={100} />
-      </div>
-    );
+    throw new Error("Cannot find meme");
   }
 
-  const { userId, createdAt, caption } = memeData;
+  const { fileId, userId, createdAt, caption } = memeData;
+
+  const memeImage = `${process.env.GALACTICA_API_URL}/meme/image/${fileId}`;
+
+  if (prepareMetadata.twitter) {
+    prepareMetadata.twitter.images = [memeImage];
+    prepareMetadata.twitter.title = caption;
+  }
 
   return (
     <div className="grid grid-cols-12">
@@ -58,7 +47,7 @@ const SingleMemePage = ({
       <div className="col-span-6">
         <div className={roboto.className}>
           <a
-            className="flex items-center my-8 hover:text-blue-500 hover:underline cursor-pointer"
+            className="flex items-center my-8 hover:text-blue-500 hover:underline cursor-pointer space-x-4"
             href="/meme"
           >
             <ArrowBackIcon fontSize="medium" />
@@ -81,16 +70,14 @@ const SingleMemePage = ({
             <div className="flex items-center justify-center mt-4">
               <Image
                 src={memeImage}
-                width={0}
-                height={0}
+                width={1000}
+                height={1000}
                 className="object-contain w-auto max-w-[80%] max-h-[40vh]"
                 alt={caption}
                 priority={true}
               />
             </div>
-            <div className="mt-2">
-              <ItemToolbar />
-            </div>
+            <div className="mt-2">{/* <ItemToolbar /> */}</div>
           </div>
         </div>
       </div>
@@ -99,4 +86,5 @@ const SingleMemePage = ({
   );
 };
 
+export const metadata = prepareMetadata;
 export default SingleMemePage;
