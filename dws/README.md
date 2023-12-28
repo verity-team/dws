@@ -36,8 +36,14 @@ yarn set version classic
 
     - `NEXT_PUBLIC_TARGET_NETWORK_RPC`: Target chain's RPC endpoint. Example: `https://rpc.sepolia.org` for Sepolia Testnet
 
+  - Public environment variables for Galactica server
+
+    - `NEXT_PUBLIC_GALACTICA_API_URL`: Galactica API server's URL
+
   - Private environment variables, use on the backend side
-    - `API_URL`: Specify real backend APIs host
+    - `DWS_API_URL`: Donation Website API server's URL
+    - `HOST_URL`: The frontend root host
+      - This is needed to show Twitter card when sharing to Twitter. More about [Twitter Card](https://developer.twitter.com/en/docs/twitter-for-websites/cards/overview/abouts-cards)
     - `API_TIMEOUT`: Specify API request default timeout (in ms)
 
 ## Getting Started
