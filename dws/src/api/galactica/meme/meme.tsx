@@ -7,6 +7,7 @@ import { MemeUpload, MemeUploadDTO } from "./meme.type";
 import { Maybe, PaginationRequest, PaginationResponse } from "@/utils";
 import { MemeFilter } from "@/components/galactica/meme/meme.type";
 import { baseGalacticaRequest } from "@/utils/baseApiV2";
+import toast from "react-hot-toast";
 
 export const uploadMeme = async ({
   meme,
@@ -66,6 +67,9 @@ export const getLatestMeme = async (
   };
 
   if (response == null || !response.ok) {
+    if (response?.status === 429) {
+      toast.error("Too many request. Please try again later");
+    }
     console.error("Failed to get latest memes");
     return defaultData;
   }
@@ -86,6 +90,9 @@ export const getSingleMeme = async (id: string): Promise<Maybe<MemeUpload>> => {
   try {
     response = await baseGalacticaRequest("GET", { path });
     if (response == null || !response.ok) {
+      if (response?.status === 429) {
+        toast.error("Too many request. Please try again later");
+      }
       return null;
     }
   } catch (error) {
@@ -109,6 +116,9 @@ export const getMemeImage = async (id: string): Promise<Maybe<Blob>> => {
   try {
     response = await baseGalacticaRequest("GET", { path });
     if (response == null || !response.ok) {
+      if (response?.status === 429) {
+        toast.error("Too many request. Please try again later");
+      }
       return null;
     }
   } catch (error) {
