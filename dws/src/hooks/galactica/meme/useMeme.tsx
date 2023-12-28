@@ -50,8 +50,9 @@ export const useLatestMeme = (filter?: MemeFilter) => {
     };
 
     init();
+    console.log("Loading init", filter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter]);
+  }, [filter?.status]);
 
   const loadMore = async () => {
     if (loadingState.current || !hasNext) {

@@ -3,10 +3,16 @@ import { Menu, MenuItem } from "@mui/material";
 import ShareIcon from "@mui/icons-material/Share";
 import LinkIcon from "@mui/icons-material/Link";
 import { TwitterShareButton, TwitterIcon } from "react-share";
-import { SyntheticEvent, useState } from "react";
+import { ReactElement, SyntheticEvent, useState } from "react";
 import { Nullable } from "@/utils";
 
-const ShareButton = () => {
+interface ShareButtonProps {
+  memeId: string;
+}
+
+const ShareButton = ({
+  memeId,
+}: ShareButtonProps): ReactElement<ShareButtonProps> => {
   const {
     isOpen,
     open: openShareDropdown,
@@ -49,7 +55,7 @@ const ShareButton = () => {
         <MenuItem>
           <TwitterShareButton
             title="Check out this fresh meme on TruthMemes!"
-            url={"https://truthmemes.io/"}
+            url={`${window.location.href}/${memeId}`}
             hashtags={["memes", "truthmemes"]}
             className="w-full"
           >

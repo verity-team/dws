@@ -1,12 +1,18 @@
 "use client";
 
 import ThumbUpIconOutlined from "@mui/icons-material/ThumbUpOutlined";
-import { SyntheticEvent, useCallback } from "react";
+import { ReactElement, SyntheticEvent, useCallback } from "react";
 import toast from "react-hot-toast";
 import ShareButton from "./ShareButton";
 
+interface ItemToolbarProps {
+  memeId: string;
+}
+
 // TODO: Separate actions into different components when features other than "Share" are ready
-const ItemToolbar = () => {
+const ItemToolbar = ({
+  memeId,
+}: ItemToolbarProps): ReactElement<ItemToolbarProps> => {
   const handleLikeClick = useCallback((event: SyntheticEvent) => {
     event.stopPropagation();
     toast("Coming soon...", { icon: "🚧" });
@@ -23,7 +29,7 @@ const ItemToolbar = () => {
         <div className="ml-1.5 text-lg font-changa">Like</div>
       </button>
       <div></div>
-      <ShareButton />
+      <ShareButton memeId={memeId} />
     </div>
   );
 };

@@ -8,7 +8,6 @@ import { useCallback, useState, ReactElement } from "react";
 import { OptimisticMemeUpload } from "@/api/galactica/meme/meme.type";
 import MemeListItem from "./list/MemeListItem";
 import { MemeFilter } from "./meme.type";
-import { useRouter } from "next/router";
 
 interface MemeTimelineProps {
   filter?: MemeFilter;
