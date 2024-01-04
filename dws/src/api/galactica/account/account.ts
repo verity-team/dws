@@ -2,7 +2,6 @@ import { Maybe } from "@/utils";
 import { clientBaseRequest, HttpMethod } from "@/utils/baseAPI";
 import {
   NonceInfo,
-  VerifyAccessTokenPayload,
   VerifySignaturePayload,
   VerifySignatureResponse,
 } from "./account.type";

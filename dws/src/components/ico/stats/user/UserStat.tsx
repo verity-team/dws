@@ -1,4 +1,5 @@
-import { useUserDonationData } from "@/api/dws/donation/donation";
+import { useUserDonationData } from "@/api/dws/user/user";
+
 import { ReactElement } from "react";
 
 interface UserStatProps {

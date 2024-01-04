@@ -78,7 +78,7 @@ const SingleMemePage = async ({
               />
             </div>
             <div className="mt-2">
-              <ItemToolbar />
+              <ItemToolbar memeId={fileId} />
             </div>
           </div>
         </div>

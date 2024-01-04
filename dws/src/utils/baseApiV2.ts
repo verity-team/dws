@@ -18,8 +18,8 @@ export const baseRequest = async (
   method: HttpMethod,
   { path, headers, payload, json }: RequestConfig
 ): Promise<Response> => {
-  let requestHeaders = null;
-  if (headers == null && json) {
+  let requestHeaders = headers;
+  if (requestHeaders == null && json) {
     requestHeaders = getDefaultJsonHeaders();
   } else {
     requestHeaders = new Headers();
