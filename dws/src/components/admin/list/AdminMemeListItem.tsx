@@ -13,7 +13,7 @@ import {
   requestRevertMemeReview,
 } from "@/api/galactica/admin/admin";
 import toast from "react-hot-toast";
-import { DWS_ADMIN_AT_KEY } from "@/utils/const";
+import { DWS_AT_KEY } from "@/utils/const";
 
 interface AdminMemeListItemProps {
   userId: string;
@@ -57,7 +57,7 @@ const AdminMemeListItem = ({
   }
 
   const handleApproveMeme = async () => {
-    const accessToken = localStorage.getItem(DWS_ADMIN_AT_KEY);
+    const accessToken = localStorage.getItem(DWS_AT_KEY);
     if (!accessToken) {
       return;
     }
@@ -73,7 +73,7 @@ const AdminMemeListItem = ({
   };
 
   const handleDeclineMeme = async () => {
-    const accessToken = localStorage.getItem(DWS_ADMIN_AT_KEY);
+    const accessToken = localStorage.getItem(DWS_AT_KEY);
     if (!accessToken) {
       return;
     }
@@ -89,7 +89,7 @@ const AdminMemeListItem = ({
   };
 
   const handleRevertMemeStatus = async () => {
-    const accessToken = localStorage.getItem(DWS_ADMIN_AT_KEY);
+    const accessToken = localStorage.getItem(DWS_AT_KEY);
     if (!accessToken) {
       return;
     }
