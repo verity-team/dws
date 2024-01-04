@@ -7,7 +7,7 @@ import {
 import AdminTimeline from "@/components/admin/AdminTimeline";
 import TextError from "@/components/common/TextError";
 import { MemeUploadStatus } from "@/components/galactica/meme/meme.type";
-import { DWS_ADMIN_AT_KEY } from "@/utils/const";
+import { DWS_AT_KEY } from "@/utils/const";
 import { Box, Tabs, Tab } from "@mui/material";
 import Image from "next/image";
 import { SyntheticEvent, useEffect, useState } from "react";
@@ -38,7 +38,7 @@ const AdminPage = () => {
 
   useEffect(() => {
     const authenticate = async () => {
-      const accessToken = localStorage.getItem(DWS_ADMIN_AT_KEY);
+      const accessToken = localStorage.getItem(DWS_AT_KEY);
       if (!accessToken) {
         return;
       }
@@ -68,7 +68,7 @@ const AdminPage = () => {
       return;
     }
 
-    localStorage.setItem(DWS_ADMIN_AT_KEY, accessToken);
+    localStorage.setItem(DWS_AT_KEY, accessToken);
     setSignedIn(true);
   };
 
