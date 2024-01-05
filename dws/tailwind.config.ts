@@ -6,6 +6,7 @@ export const customColors = {
   cgreen: "#FDEEA9",
   cblue: "#F4F4F4",
   cyellow: "ffde00",
+  corange: "#f93",
 };
 
 const config: Config = {

@@ -1,8 +1,9 @@
-import { ReactElement, ReactNode } from "react";
+import clsx from "clsx";
+import { HTMLAttributes, ReactElement, ReactNode } from "react";
 
 interface BannerSectionProps {
   children: ReactNode;
-  className: string | undefined;
+  className?: HTMLAttributes<HTMLDivElement>["className"];
 }
 
 const BannerSection = ({
@@ -10,11 +11,9 @@ const BannerSection = ({
   className,
 }: BannerSectionProps): ReactElement<BannerSectionProps> => {
   return (
-    <section className={className}>
-      <div className="px-24 py-12 flex items-center justify-center">
-        <div className="max-w-4xl flex flex-col items-start justify-center">
-          {children}
-        </div>
+    <section className={clsx(className, "mx-8")}>
+      <div className="max-w-4xl flex flex-col items-start justify-center">
+        {children}
       </div>
     </section>
   );

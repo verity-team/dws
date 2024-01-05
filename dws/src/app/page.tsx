@@ -8,6 +8,8 @@ import Roadmap from "@/components/landing/roadmap/Roadmap";
 import Donate from "@/components/ico/donatev2/Donate";
 import dynamic from "next/dynamic";
 import LandingClientRoot from "@/components/landing/LandingClientRoot";
+import StoryBanner from "@/components/landing/banner/StoryBanner";
+import CommunityBanner from "@/components/landing/banner/CommunityBanner";
 
 const LaunchTimer = dynamic(
   () => import("@/components/landing/banner/LaunchTimer"),
@@ -22,8 +24,27 @@ export default function Home() {
         <div className="px-24 pt-10">
           <LaunchTimer />
         </div>
+      </div> */}
+      <div className="mt-12">
+        <Banner />
       </div>
-      <Banner /> */}
+
+      <div>
+        <StoryBanner />
+      </div>
+
+      <div>
+        <MemeSlideshow />
+      </div>
+
+      <div className="mt-8">
+        <CommunityBanner />
+      </div>
+
+      <div>
+        <Newsletter />
+      </div>
+
       {/* <div className="my-2">
         <UploadMemeButton />
       </div> */}
