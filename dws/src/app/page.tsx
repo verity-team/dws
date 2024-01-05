@@ -45,6 +45,10 @@ export default function Home() {
         <Newsletter />
       </div>
 
+      <div className="mt-8">
+        <LandingFooter />
+      </div>
+
       {/* <div className="my-2">
         <UploadMemeButton />
       </div> */}

@@ -1,6 +1,6 @@
 import Image from "next/image";
-import BannerSection from "./BannerSection";
-import { TwitterIcon, Teleg, SendIcon } from "lucide-react";
+import { SendIcon, TwitterIcon } from "lucide-react";
+import XIcon from "@/components/icons/XIcon";
 
 const Banner = () => {
   return (
@@ -42,7 +42,7 @@ const Banner = () => {
             >
               <div className="flex items-center justify-center space-x-2">
                 <p>Follow us</p>
-                <TwitterIcon />
+                <XIcon />
               </div>
             </button>
           </div>

@@ -1,51 +1,64 @@
+import DiscordIcon from "@/components/icons/DiscordIcon";
+import { InstagramIcon, SendIcon, TwitterIcon } from "lucide-react";
 import Image from "next/image";
 
 const LandingFooter = () => {
   return (
-    <div className="flex flex-col items-center justify-center md:flex-row md:items-center md:justify-between mx-16 my-8">
-      <div className="flex">
-        <Image
-          src="/images/logo.png"
-          alt="truth meme eye logo"
-          width={15}
-          height={0}
-          className="h-auto object-contain"
-        />
-        <div className="text-sm uppercase leading-5 font-sans opacity-70 pl-2">
-          TRUTH-MEMES BY verity.team ©2023
+    <>
+      <div className="mx-8">
+        <div>
+          <h1 className="text-3xl italic tracking-wide inline-block break-words">
+            Join the the fun on <span className="text-cred">Telegram</span>
+          </h1>
+        </div>
+        <button
+          type="button"
+          className="mt-4 px-6 py-2 bg-cred text-white rounded-3xl border-4 border-black text-2xl tracking-wide uppercase"
+        >
+          <div className="flex items-center justify-center space-x-2">
+            <p>Join Telegram</p>
+            <SendIcon />
+          </div>
+        </button>
+        <div className="relative w-full h-[30vh]">
+          <Image
+            src="/images/wojak.png"
+            alt="soyboy"
+            fill
+            sizes="100vw"
+            className="object-contain overflow-hidden"
+          />
+        </div>
+        <div className="mt-4 flex items-center justify-center">
+          <Image
+            src="/images/logo.png"
+            alt="eye of truth"
+            width={48}
+            height={0}
+            className="h-auto object-contain"
+          />
+          <div className="text-xl uppercase">Truth memes</div>
         </div>
       </div>
-      <div className="flex flex-col space-x-0 mt-8 space-y-8 md:block md:space-y-0 md:space-x-12 md:mt-0">
-        <a
-          href="#"
-          target="_blank"
-          className="text-xl uppercase font-bold text-gray-500"
-        >
-          TELEGRAM
-        </a>
-        <a
-          href="#"
-          target="_blank"
-          className="text-xl uppercase font-bold text-gray-500"
-        >
-          DISCORD
-        </a>
-        <a
-          href="#"
-          target="_blank"
-          className="text-xl uppercase font-bold text-gray-500"
-        >
-          Twitter
-        </a>
-        <a
-          href="#"
-          target="_blank"
-          className="text-xl uppercase font-bold text-gray-500"
-        >
-          Instagram
-        </a>
+      <div className="w-full grid grid-cols-4 mt-8">
+        <div className="border border-black flex flex-col items-center justify-center p-4 bg-corange cursor-pointer hover:bg-orange-400">
+          <TwitterIcon />
+          <div className="mt-1">Twitter</div>
+        </div>
+        <div className="border border-black flex flex-col items-center justify-center p-4 bg-corange cursor-pointer hover:bg-orange-400">
+          <SendIcon />
+          <div>Telegram</div>
+        </div>
+        <div className="border border-black flex flex-col items-center justify-center p-4 bg-corange cursor-pointer hover:bg-orange-400">
+          <DiscordIcon />
+          <div>Discord</div>
+        </div>
+        <div className="border border-black flex flex-col items-center justify-center p-4 bg-corange cursor-pointer hover:bg-orange-400">
+          <InstagramIcon />
+          <div>Instagram</div>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 
