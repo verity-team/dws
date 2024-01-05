@@ -4,22 +4,22 @@ import XIcon from "@/components/icons/XIcon";
 
 const Banner = () => {
   return (
-    <>
-      <section className="mx-8">
+    <div className="grid grid-cols-1 md:grid-cols-5 md:items-center">
+      <section className="mx-8 md:col-span-3">
         <div>
-          <h1 className="text-3xl italic tracking-wide inline-block break-words mt-2">
+          <h1 className="text-3xl italic tracking-wide inline-block break-words mt-2 md:text-5xl">
             We memefy counterculture!
             <br />
           </h1>
         </div>
         <div>
-          <h1 className="text-3xl italic tracking-wide inline-block break-words mt-2">
+          <h1 className="text-3xl italic tracking-wide inline-block break-words mt-2 md:text-5xl">
             Join the&nbsp;
             <span className="text-cred">Meme</span>&nbsp; ®Evolution.
           </h1>
         </div>
         <div>
-          <h2 className="text-2xl inline-block break-words mt-4">
+          <h2 className="text-2xl inline-block break-words mt-4 md:text-4xl">
             It&apos;s gonna to be Lit 🔥
           </h2>
         </div>
@@ -48,7 +48,7 @@ const Banner = () => {
           </div>
         </div>
       </section>
-      <div className="relative w-full h-[30vh] my-8">
+      <div className="relative w-full h-[30vh] my-8 md:col-span-2 md:h-[50vh]">
         <Image
           src="/images/banner1.png"
           alt="soyboy"
@@ -57,7 +57,7 @@ const Banner = () => {
           className="object-contain overflow-hidden"
         />
       </div>
-    </>
+    </div>
   );
 };
 

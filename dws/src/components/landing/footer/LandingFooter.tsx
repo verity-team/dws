@@ -29,7 +29,7 @@ const LandingFooter = () => {
             className="object-contain overflow-hidden"
           />
         </div>
-        <div className="mt-4 flex items-center justify-center">
+        <div className="mt-8 flex items-center justify-center">
           <Image
             src="/images/logo.png"
             alt="eye of truth"

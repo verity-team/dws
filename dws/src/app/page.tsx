@@ -29,7 +29,7 @@ export default function Home() {
         <Banner />
       </div>
 
-      <div>
+      <div className="md:mt-12 md:max-w-4xl md:mx-auto">
         <StoryBanner />
       </div>
 
