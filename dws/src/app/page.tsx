@@ -37,11 +37,11 @@ export default function Home() {
         <MemeSlideshow />
       </div>
 
-      <div className="mt-8">
+      <div className="mt-8 md:mt-12 md:max-w-4xl md:mx-auto">
         <CommunityBanner />
       </div>
 
-      <div>
+      <div className="mt-8 md:mt-12">
         <Newsletter />
       </div>
 

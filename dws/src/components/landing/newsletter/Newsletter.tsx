@@ -28,22 +28,25 @@ const Newsletter = () => {
 
   return (
     <div className="bg-cyellow mx-2">
-      <div className="bg-corange py-8 flex flex-col items-center justify-center">
+      <div className="bg-corange py-8 flex flex-col items-center justify-center md:items-start md:p-12">
         <div>
           <h2 className="text-2xl inline-block break-words">
             Get notified. Get <span className="text-cred">Memes.</span>
           </h2>
         </div>
         <div>
-          <p className="text-sm inline-block break-words font-sans font-bold text-center mt-2">
+          <p className="text-sm inline-block break-words font-sans font-bold text-center mt-2 md:hidden">
             No SPAM, just Memes and News
             <br />
             Unsubcribe any time.
           </p>
+          <p className="hidden text-sm break-words font-sans font-bold text-start mt-2 md:inline-block">
+            No SPAM, just Memes and News Unsubcribe any time.
+          </p>
         </div>
         <form
           onSubmit={handleSubmit}
-          className="w-full flex flex-col items-center px-4 mt-4"
+          className="w-full flex flex-col items-center px-4 mt-4 md:w-1/2 md:flex-row md:items-center md:space-x-4 md:px-0"
         >
           <input
             className="p-4 w-full border-2 border-gray-400"
@@ -54,7 +57,7 @@ const Newsletter = () => {
           />
           <button
             type="submit"
-            className="mt-4 px-6 py-2 bg-cred text-white rounded-3xl border-4 border-black text-2xl tracking-wide uppercase"
+            className="mt-4 px-6 py-2 bg-cred text-white rounded-3xl border-4 border-black text-2xl tracking-wide uppercase md:mt-0"
           >
             <div className="flex items-center justify-center space-x-2">
               Submit
