@@ -3,17 +3,35 @@
 import Image from "next/image";
 import { ReactElement, useLayoutEffect, useState } from "react";
 import NavbarItem from "./NavbarItem";
-import NavbarDropdown from "./dropdown/NavbarDropdown";
-import ConnectButton from "./ConnectBtn";
-import { NavbarDropdownItemProps } from "./dropdown/NavbarDropdownItem";
 import { Collapse } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
-import CollapseNavbarDropdown from "./dropdown/CollapseNavbarDropdown";
 
-const aboutOptions: NavbarDropdownItemProps[] = [
-  { text: "Whitepaper", href: "/" },
-  { text: "Airdrop", href: "/" },
-  { text: "Contact", href: "/" },
+const navbarItems = [
+  {
+    text: "Home",
+    isActive: true,
+    href: "/",
+  },
+  {
+    text: "Community",
+    isActive: false,
+    href: "/",
+  },
+  {
+    text: "Staking",
+    isActive: false,
+    href: "/",
+  },
+  {
+    text: "Memes",
+    isActive: false,
+    href: "/meme",
+  },
+  {
+    text: "NFTs",
+    isActive: false,
+    href: "/",
+  },
 ];
 
 const Navbar = (): ReactElement => {
@@ -34,36 +52,33 @@ const Navbar = (): ReactElement => {
     setMenuOpen((isOpen) => !isOpen);
   };
 
-  const handleMenuClose = () => {
-    setMenuOpen(false);
-  };
-
   return (
-    <div className="p-5 mx-auto bg-white z-auto">
+    <div className="mx-auto z-auto">
       <div className="px-5 items-center flex justify-between">
+        {/* LOGO */}
         <div>
           <Image
-            src="/images/logo-text.png"
+            src="/images/logo-no-shadow.png"
             alt="truth memes logo"
-            width={388}
+            width={100}
             height={0}
-            className="h-auto"
+            className="max-w-[200px]"
           />
         </div>
+
+        {/* DESKTOP NAVBAR */}
         <nav className="hidden items-center space-x-2 lg:flex">
-          <NavbarItem text="home" isActive={true} href="#" />
-          <NavbarItem text="community" href="#" />
-          <NavbarItem text="staking" href="#" />
-          <NavbarItem text="memes" href="/meme" />
-          <NavbarDropdown
-            title="about"
-            options={aboutOptions}
-            openBehavior="hover"
-          />
-          {/* <div className="px-4">
-            <ConnectButton />
-          </div> */}
+          {navbarItems.map((item) => (
+            <NavbarItem
+              text={item.text}
+              isActive={item.isActive}
+              href={item.href}
+              key={item.text}
+            />
+          ))}
         </nav>
+
+        {/* MOBILE NAVBAR */}
         <div className="flex items-center lg:hidden">
           <button type="button" onClick={handleMenuToggle}>
             <MenuIcon fontSize="large" />
@@ -71,15 +86,15 @@ const Navbar = (): ReactElement => {
         </div>
       </div>
       <Collapse in={isMenuOpen} timeout="auto" unmountOnExit>
-        <nav className="flex flex-col items-center justify-center space-x-2 mt-4 md:flex-col md:space-y-2">
-          <NavbarItem text="home" isActive={true} href="#" />
-          <NavbarItem text="community" href="#" />
-          <NavbarItem text="staking" href="#" />
-          <NavbarItem text="memes" href="#" />
-          <CollapseNavbarDropdown title="About" options={aboutOptions} />
-          {/* <div className="pt-4 px-4 md:mt-0">
-            <ConnectButton />
-          </div> */}
+        <nav className="flex flex-col items-center justify-center space-y-1">
+          {navbarItems.map((item) => (
+            <NavbarItem
+              text={item.text}
+              isActive={item.isActive}
+              href={item.href}
+              key={item.text}
+            />
+          ))}
         </nav>
       </Collapse>
     </div>

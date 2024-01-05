@@ -13,3 +13,12 @@
   width: 25vw;
   border-top: 4px solid black;
 } */
+
+body {
+  height: auto;
+  max-width: none;
+  min-height: auto;
+  min-width: auto;
+  background-color: #ffde00;
+  overflow: visible;
+}

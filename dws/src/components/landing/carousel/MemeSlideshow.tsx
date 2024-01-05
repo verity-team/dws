@@ -34,7 +34,7 @@ const MemeSlideshow = () => {
   };
 
   return (
-    <div className="bg-cgreen">
+    <div className="bg-corange">
       <div className="flex flex-1 items-center justify-center overflow-hidden">
         <div className="static whitespace-nowrap overflow-visible">
           <div className="relative w-[400px] h-[400px] left-0">

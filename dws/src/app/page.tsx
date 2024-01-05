@@ -8,6 +8,8 @@ import Roadmap from "@/components/landing/roadmap/Roadmap";
 import Donate from "@/components/ico/donatev2/Donate";
 import dynamic from "next/dynamic";
 import LandingClientRoot from "@/components/landing/LandingClientRoot";
+import StoryBanner from "@/components/landing/banner/StoryBanner";
+import CommunityBanner from "@/components/landing/banner/CommunityBanner";
 
 const LaunchTimer = dynamic(
   () => import("@/components/landing/banner/LaunchTimer"),
@@ -18,16 +20,39 @@ export default function Home() {
   return (
     <>
       <Navbar />
-      <div className="mx-8">
+      {/* <div className="mx-8">
         <div className="px-24 pt-10">
           <LaunchTimer />
         </div>
+      </div> */}
+      <div className="mt-12">
+        <Banner />
       </div>
-      <Banner />
+
+      <div className="md:mt-12 md:max-w-4xl md:mx-auto">
+        <StoryBanner />
+      </div>
+
+      <div>
+        <MemeSlideshow />
+      </div>
+
+      <div className="mt-8 md:mt-12 md:max-w-4xl md:mx-auto">
+        <CommunityBanner />
+      </div>
+
+      <div className="mt-8 md:mt-12">
+        <Newsletter />
+      </div>
+
+      <div className="mt-8">
+        <LandingFooter />
+      </div>
+
       {/* <div className="my-2">
         <UploadMemeButton />
       </div> */}
-      <MemeSlideshow />
+      {/* <MemeSlideshow />
       <Roadmap />
       <BannerSection className="bg-white">
         <h1 className="text-6xl leading-loose-2xl italic">
@@ -44,7 +69,7 @@ export default function Home() {
         </div>
       </LandingClientRoot>
       <Newsletter />
-      <LandingFooter />
+      <LandingFooter /> */}
     </>
   );
 }
