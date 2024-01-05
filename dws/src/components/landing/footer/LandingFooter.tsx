@@ -25,7 +25,7 @@ const LandingFooter = () => {
               </div>
             </button>
           </div>
-          <div className="relative md:flex md:items-center md:justify-center">
+          <div className="relative flex items-center justify-center">
             <Image
               src="/images/wojak.png"
               alt="soyboy"
@@ -46,7 +46,7 @@ const LandingFooter = () => {
             />
             <div className="text-xl uppercase">Truth memes</div>
           </div>
-          <div className="flex items-center justify-center space-x-4">
+          <div className="mt-4 flex items-center justify-center space-x-4 md:mt-0">
             <XIcon width={48} height={48} fill="#000" stroke="#000" />
             <TelegramIcon width={48} height={48} />
           </div>
