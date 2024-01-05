@@ -39,17 +39,20 @@ const Navbar = (): ReactElement => {
   };
 
   return (
-    <div className="p-5 mx-auto bg-white z-auto">
+    <div className="mx-auto z-auto">
       <div className="px-5 items-center flex justify-between">
+        {/* LOGO */}
         <div>
           <Image
-            src="/images/logo-text.png"
+            src="/images/logo-no-shadow.png"
             alt="truth memes logo"
-            width={388}
+            width={100}
             height={0}
-            className="h-auto"
+            className="max-w-[200px]"
           />
         </div>
+
+        {/* DESKTOP NAVBAR */}
         <nav className="hidden items-center space-x-2 lg:flex">
           <NavbarItem text="home" isActive={true} href="#" />
           <NavbarItem text="community" href="#" />
@@ -64,6 +67,8 @@ const Navbar = (): ReactElement => {
             <ConnectButton />
           </div> */}
         </nav>
+
+        {/* MOBILE NAVBAR */}
         <div className="flex items-center lg:hidden">
           <button type="button" onClick={handleMenuToggle}>
             <MenuIcon fontSize="large" />
@@ -71,15 +76,11 @@ const Navbar = (): ReactElement => {
         </div>
       </div>
       <Collapse in={isMenuOpen} timeout="auto" unmountOnExit>
-        <nav className="flex flex-col items-center justify-center space-x-2 mt-4 md:flex-col md:space-y-2">
+        <nav className="flex flex-col items-center justify-center space-y-1">
           <NavbarItem text="home" isActive={true} href="#" />
           <NavbarItem text="community" href="#" />
           <NavbarItem text="staking" href="#" />
-          <NavbarItem text="memes" href="#" />
-          <CollapseNavbarDropdown title="About" options={aboutOptions} />
-          {/* <div className="pt-4 px-4 md:mt-0">
-            <ConnectButton />
-          </div> */}
+          <NavbarItem text="memes" href="/meme" />
         </nav>
       </Collapse>
     </div>

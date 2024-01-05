@@ -4,8 +4,8 @@ import BannerSection from "./BannerSection";
 const Banner = () => {
   return (
     <div>
-      <section className="grid grid-cols-1 md:grid-cols-3 mx-8 px-24 pt-8 relative">
-        <div className="col-span-2 flex h-full items-start justify-start">
+      <section className="grid grid-cols-1 md:grid-cols-3 mx-8 px-24 py-24 relative">
+        <div className="md:col-span-2 flex h-full items-start justify-start">
           <h1 className="text-5xl leading-loose-2xl italic tracking-wide inline-block break-words">
             Let&#x27;s memefy counterculture!
             <br />
@@ -13,12 +13,13 @@ const Banner = () => {
             <span className="text-cred">Meme</span>&nbsp; ®Evolution.
           </h1>
         </div>
-        <div className="col-span-1 flex items-center justify-center mx-8">
+        <div className="md:col-span-1 flex items-center justify-center mx-8 w-full h-full relative">
           <Image
-            src="/images/wojak.png"
-            alt="sad guy with hoodie"
-            width={270}
-            height={0}
+            src="/images/banner1.png"
+            alt="soyboy"
+            fill
+            sizes="100vw"
+            className="object-contain overflow-visible"
           />
         </div>
       </section>

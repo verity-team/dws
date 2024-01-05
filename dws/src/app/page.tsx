@@ -18,16 +18,16 @@ export default function Home() {
   return (
     <>
       <Navbar />
-      <div className="mx-8">
+      {/* <div className="mx-8">
         <div className="px-24 pt-10">
           <LaunchTimer />
         </div>
       </div>
-      <Banner />
+      <Banner /> */}
       {/* <div className="my-2">
         <UploadMemeButton />
       </div> */}
-      <MemeSlideshow />
+      {/* <MemeSlideshow />
       <Roadmap />
       <BannerSection className="bg-white">
         <h1 className="text-6xl leading-loose-2xl italic">
@@ -44,7 +44,7 @@ export default function Home() {
         </div>
       </LandingClientRoot>
       <Newsletter />
-      <LandingFooter />
+      <LandingFooter /> */}
     </>
   );
 }
