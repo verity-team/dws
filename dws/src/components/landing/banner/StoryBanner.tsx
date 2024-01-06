@@ -19,10 +19,13 @@ const StoryBanner = () => {
           type="button"
           className="px-6 py-2 bg-cred text-white rounded-3xl border-4 border-black text-2xl tracking-wide uppercase"
         >
-          <div className="flex items-center justify-center space-x-2">
+          <a
+            className="flex items-center justify-center space-x-2 hover:text-gray-200"
+            href="https://truthmemes.io/story.html"
+          >
             <p>Story</p>
             <BookOpenText />
-          </div>
+          </a>
         </button>
       </div>
       <div className="relative w-full h-[30vh] my-8 p-2 box-border border-8 border-black rounded-lg bg-white md:w-1/2 md:aspect-square mx-auto">
