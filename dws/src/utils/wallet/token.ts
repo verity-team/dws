@@ -3,7 +3,7 @@ import BN from "bn.js";
 export type AvailableToken = "ETH" | "USDT" | "LINK";
 export type AvailableWallet = "MetaMask" | "WalletConnect";
 
-export const availableTokens: Array<AvailableToken> = ["ETH", "USDT", "LINK"];
+export const availableTokens: Array<AvailableToken> = ["ETH", "USDT"];
 export const availableWallets: Array<AvailableWallet> = [
   "MetaMask",
   "WalletConnect",
@@ -13,7 +13,6 @@ export const availableWallets: Array<AvailableWallet> = [
 export const stableCoinPrice: Record<string, number> = {
   USDT: 1,
   USDC: 1,
-  LINK: 0.002,
 };
 
 export interface TokenInfo {

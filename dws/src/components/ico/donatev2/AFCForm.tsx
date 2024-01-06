@@ -25,6 +25,8 @@ import { useUserDonationData, getUserDonationData } from "@/api/dws/user/user";
 
 const AFCForm = (): ReactElement => {
   const account = useContext(ClientWallet);
+  const { connect } = useContext(WalletUtils);
+
   const { requestWalletSignature } = useContext(WalletUtils);
 
   const [isFormOpen, setFormOpen] = useState(false);
@@ -63,6 +65,12 @@ const AFCForm = (): ReactElement => {
   };
 
   const handleGenAffiliateCode = async () => {
+    if (account == null || account === "") {
+      toast.error("You need to connect your wallet first");
+      connect();
+      return;
+    }
+
     setLoading(true);
 
     // Try to (re)connect when there are no connected accounts
@@ -167,7 +175,6 @@ const AFCForm = (): ReactElement => {
                   <button
                     className="w-full px-4 py-2 border-2 border-black bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed"
                     onClick={handleGenAffiliateCode}
-                    disabled={!account}
                   >
                     Generate affiliate code
                   </button>

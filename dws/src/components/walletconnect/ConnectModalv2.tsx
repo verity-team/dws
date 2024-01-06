@@ -62,10 +62,9 @@ const ConnectModalV2 = ({
 
   // Run procedure when closing connect wallet form
   const handleCloseModal = useCallback(() => {
-    onClose();
-
-    setCurrentStep(0);
-    setConnectStatus("connecting");
+    // onClose();
+    // setCurrentStep(0);
+    // setConnectStatus("connecting");
   }, [onClose]);
 
   const handleFinalizeConnection = useCallback(async () => {
@@ -202,8 +201,8 @@ const ConnectModalV2 = ({
       </IconButton>
       <DialogContent className="font-sans w-full">
         <div className="grid grid-cols-12">
-          <div className="col-span-4 border-r border-black">
-            <div className="p-4">
+          <div className="col-span-12 border-b border-black md:border-r md:col-span-4">
+            <div className="md:p-4">
               <Image
                 src="/images/logo.png"
                 alt="eye of truth"
@@ -253,10 +252,13 @@ const ConnectModalV2 = ({
           </div>
 
           {/* Here I use hidden instead of conditional rendering to better support user redo */}
-          <div className="col-span-8">
-            <div className="px-4" hidden={currentStep !== 0}>
-              <div className="text-xl p-2">Available Wallets (2)</div>
-              <div className="grid grid-cols-2 gap-4 p-2">
+          <div className="mt-4 col-span-12 md:col-span-8 md:mt-0">
+            <div
+              className="space-y-2 md:px-4 md:space-y-0"
+              hidden={currentStep !== 0}
+            >
+              <div className="text-xl md:p-2">Available Wallets (2)</div>
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2 md:gap-4">
                 <ConnectOption
                   icon="/icons/metamask.svg"
                   name="MetaMask"
@@ -270,7 +272,10 @@ const ConnectModalV2 = ({
               </div>
             </div>
 
-            <div className="px-4" hidden={currentStep !== 1}>
+            <div
+              className="space-y-2 md:px-4 md:space-y-0"
+              hidden={currentStep !== 1}
+            >
               <div className="flex flex-col items-stretch justify-between h-full">
                 <ConnectStatus
                   walletLogo="/icons/metamask.svg"
@@ -285,7 +290,10 @@ const ConnectModalV2 = ({
               </div>
             </div>
 
-            <div className="px-4" hidden={currentStep !== 2}>
+            <div
+              className="space-y-2 md:px-4 md:space-y-0"
+              hidden={currentStep !== 2}
+            >
               <div className="text-xl p-2">
                 Connected wallets ({accounts.length})
               </div>
@@ -308,12 +316,14 @@ const ConnectModalV2 = ({
               </div>
             </div>
 
-            <div className="px-4" hidden={currentStep !== 3}>
-              <div className="text-xl p-2">Connected</div>
-              <div className="flex flex-col items-center justify-start border-2 border-black rounded-lg px-4 py-2">
+            <div className="md:px-4" hidden={currentStep !== 3}>
+              <div className="text-xl text-cred mb-2 text-center md:text-start">
+                Connected
+              </div>
+              <div className="flex flex-col items-center justify-start border-2 border-black rounded-lg px-4 py-2 space-y-2">
                 <div>Connected to {getWalletShorthand(selectedAccount)}</div>
                 <div className="italic">
-                  This screen will close in a short while
+                  This popup will be closed in a moment
                 </div>
               </div>
             </div>
