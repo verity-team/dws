@@ -57,9 +57,8 @@ const ConnectStatus = ({
       {status === "rejected" && (
         <div className="space-y-2 md:pl-4 md:space-y-0">
           <div className="text-xl text-center md:text-left">
-            Connection Rejected!
+            Connection rejected!
           </div>
-          <div>Click here to try again</div>
         </div>
       )}
     </div>

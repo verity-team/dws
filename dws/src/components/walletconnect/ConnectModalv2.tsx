@@ -62,9 +62,9 @@ const ConnectModalV2 = ({
 
   // Run procedure when closing connect wallet form
   const handleCloseModal = useCallback(() => {
-    // onClose();
-    // setCurrentStep(0);
-    // setConnectStatus("connecting");
+    onClose();
+    setCurrentStep(0);
+    setConnectStatus("connecting");
   }, [onClose]);
 
   const handleFinalizeConnection = useCallback(async () => {
@@ -237,7 +237,7 @@ const ConnectModalV2 = ({
                   Please choose one to connect with our site
                 </div>
                 <div className="py-1 italic">
-                  *You can switch between connected wallets. No worries!
+                  *You can switch between connected wallets later. No worries!
                 </div>
               </div>
 
@@ -294,10 +294,10 @@ const ConnectModalV2 = ({
               className="space-y-2 md:px-4 md:space-y-0"
               hidden={currentStep !== 2}
             >
-              <div className="text-xl p-2">
+              <div className="text-xl md:p-2">
                 Connected wallets ({accounts.length})
               </div>
-              <div className="grid grid-cols-2 gap-4 p-2">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-1 md:p-2">
                 {accounts.map((address, i) => (
                   <WalletOption
                     key={address}
