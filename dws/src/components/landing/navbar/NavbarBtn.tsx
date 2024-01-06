@@ -29,7 +29,7 @@ const NavbarButton = ({
   return (
     <button
       type="button"
-      className="text-2xl tracking-wide no-underline uppercase text-cblack hover:text-cred"
+      className="text-2xl tracking-wide no-underline uppercase text-cblack hover:!text-cred"
       style={{ color: customColors.cblack }}
       onClick={onClick}
     >
