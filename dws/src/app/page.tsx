@@ -6,6 +6,9 @@ import Newsletter from "@/components/landing/newsletter/Newsletter";
 import dynamic from "next/dynamic";
 import StoryBanner from "@/components/landing/banner/StoryBanner";
 import CommunityBanner from "@/components/landing/banner/CommunityBanner";
+import DonateForm from "@/components/ico/donatev2/form/DonateForm";
+import LandingClientRoot from "@/components/landing/LandingClientRoot";
+import Donate from "@/components/ico/donatev2/Donate";
 
 const LaunchTimer = dynamic(
   () => import("@/components/landing/banner/LaunchTimer"),
@@ -29,7 +32,13 @@ export default function Home() {
         <StoryBanner />
       </div>
 
-      <div>
+      <div className="mx-8">
+        <LandingClientRoot>
+          <Donate />
+        </LandingClientRoot>
+      </div>
+
+      <div className="mt-8 md:mt-12">
         <MemeSlideshow />
       </div>
 

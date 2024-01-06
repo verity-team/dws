@@ -1,3 +1,5 @@
+"use client";
+
 import { exchangeToReward } from "@/utils/wallet/donate";
 import ConnectButton from "./ConnectBtn";
 import TokenSelector from "./TokenSelector";
@@ -118,17 +120,20 @@ const DonateForm = (): ReactElement => {
 
   return (
     <>
+      <div className="px-3">Pay with</div>
       <TokenSelector
         selectedToken={selectedToken}
         onTokenChange={handleTokenChange}
       />
+      <div className="px-3 mt-2">Payment info</div>
       <form>
-        <div className="grid grid-cols-2 gap-2 p-2">
+        <div className="grid grid-cols-1 gap-2 p-2 md:grid-cols-2">
           <div className="rounded-lg bg-white border-2 border-black">
             <div className="px-4 py-2">You pay</div>
             <div className="px-4 py-2 flex items-center justify-between">
               <input
                 className="bg-white border-none w-full focus:outline-none"
+                autoComplete="off"
                 {...register("payAmount", {
                   valueAsNumber: true,
                   onChange: handleSwapTokenToReward,
@@ -147,8 +152,9 @@ const DonateForm = (): ReactElement => {
                 className="bg-white border-none focus:border-none w-full focus:outline-none"
                 disabled
                 value={receiveAmount}
+                autoComplete="off"
               />
-              <span>MEMEME</span>
+              <span>TRUTH</span>
             </div>
           </div>
         </div>

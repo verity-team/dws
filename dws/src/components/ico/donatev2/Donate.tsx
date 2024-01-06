@@ -20,8 +20,8 @@ const Donate = () => {
 
         <div className="border-b-2 border-black">
           <div className="flex items-center justify-between p-4">
-            <div>Current price: 0</div>
-            <div>Next stage price: 0</div>
+            <div>Current price: $0</div>
+            <div>Next stage price: $0</div>
           </div>
         </div>
 
