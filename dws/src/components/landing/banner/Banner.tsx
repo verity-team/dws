@@ -1,10 +1,10 @@
 import Image from "next/image";
-import { SendIcon, TwitterIcon } from "lucide-react";
+import { SendIcon } from "lucide-react";
 import XIcon from "@/components/icons/XIcon";
 
 const Banner = () => {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-5 md:items-center">
+    <div className="grid grid-cols-1 md:grid-cols-5 md:items-center md:mx-12">
       <section className="mx-8 md:col-span-3">
         <div>
           <h1 className="text-3xl italic tracking-wide inline-block break-words mt-2 md:text-5xl">
@@ -23,16 +23,19 @@ const Banner = () => {
             It&apos;s gonna to be Lit 🔥
           </h2>
         </div>
-        <div className="mt-4 space-y-4">
+        <div className="mt-4 space-y-4 md:flex md:items-center md:mt-8 md:space-x-4 md:space-y-0">
           <div>
             <button
               type="button"
               className="px-6 py-2 bg-cred text-white rounded-3xl border-4 border-black text-2xl tracking-wide uppercase"
             >
-              <div className="flex items-center justify-center space-x-2">
+              <a
+                className="flex items-center justify-center space-x-2 hover:text-gray-200"
+                href="https://t.me/truthmemesofficialchat"
+              >
                 <p>Join Telegram</p>
                 <SendIcon />
-              </div>
+              </a>
             </button>
           </div>
           <div>
@@ -40,10 +43,13 @@ const Banner = () => {
               type="button"
               className="px-6 py-2 bg-cred text-white rounded-3xl border-4 border-black text-2xl tracking-wide uppercase"
             >
-              <div className="flex items-center justify-center space-x-2">
+              <a
+                className="flex items-center justify-center space-x-2 hover:text-gray-200"
+                href="https://twitter.com/_truthmemes_"
+              >
                 <p>Follow us</p>
                 <XIcon />
-              </div>
+              </a>
             </button>
           </div>
         </div>

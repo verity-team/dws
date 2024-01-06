@@ -1,13 +1,12 @@
-import DiscordIcon from "@/components/icons/DiscordIcon";
 import TelegramIcon from "@/components/icons/TelegramIcon";
 import XIcon from "@/components/icons/XIcon";
-import { InstagramIcon, SendIcon, TwitterIcon } from "lucide-react";
+import { SendIcon } from "lucide-react";
 import Image from "next/image";
 
 const LandingFooter = () => {
   return (
     <>
-      <div className="mx-8">
+      <div className="mx-8 md:mx-12">
         <div className="md:flex md:items-center md:justify-between">
           <div>
             <div>
@@ -19,10 +18,13 @@ const LandingFooter = () => {
               type="button"
               className="mt-4 px-6 py-2 bg-cred text-white rounded-3xl border-4 border-black text-2xl tracking-wide uppercase"
             >
-              <div className="flex items-center justify-center space-x-2">
+              <a
+                className="flex items-center justify-center space-x-2 hover:text-gray-200"
+                href="https://t.me/truthmemesofficialchat"
+              >
                 <p>Join Telegram</p>
                 <SendIcon />
-              </div>
+              </a>
             </button>
           </div>
           <div className="relative flex items-center justify-center">
@@ -36,7 +38,7 @@ const LandingFooter = () => {
           </div>
         </div>
         <div className="my-8 md:flex md:items-center md:justify-between">
-          <div className="flex items-center justify-center">
+          <div className="flex items-center justify-center md:space-x-2">
             <Image
               src="/images/logo.png"
               alt="eye of truth"
@@ -47,8 +49,18 @@ const LandingFooter = () => {
             <div className="text-xl uppercase">Truth memes</div>
           </div>
           <div className="mt-4 flex items-center justify-center space-x-4 md:mt-0">
-            <XIcon width={48} height={48} fill="#000" stroke="#000" />
-            <TelegramIcon width={48} height={48} />
+            <a
+              className="cursor-pointer"
+              href="https://twitter.com/_truthmemes_"
+            >
+              <XIcon width={48} height={48} fill="#000" stroke="#000" />
+            </a>
+            <a
+              className="cursor-pointer"
+              href="https://t.me/truthmemesofficialchat"
+            >
+              <TelegramIcon width={48} height={48} />
+            </a>
           </div>
         </div>
       </div>

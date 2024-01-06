@@ -19,8 +19,20 @@ export const roboto = Roboto({
 });
 
 export const metadata: Metadata = {
-  title: "TruthMemes",
-  description: "United by Meme",
+  title: "Truth Memes",
+  description: "We memefy counterculture - Join the Meme ®Evolution!",
+  openGraph: {
+    title: "Truth Memes",
+    description: "We memefy counterculture. Join the Meme ®Evolution!",
+    images: ["/images/social-media-banner.png"],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Truth Memes",
+    description: "Join the Truthmemes army and deliver the truth to everyone!",
+    images: ["/images/social-media-banner.png"],
+  },
 };
 
 export default function RootLayout({
