@@ -88,7 +88,7 @@ const UserStat = (
         </h3>
         <div className="text-3xl space-x-2">
           <span className="text-3xl">{userStat.total}</span>
-          <span className="text-cred">$TRUTHMEME </span>!
+          <span className="text-cred">$TRUTH </span>!
         </div>
       </div>
     </div>

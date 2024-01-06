@@ -34,7 +34,7 @@ const DonationStat = ({
         </div>
         <div>
           Reward: {Number(tokens).toLocaleString()}{" "}
-          <span className="text-cred">$TRUTHMEME</span>
+          <span className="text-cred">$TRUTH</span>
         </div>
         <div>
           Status: <span className="uppercase">{status}</span>
