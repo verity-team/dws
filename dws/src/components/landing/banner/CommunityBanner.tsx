@@ -1,5 +1,4 @@
-import Image from "next/image";
-import { BookOpenText, UserRound, UsersRound } from "lucide-react";
+import { UsersRound } from "lucide-react";
 
 const CommunityBanner = () => {
   return (

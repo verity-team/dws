@@ -53,7 +53,7 @@ const Navbar = (): ReactElement => {
   };
 
   return (
-    <div className="mx-auto z-auto">
+    <div className="mx-8 z-auto md:mx-12">
       <div className="px-5 items-center flex justify-between">
         {/* LOGO */}
         <div>

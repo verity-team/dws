@@ -25,7 +25,7 @@ const StoryBanner = () => {
           </div>
         </button>
       </div>
-      <div className="relative w-full h-[30vh] my-8 p-2 box-border border-8 border-black rounded-lg bg-white md:h-[70vh]">
+      <div className="relative w-full h-[30vh] my-8 p-2 box-border border-8 border-black rounded-lg bg-white md:w-1/2 md:aspect-square mx-auto">
         <div className="w-full h-full relative p-2 border-4 border-black">
           <Image
             src="/images/banner2.gif"

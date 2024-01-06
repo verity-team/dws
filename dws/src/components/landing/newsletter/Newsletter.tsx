@@ -1,7 +1,6 @@
 "use client";
 
 import { subscribeEmail } from "@/api/dws/email/email";
-import { UsersRound } from "lucide-react";
 import { FormEvent, useRef, useState } from "react";
 import toast from "react-hot-toast";
 
