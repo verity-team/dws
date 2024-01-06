@@ -1,12 +1,10 @@
 "use client";
 
 import { Donation } from "@/api/dws/user/user.type";
-import { ClientWallet } from "@/components/ClientRoot";
 import { getTimeElapsedString } from "@/utils/utils";
 import { getWalletShorthand } from "@/utils/wallet/wallet";
 import Avatar from "boring-avatars";
-import { time } from "console";
-import { ReactElement, useContext, useMemo } from "react";
+import { ReactElement } from "react";
 
 interface DonationStatProps {
   donation: Donation;
@@ -15,24 +13,18 @@ interface DonationStatProps {
 const DonationStat = ({
   donation,
 }: DonationStatProps): ReactElement<DonationStatProps> => {
-  const account = useContext(ClientWallet);
-
   const { amount, asset, price, status, tokens, ts, tx_hash, usd_amount } =
     donation;
 
-  const donateTime = useMemo(() => {
-    const timeString = getTimeElapsedString(ts);
-    if (timeString === "just now") {
-      return timeString;
-    }
-
-    return timeString + " ago";
-  }, []);
+  let donateTime = getTimeElapsedString(ts);
+  if (donateTime !== "just now") {
+    donateTime += " ago";
+  }
 
   return (
     <div>
       <div className="flex w-full items-center space-x-2">
-        <Avatar size={40} name={account} variant="marble" />
+        <Avatar size={40} name={tx_hash} variant="marble" />
         <div className="text-gray-700">{donateTime}</div>
       </div>
       <div className="mt-4 space-y-2">

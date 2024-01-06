@@ -1,4 +1,5 @@
 import { AvailableToken, availableTokens } from "@/utils/wallet/token";
+import clsx from "clsx";
 import { ReactElement, memo } from "react";
 
 interface TokenSelectorProps {
@@ -11,7 +12,12 @@ const TokenSelector = ({
   onTokenChange,
 }: TokenSelectorProps): ReactElement<TokenSelectorProps> => {
   return (
-    <div className="grid grid-cols-1 gap-2 p-2 md:grid-cols-3">
+    <div
+      className={clsx(
+        "grid grid-cols-1 gap-2 p-2",
+        `md:grid-cols-${availableTokens.length}`
+      )}
+    >
       {availableTokens.map((token) => {
         if (token === selectedToken) {
           return (

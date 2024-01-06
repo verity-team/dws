@@ -40,7 +40,6 @@ const UserStat = (
       </h3>
 
       <div className="w-full mt-4 md:flex md:flex-col md:items-center">
-        <h3 className="text-2xl">Your donations</h3>
         <Box
           sx={{
             width: "100%",
