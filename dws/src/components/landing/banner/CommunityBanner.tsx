@@ -14,10 +14,13 @@ const CommunityBanner = () => {
         type="button"
         className="mt-4 px-6 py-2 bg-cred text-white rounded-3xl border-4 border-black text-2xl tracking-wide uppercase md:mt-8"
       >
-        <div className="flex items-center justify-center space-x-2">
+        <a
+          className="flex items-center justify-center space-x-2 hover:text-gray-200"
+          href="https://truthmemes.io/community.html"
+        >
           <p>Community</p>
           <UsersRound />
-        </div>
+        </a>
       </button>
     </section>
   );
