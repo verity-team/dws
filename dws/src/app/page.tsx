@@ -9,6 +9,9 @@ import CommunityBanner from "@/components/landing/banner/CommunityBanner";
 import DonateForm from "@/components/ico/donatev2/form/DonateForm";
 import LandingClientRoot from "@/components/landing/LandingClientRoot";
 import Donate from "@/components/ico/donatev2/Donate";
+import DonationStat from "@/components/ico/stats/donation/DonationStat";
+import UserStat from "@/components/ico/stats/user/UserStat";
+import UserDonationStat from "@/components/ico/stats/user/UserDonationStat";
 
 const LaunchTimer = dynamic(
   () => import("@/components/landing/banner/LaunchTimer"),
@@ -35,6 +38,9 @@ export default function Home() {
       <div className="mx-8">
         <LandingClientRoot>
           <Donate />
+          <div className="mt-8 md:mt-12">
+            <UserDonationStat />
+          </div>
         </LandingClientRoot>
       </div>
 

@@ -5,7 +5,7 @@ export const customColors = {
   cred: "#ee382d",
   cgreen: "#FDEEA9",
   cblue: "#F4F4F4",
-  cyellow: "ffde00",
+  cyellow: "#ffde00",
   corange: "#f93",
 };
 

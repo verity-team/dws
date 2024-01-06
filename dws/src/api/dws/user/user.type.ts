@@ -5,7 +5,7 @@ export interface UserDonationData {
 }
 
 // Interface for a single donation entry
-interface Donation {
+export interface Donation {
   amount: string;
   usd_amount: string;
   asset: string;
