@@ -2,6 +2,7 @@ import { Nullable, Maybe } from "@/utils";
 import { Revalidator } from "swr";
 import { getExponentialWaitTime } from "./utils";
 import { DWS_AT_KEY } from "./const";
+import { baseNextClientRequest } from "./baseApiV2";
 
 export enum HttpMethod {
   GET = "GET",
@@ -220,7 +221,7 @@ export const swrFetcher = async (url: string) => {
     return null;
   }
 
-  const response = await clientBaseRequest(url, HttpMethod.GET);
+  const response = await baseNextClientRequest("GET", { path: url });
 
   if (response == null) {
     throw new Error("Client setup is wrong. Check log for more info");

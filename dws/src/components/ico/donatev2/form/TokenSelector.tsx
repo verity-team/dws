@@ -11,7 +11,7 @@ const TokenSelector = ({
   onTokenChange,
 }: TokenSelectorProps): ReactElement<TokenSelectorProps> => {
   return (
-    <div className="grid grid-cols-3 gap-2 p-2">
+    <div className="grid grid-cols-1 gap-2 p-2 md:grid-cols-3">
       {availableTokens.map((token) => {
         if (token === selectedToken) {
           return (

@@ -6,6 +6,12 @@ import Newsletter from "@/components/landing/newsletter/Newsletter";
 import dynamic from "next/dynamic";
 import StoryBanner from "@/components/landing/banner/StoryBanner";
 import CommunityBanner from "@/components/landing/banner/CommunityBanner";
+import DonateForm from "@/components/ico/donatev2/form/DonateForm";
+import LandingClientRoot from "@/components/landing/LandingClientRoot";
+import Donate from "@/components/ico/donatev2/Donate";
+import DonationStat from "@/components/ico/stats/donation/DonationStat";
+import UserStat from "@/components/ico/stats/user/UserStat";
+import UserDonationStat from "@/components/ico/stats/user/UserDonationStat";
 
 const LaunchTimer = dynamic(
   () => import("@/components/landing/banner/LaunchTimer"),
@@ -29,7 +35,16 @@ export default function Home() {
         <StoryBanner />
       </div>
 
-      <div>
+      <div className="mx-8 md:flex md:items-start md:justify-center">
+        <LandingClientRoot>
+          <Donate />
+          <div className="mt-8 md:mt-12">
+            <UserDonationStat />
+          </div>
+        </LandingClientRoot>
+      </div>
+
+      <div className="mt-8 md:mt-12">
         <MemeSlideshow />
       </div>
 

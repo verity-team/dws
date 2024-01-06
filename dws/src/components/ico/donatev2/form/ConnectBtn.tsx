@@ -30,13 +30,13 @@ const ConnectButton = ({
   if (account) {
     return (
       <>
-        <div className="font-sans text-sm text-center">
+        <div className="font-sans text-sm text-center mb-2">
           Connected to {getWalletShorthand(account)}
           <span
             className="text-blue-500 underline hover:text-blue-700 cursor-pointer ml-2"
             onClick={handleChangeAccount}
           >
-            Change account?
+            Switch
           </span>
         </div>
 
