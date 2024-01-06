@@ -47,7 +47,14 @@ const UserStat = (
 
       <div className="w-full mt-4">
         <h3 className="text-2xl">Your donations</h3>
-        <Box sx={{ width: "100%", maxWidth: 900, flexGrow: 1 }}>
+        <Box
+          sx={{
+            width: "100%",
+            maxWidth: 900,
+            flexGrow: 1,
+            marginTop: "0.25rem",
+          }}
+        >
           <div className="bg-white border-2 border-b-0 border-black rounded-t-lg p-4">
             <DonationStat donation={donations[activeDonation]} />
           </div>
@@ -81,6 +88,15 @@ const UserStat = (
             }
           />
         </Box>
+      </div>
+      <div className="w-full mt-4 flex flex-col items-center">
+        <h3 className="text-2xl tracking-wide inline-block break-words mt-2 md:text-5xl space-x-1">
+          You have a total of
+        </h3>
+        <div className="text-3xl space-x-2">
+          <span className="text-3xl">{userStat.total}</span>
+          <span className="text-cred">$TRUTHMEME </span>!
+        </div>
       </div>
     </div>
   );

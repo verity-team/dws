@@ -66,6 +66,10 @@ const DonateForm = (): ReactElement => {
       const reward = exchangeToReward(payAmount, selectedTokenPrice);
       setReceiveAmount(reward);
     } catch (err: any) {
+      if (payAmount === 0) {
+        setReceiveAmount(0);
+        return;
+      }
       setReceiveAmount("N/A");
     }
   }, [getValues, selectedToken, tokenPrices]);
