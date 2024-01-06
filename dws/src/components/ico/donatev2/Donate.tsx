@@ -6,7 +6,7 @@ import AFCForm from "./AFCForm";
 
 const Donate = () => {
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col transition-all">
       {/* Donate section */}
       <div className="max-w-2xl border-2 border-black rounded-2xl">
         <div className="w-full border-b-2 border-black bg-cred p-8 rounded-t-xl relative h-32">

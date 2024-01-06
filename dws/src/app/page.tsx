@@ -35,7 +35,7 @@ export default function Home() {
         <StoryBanner />
       </div>
 
-      <div className="mx-8">
+      <div className="mx-8 md:flex md:items-start md:justify-center">
         <LandingClientRoot>
           <Donate />
           <div className="mt-8 md:mt-12">

@@ -34,7 +34,6 @@ const DonationStat = ({
       <div className="flex w-full items-center space-x-2">
         <Avatar size={40} name={account} variant="marble" />
         <div className="text-gray-700">{donateTime}</div>
-        h3
       </div>
       <div className="mt-4 space-y-2">
         <div>

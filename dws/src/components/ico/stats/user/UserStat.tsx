@@ -1,8 +1,7 @@
 "use client";
 
 import { Donation, UserStats } from "@/api/dws/user/user.type";
-import { getTimeElapsedString } from "@/utils/utils";
-import { Paper, Typography, MobileStepper, Button, Box } from "@mui/material";
+import { MobileStepper, Button, Box } from "@mui/material";
 import KeyboardArrowLeft from "@mui/icons-material/KeyboardArrowLeft";
 import KeyboardArrowRight from "@mui/icons-material/KeyboardArrowRight";
 import {
@@ -10,11 +9,8 @@ import {
   ReactElement,
   forwardRef,
   useCallback,
-  useMemo,
   useState,
 } from "react";
-import { useTheme } from "@emotion/react";
-import { customColors } from "@root/tailwind.config";
 import DonationStat from "./DonationStat";
 
 interface UserStatProps {
@@ -26,8 +22,6 @@ const UserStat = (
   { donations, userStat }: UserStatProps,
   ref: ForwardedRef<HTMLDivElement>
 ): ReactElement<UserStatProps> => {
-  const theme = useTheme();
-
   const [activeDonation, setActiveDonation] = useState(0);
   const maxSteps = donations.length;
 
@@ -45,7 +39,7 @@ const UserStat = (
         <span className="text-cred">Thanks</span> for your support
       </h3>
 
-      <div className="w-full mt-4">
+      <div className="w-full mt-4 md:flex md:flex-col md:items-center">
         <h3 className="text-2xl">Your donations</h3>
         <Box
           sx={{
