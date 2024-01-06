@@ -13,24 +13,24 @@ const navbarItems = [
     href: "/",
   },
   {
-    text: "Community",
+    text: "Story",
     isActive: false,
-    href: "/",
+    href: "https://truthmemes.io/story.html",
   },
   {
-    text: "Staking",
+    text: "Community",
     isActive: false,
-    href: "/",
+    href: "https://truthmemes.io/community.html",
   },
   {
     text: "Memes",
     isActive: false,
-    href: "/meme",
+    href: "https://truthmemes.io/memes.html",
   },
   {
     text: "NFTs",
     isActive: false,
-    href: "/",
+    href: "https://truthmemes.io/nft.html",
   },
 ];
 
