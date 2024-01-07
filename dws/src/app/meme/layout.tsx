@@ -10,9 +10,5 @@ interface MemePageLayoutProps {
 export default function MemePageLayout({
   children,
 }: MemePageLayoutProps): ReactElement<MemePageLayoutProps> {
-  return (
-    <ClientRoot>
-      <div className="container mx-auto">{children}</div>
-    </ClientRoot>
-  );
+  return <ClientRoot>{children}</ClientRoot>;
 }
