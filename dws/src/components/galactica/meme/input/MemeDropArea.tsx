@@ -9,7 +9,6 @@ import {
   useMemo,
   useState,
 } from "react";
-import MemeInputToolbar from "./MemeInputToolbar";
 import toast from "react-hot-toast";
 
 type FileStatus = "TOO_BIG" | "INVALID_MIME" | "OK";
@@ -79,12 +78,14 @@ const MemeDropArea = ({
     const uploadedFile = event.target.files[0];
     const validationResult = validateUploadFile(uploadedFile);
     if (validationResult === "TOO_BIG") {
-      toast.error("Your meme is too big. Best we can do is 1MB");
+      toast.error("Your meme is too big.\nBest we can do is 1MB");
+      event.target.value = "";
       return;
     }
 
     if (validationResult === "INVALID_MIME") {
-      toast.error("Meme should be an image. We support PNG, JPG, and GIF");
+      toast.error("Meme should be an image.\nWe support PNG, JPG, and GIF");
+      event.target.value = "";
       return;
     }
 
@@ -110,6 +111,7 @@ const MemeDropArea = ({
         onChange={handleImageChange}
         hidden
         ref={fileInputRef}
+        accept=".jpg,.jpeg,.png,.gif"
       />
       {dragActive && (
         <div

@@ -140,7 +140,7 @@ const MemeInput = ({
                 alt="meme upload image"
                 width={0}
                 height={0}
-                className="object-contain w-auto max-w-full max-h-full mx-auto"
+                className="object-contain w-auto max-w-full max-h-[30vh] mx-auto"
               />
             </div>
           )}

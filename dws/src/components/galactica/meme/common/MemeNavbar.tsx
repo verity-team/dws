@@ -71,7 +71,6 @@ const MemeNavbar = (): ReactElement => {
         </div>
         <div className="flex items-center space-x-4">
           <SignInBtn />
-          {/* MOBILE NAVBAR */}
           <div className="flex items-center space-x-4">
             <button type="button" onClick={handleMenuToggle}>
               {account ? <Avatar size={40} name={account} /> : <MenuIcon />}
