@@ -3,12 +3,18 @@
 import SignInBtn from "../account/SignInBtn";
 import MemeInput from "./input/MemeInput";
 import MemeList from "./list/MemeList";
-import { useLatestMeme } from "@/hooks/galactica/meme/useMeme";
-import { useCallback, useState, ReactElement } from "react";
+import { useLatestMeme, usePreviewMeme } from "@/hooks/galactica/meme/useMeme";
+import {
+  useCallback,
+  useState,
+  ReactElement,
+  useContext,
+  useEffect,
+} from "react";
 import { OptimisticMemeUpload } from "@/api/galactica/meme/meme.type";
 import MemeListItem from "./list/MemeListItem";
 import { MemeFilter } from "./meme.type";
-import MemeNavbar from "./common/MemeNavbar";
+import { ClientWallet } from "@/components/ClientRoot";
 
 interface MemeTimelineProps {
   filter?: MemeFilter;
@@ -20,8 +26,23 @@ const MemeTimeline = ({
     status: "APPROVED",
   },
 }: MemeTimelineProps): ReactElement<MemeTimelineProps> => {
-  const { memes, loadMore, isLoading, hasNext } = useLatestMeme(filter);
+  const account = useContext(ClientWallet);
+  const { memes, loadMore, isLoading, hasNext, loadInit } = useLatestMeme(
+    filter,
+    { requireInit: false }
+  );
+  const { memes: previewMemes } = usePreviewMeme();
+
   const [userMemes, setUserMemes] = useState<OptimisticMemeUpload[]>([]);
+
+  useEffect(() => {
+    if (account == null || account === "") {
+      return;
+    }
+
+    loadInit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account]);
 
   const handleLoadMore = async () => {
     if (
@@ -49,26 +70,41 @@ const MemeTimeline = ({
 
   return (
     <>
-      {/* <div className="flex items-center justify-between w-full">
-        <h1 className="text-4xl font-bold">#Truthmemes</h1>
-        <SignInBtn />
-      </div> */}
       <div className="mt-4">
         <MemeInput onUpload={handleMemeUpload} />
       </div>
       <div className="px-2">
-        {userMemes.map((meme, i) => (
-          <MemeListItem {...meme} isServerMeme={false} key={i} />
-        ))}
-        <MemeList
-          memes={memes}
-          loadMore={handleLoadMore}
-          isLoading={isLoading}
-        />
-        {isLoading && (
-          <div className="py-4 flex items-center justify-center">
-            Loading more...
-          </div>
+        {(account == null || account === "") && memes.length === 0 ? (
+          <>
+            <MemeList
+              memes={previewMemes}
+              loadMore={() => {}}
+              isLoading={false}
+            />
+            <div className="fixed bottom-0 left-0 w-full bg-corange backdrop-blur-lg bg-opacity-50 mt-8 md:mt-12">
+              <div className="w-full flex items-center justify-center px-4 p-8 space-x-1 text-xl cursor-pointer">
+                <SignInBtn variant="text-only" />
+                <span>to see more memes</span>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {userMemes.map((meme, i) => (
+              <MemeListItem {...meme} isServerMeme={false} key={i} />
+            ))}
+            <MemeList
+              memes={memes}
+              loadMore={handleLoadMore}
+              isLoading={isLoading}
+            />
+
+            {isLoading && (
+              <div className="py-4 flex items-center justify-center">
+                Loading more...
+              </div>
+            )}
+          </>
         )}
       </div>
     </>

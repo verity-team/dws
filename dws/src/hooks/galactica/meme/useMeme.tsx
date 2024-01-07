@@ -1,4 +1,8 @@
-import { getLatestMeme, getMemeImage } from "@/api/galactica/meme/meme";
+import {
+  getLatestMeme,
+  getMemeImage,
+  getPreviewMeme,
+} from "@/api/galactica/meme/meme";
 import { MemeUpload } from "@/api/galactica/meme/meme.type";
 import { MemeFilter } from "@/components/galactica/meme/meme.type";
 import { PaginationRequest } from "@/utils";
@@ -6,7 +10,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const LIMIT = 5;
 
-export const useLatestMeme = (filter?: MemeFilter) => {
+interface UseLatestMemeConfig {
+  requireInit?: boolean;
+}
+
+export const useLatestMeme = (
+  filter?: MemeFilter,
+  config?: UseLatestMemeConfig
+) => {
   const [memes, setMemes] = useState<MemeUpload[]>([]);
   const [page, setPage] = useState<number>(0);
   const [total, setTotal] = useState<number>(0);
@@ -44,13 +55,16 @@ export const useLatestMeme = (filter?: MemeFilter) => {
   };
 
   useEffect(() => {
+    if (!config?.requireInit) {
+      return;
+    }
+
     const init = async () => {
       await loadInit();
       loadingState.current = false;
     };
 
     init();
-    console.log("Loading init", filter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter?.status]);
 
@@ -96,6 +110,26 @@ export const useLatestMeme = (filter?: MemeFilter) => {
     clear,
     removeMeme,
   };
+};
+
+export const usePreviewMeme = () => {
+  const [memes, setMemes] = useState<MemeUpload[]>([]);
+
+  const loadInit = useCallback(async () => {
+    const { data } = await getPreviewMeme();
+    if (data.length === 0) {
+      // Avoid state mutation on empty data
+      return;
+    }
+
+    setMemes(data);
+  }, []);
+
+  useEffect(() => {
+    loadInit();
+  }, []);
+
+  return { memes };
 };
 
 export const useMemeImage = () => {

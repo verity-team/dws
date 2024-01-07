@@ -83,6 +83,38 @@ export const getLatestMeme = async (
   }
 };
 
+export const getPreviewMeme = async (): Promise<
+  PaginationResponse<MemeUpload>
+> => {
+  const path = "/meme/preview";
+  const response = await baseGalacticaRequest("GET", { path });
+
+  const defaultData: PaginationResponse<MemeUpload> = {
+    data: [],
+    pagination: {
+      limit: 10,
+      offset: 0,
+      total: 0,
+    },
+  };
+
+  if (response == null || !response.ok) {
+    if (response?.status === 429) {
+      toast.error("Too many request. Please try again later");
+    }
+    console.error("Failed to get latest memes");
+    return defaultData;
+  }
+
+  try {
+    const data = await response.json();
+    return data;
+  } catch {
+    console.error("Failed to parse data");
+    return defaultData;
+  }
+};
+
 export const getSingleMeme = async (id: string): Promise<Maybe<MemeUpload>> => {
   const path = `/meme/${id}`;
 

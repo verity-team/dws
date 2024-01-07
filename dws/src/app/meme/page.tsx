@@ -11,7 +11,7 @@ const TruthMemePage = () => {
         <div className="col-span-12">
           <MemeNavbar />
         </div>
-        <div className="col-span-12 md:col-span-4 md:col-start-5 md:mt-12">
+        <div className="col-span-12 md:col-span-4 md:col-start-5">
           <MemeTimeline />
         </div>
       </div>
