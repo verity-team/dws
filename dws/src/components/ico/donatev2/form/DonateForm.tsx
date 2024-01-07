@@ -86,20 +86,25 @@ const DonateForm = (): ReactElement => {
       return;
     }
 
-    const txHash = await requestTransaction(data.payAmount, selectedToken);
-    if (!txHash) {
+    try {
+      const txHash = await requestTransaction(data.payAmount, selectedToken);
+      if (!txHash) {
+        setLoading(false);
+        toast.error("Donate failed");
+        return;
+      }
+
+      toast.success("Donate success");
+
+      // Revalidate user donations
+      await mutate(getUserDonationDataKey(account));
+
+      return txHash;
+    } catch (error) {
+      console.log(error);
+    } finally {
       setLoading(false);
-      toast.error("Donate failed");
-      return;
     }
-
-    toast.success("Donate success");
-    setLoading(false);
-
-    // Revalidate user donations
-    await mutate(getUserDonationDataKey(account));
-
-    return txHash;
   };
 
   const minDonateAmount: number = useMemo(() => {

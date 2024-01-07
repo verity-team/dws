@@ -60,7 +60,7 @@ const MemeNavbar = (): ReactElement => {
     <div className="z-auto md:max-w-6xl md:mx-auto">
       <div className="px-5 items-center flex justify-between">
         {/* LOGO */}
-        <div>
+        <a href="/">
           <Image
             src="/images/logo-no-shadow.png"
             alt="truth memes logo"
@@ -68,7 +68,7 @@ const MemeNavbar = (): ReactElement => {
             height={0}
             className="max-w-[200px]"
           />
-        </div>
+        </a>
         <div className="flex items-center space-x-4">
           <SignInBtn />
           <div className="flex items-center space-x-4">

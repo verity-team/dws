@@ -56,7 +56,7 @@ const Navbar = (): ReactElement => {
     <div className="mx-8 z-auto md:mx-12">
       <div className="px-5 items-center flex justify-between">
         {/* LOGO */}
-        <div>
+        <a href="/">
           <Image
             src="/images/logo-no-shadow.png"
             alt="truth memes logo"
@@ -64,7 +64,7 @@ const Navbar = (): ReactElement => {
             height={0}
             className="max-w-[200px]"
           />
-        </div>
+        </a>
 
         {/* DESKTOP NAVBAR */}
         <nav className="hidden items-center space-x-2 lg:flex">
