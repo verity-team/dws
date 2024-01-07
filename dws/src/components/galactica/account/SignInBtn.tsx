@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  requestNonce,
   verifyAccessToken,
   verifySignature,
 } from "@/api/galactica/account/account";
