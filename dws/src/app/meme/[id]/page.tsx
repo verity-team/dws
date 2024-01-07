@@ -1,3 +1,5 @@
+import "server-only";
+
 import { getSingleMeme } from "@/api/galactica/meme/meme";
 import { roboto } from "@/app/fonts";
 import ItemToolbar from "@/components/galactica/meme/list/toolbar/ItemToolbar";
@@ -8,6 +10,7 @@ import Image from "next/image";
 import { ReactElement } from "react";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { Metadata } from "next";
+import { Toaster } from "react-hot-toast";
 
 const prepareMetadata: Metadata = {
   twitter: {
@@ -33,7 +36,7 @@ const SingleMemePage = async ({
 
   const { fileId, userId, createdAt, caption } = memeData;
 
-  const memeImage = `${process.env.GALACTICA_API_URL}/meme/image/${fileId}`;
+  const memeImage = `${process.env.NEXT_PUBLIC_GALACTICA_API_URL}/meme/image/${fileId}`;
 
   if (prepareMetadata.twitter) {
     prepareMetadata.twitter.images = [memeImage];
@@ -42,9 +45,8 @@ const SingleMemePage = async ({
   }
 
   return (
-    <div className="grid grid-cols-12">
-      <div className="col-span-3"></div>
-      <div className="col-span-6">
+    <div className="grid grid-cols-12 px-8">
+      <div className="col-span-12 md:col-span-4 md:col-start-5 md:mt-12">
         <div className={roboto.className}>
           <a
             className="flex items-center my-8 hover:text-blue-500 hover:underline cursor-pointer space-x-4"
@@ -83,7 +85,7 @@ const SingleMemePage = async ({
           </div>
         </div>
       </div>
-      <div className="col-span-3"></div>
+      <Toaster />
     </div>
   );
 };

@@ -5,6 +5,7 @@ import LinkIcon from "@mui/icons-material/Link";
 import { TwitterShareButton, TwitterIcon } from "react-share";
 import { ReactElement, SyntheticEvent, useState } from "react";
 import { Nullable } from "@/utils";
+import toast from "react-hot-toast";
 
 interface ShareButtonProps {
   memeId: string;
@@ -26,6 +27,12 @@ const ShareButton = ({
 
     setAnchorEl(event.currentTarget);
     openShareDropdown();
+  };
+
+  const handleCopyClick = () => {
+    navigator.clipboard.writeText(`${window.location.href}/${memeId}`);
+    toast("Copied to clipboard", { icon: "📋" });
+    closeShareDropdown();
   };
 
   return (
@@ -58,6 +65,7 @@ const ShareButton = ({
             url={`${window.location.href}/${memeId}`}
             hashtags={["memes", "truthmemes"]}
             className="w-full"
+            onClick={closeShareDropdown}
           >
             <div className="flex items-center">
               <TwitterIcon size={32} round />
@@ -66,7 +74,10 @@ const ShareButton = ({
           </TwitterShareButton>
         </MenuItem>
         <MenuItem>
-          <div className="flex items-center justify-between">
+          <div
+            className="flex items-center justify-between"
+            onClick={handleCopyClick}
+          >
             <div className="flex items-center justify-center p-2 bg-slate-200 rounded-full">
               <LinkIcon className="rotate-45 text-xl" />
             </div>

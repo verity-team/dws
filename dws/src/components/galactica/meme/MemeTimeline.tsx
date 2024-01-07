@@ -53,7 +53,6 @@ const MemeTimeline = ({
         <h1 className="text-4xl font-bold">#Truthmemes</h1>
         <SignInBtn />
       </div> */}
-      <MemeNavbar />
       <div className="mt-4">
         <MemeInput onUpload={handleMemeUpload} />
       </div>

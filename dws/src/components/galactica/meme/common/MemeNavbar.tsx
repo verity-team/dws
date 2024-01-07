@@ -54,7 +54,7 @@ const MemeNavbar = (): ReactElement => {
   };
 
   return (
-    <div className="z-auto md:mx-8">
+    <div className="z-auto md:max-w-6xl md:mx-auto">
       <div className="px-5 items-center flex justify-between">
         {/* LOGO */}
         <div>
