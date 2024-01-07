@@ -2,7 +2,7 @@ import { toWei } from "web3-utils";
 import {
   AvailableToken,
   AvailableWallet,
-  TokenInfo,
+  contractAddrMap,
   multipleOrderOf10,
 } from "./token";
 import { encodeFunctionCall } from "web3-eth-abi";
@@ -16,17 +16,6 @@ import {
 } from "@wagmi/core";
 import { parseEther } from "viem";
 import { Maybe } from "@/utils";
-
-const contractAddrMap = new Map<AvailableToken, TokenInfo>([
-  [
-    "LINK",
-    {
-      symbol: "LINK",
-      contractAddress: "0x779877A7B0D9E8603169DdbD7836e478b4624789",
-      decimals: 18,
-    },
-  ],
-]);
 
 const getContractData = (
   receiver: string,

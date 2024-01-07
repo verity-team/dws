@@ -39,7 +39,7 @@ export const useUserDonationData = (account: string) => {
     return time;
   }, []);
 
-  const [waitTime, setWaitTime] = useState(defaultWaitTime);
+  const [waitTime, setWaitTime] = useState(unconfirmWaitTime);
 
   const { data, error, isLoading } = useSWRImmutable<
     UserDonationData,
