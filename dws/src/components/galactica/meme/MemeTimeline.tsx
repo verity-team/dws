@@ -57,7 +57,7 @@ const MemeTimeline = ({
       <div className="mt-4">
         <MemeInput onUpload={handleMemeUpload} />
       </div>
-      <div>
+      <div className="px-2">
         {userMemes.map((meme, i) => (
           <MemeListItem {...meme} isServerMeme={false} key={i} />
         ))}

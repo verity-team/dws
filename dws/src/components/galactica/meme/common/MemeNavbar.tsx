@@ -66,26 +66,26 @@ const MemeNavbar = (): ReactElement => {
             className="max-w-[200px]"
           />
         </div>
-
-        {/* DESKTOP NAVBAR */}
-        <nav className="hidden items-center space-x-2 lg:flex">
+        <div className="flex items-center space-x-4">
           <SignInBtn />
-          {navbarItems.map((item) => (
-            <NavbarItem
-              text={item.text}
-              isActive={item.isActive}
-              href={item.href}
-              key={item.text}
-            />
-          ))}
-        </nav>
+          {/* DESKTOP NAVBAR */}
+          <nav className="hidden items-center space-x-2 lg:flex">
+            {navbarItems.map((item) => (
+              <NavbarItem
+                text={item.text}
+                isActive={item.isActive}
+                href={item.href}
+                key={item.text}
+              />
+            ))}
+          </nav>
 
-        {/* MOBILE NAVBAR */}
-        <div className="flex items-center space-x-4 lg:hidden">
-          <SignInBtn />
-          <button type="button" onClick={handleMenuToggle}>
-            <MenuIcon fontSize="large" />
-          </button>
+          {/* MOBILE NAVBAR */}
+          <div className="flex items-center space-x-4 lg:hidden">
+            <button type="button" onClick={handleMenuToggle}>
+              <MenuIcon fontSize="large" />
+            </button>
+          </div>
         </div>
       </div>
       <Collapse in={isMenuOpen} timeout="auto" unmountOnExit>

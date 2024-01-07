@@ -47,7 +47,7 @@ const MemeListItem = ({
     router.push(`/meme/${fileId}`);
   };
 
-  if (loading || !url) {
+  if (loading) {
     return (
       <div className="p-12 flex items-center justify-center">Loading...</div>
     );
@@ -77,7 +77,7 @@ const MemeListItem = ({
             src={isServerMeme ? url : fileId}
             width={0}
             height={0}
-            className="object-contain w-auto max-w-[80%] max-h-[40vh]"
+            className="border-4 border-black box-border rounded-lg w-auto max-h-[40vh] object-contain"
             alt={caption}
           />
         </div>
