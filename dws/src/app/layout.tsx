@@ -33,6 +33,9 @@ export const metadata: Metadata = {
     description: "Join the Truthmemes army and deliver the truth to everyone!",
     images: ["/images/social-media-banner.png"],
   },
+  metadataBase: process.env.NEXT_PUBLIC_HOST_URL
+    ? new URL(process.env.NEXT_PUBLIC_HOST_URL)
+    : new URL("https://truthmemes.io"),
 };
 
 export default function RootLayout({
