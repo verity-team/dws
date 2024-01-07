@@ -19,6 +19,8 @@ import TextError from "@/components/common/TextError";
 import { ClientWallet, WalletUtils } from "@/components/ClientRoot";
 import { useDonationData } from "@/api/dws/donation/donation";
 import { getUserDonationDataKey } from "@/api/dws/user/user";
+import { useToggle } from "@/hooks/utils/useToggle";
+import ThankDialog from "./ThankDialog";
 
 export interface DonateFormData {
   payAmount: number;
@@ -34,6 +36,12 @@ const DonateForm = (): ReactElement => {
   const [receiveAmount, setReceiveAmount] = useState<number | "N/A">(0);
 
   const [isLoading, setLoading] = useState(false);
+
+  const {
+    isOpen: isThankOpen,
+    open: setThankOpen,
+    close: setThankClose,
+  } = useToggle();
 
   const {
     register,
@@ -90,11 +98,12 @@ const DonateForm = (): ReactElement => {
       const txHash = await requestTransaction(data.payAmount, selectedToken);
       if (!txHash) {
         setLoading(false);
-        toast.error("Donate failed");
+        toast.error("Transaction rejected");
         return;
       }
 
       toast.success("Donate success");
+      setThankOpen();
 
       // Revalidate user donations
       await mutate(getUserDonationDataKey(account));
@@ -102,6 +111,7 @@ const DonateForm = (): ReactElement => {
       return txHash;
     } catch (error) {
       console.log(error);
+      return;
     } finally {
       setLoading(false);
     }
@@ -192,6 +202,7 @@ const DonateForm = (): ReactElement => {
           />
         </div>
       </form>
+      <ThankDialog isOpen={isThankOpen} handleClose={setThankClose} />
     </>
   );
 };
