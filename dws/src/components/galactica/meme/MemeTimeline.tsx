@@ -8,6 +8,7 @@ import { useCallback, useState, ReactElement } from "react";
 import { OptimisticMemeUpload } from "@/api/galactica/meme/meme.type";
 import MemeListItem from "./list/MemeListItem";
 import { MemeFilter } from "./meme.type";
+import MemeNavbar from "./common/MemeNavbar";
 
 interface MemeTimelineProps {
   filter?: MemeFilter;
@@ -48,14 +49,15 @@ const MemeTimeline = ({
 
   return (
     <>
-      <div className="flex items-center justify-between">
+      {/* <div className="flex items-center justify-between w-full">
         <h1 className="text-4xl font-bold">#Truthmemes</h1>
         <SignInBtn />
-      </div>
+      </div> */}
+      <MemeNavbar />
       <div className="mt-4">
         <MemeInput onUpload={handleMemeUpload} />
       </div>
-      <div>
+      <div className="px-2">
         {userMemes.map((meme, i) => (
           <MemeListItem {...meme} isServerMeme={false} key={i} />
         ))}

@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  requestNonce,
   verifyAccessToken,
   verifySignature,
 } from "@/api/galactica/account/account";
@@ -12,48 +11,66 @@ import { Dialog, DialogContent } from "@mui/material";
 import { memo, useContext, useEffect, useState } from "react";
 import Image from "next/image";
 import toast from "react-hot-toast";
-import { sleep } from "@/utils/utils";
 import { DWS_AT_KEY } from "@/utils/const";
+import { useNonce } from "@/hooks/galactica/account/useNonce";
+
+const verifyUserAccessToken = async (wallet: string): Promise<boolean> => {
+  const accessToken = localStorage.getItem(DWS_AT_KEY);
+
+  if (accessToken == null || accessToken.trim() === "") {
+    return false;
+  }
+
+  // Verify access token with current wallet address
+  const isAcessTokenValid = await verifyAccessToken(wallet);
+
+  if (isAcessTokenValid) {
+    // No need to sign-in again
+    return true;
+  }
+
+  // If current wallet address and access token's wallet address mismatch
+  localStorage.removeItem(DWS_AT_KEY);
+  return false;
+};
 
 const SignInBtn = () => {
   const { connect, disconnect, requestWalletSignature } =
     useContext(WalletUtils);
   const walletAddress = useContext(ClientWallet);
 
+  const { getNonce } = useNonce();
+
   const [siweMessageOpen, setSiweMessageOpen] = useState(false);
+  const [signaturePending, setSignaturePending] = useState(false);
+
   const [connected, setConnected] = useState(false);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    if (walletAddress == null || walletAddress === "") {
+    if (walletAddress == null || walletAddress === "" || signaturePending) {
       return;
     }
 
     const handleSignIn = async (walletAddress: string) => {
-      const accessToken = localStorage.getItem(DWS_AT_KEY);
-      if (accessToken != null && accessToken !== "") {
-        // Verify access token with current wallet address
-        const isAcessTokenValid = await verifyAccessToken(walletAddress);
+      setSignaturePending(true);
 
-        if (isAcessTokenValid) {
-          // No need to sign-in again
-          handleConnectSuccess();
-          return;
-        }
-
-        // If current wallet address and access token's wallet address mismatch
-        localStorage.removeItem(DWS_AT_KEY);
+      const accessTokenValid = await verifyUserAccessToken(walletAddress);
+      if (accessTokenValid) {
+        handleConnectSuccess();
+        return;
       }
 
-      await sleep(2000);
-      setSiweMessageOpen(true);
+      setTimeout(() => setSiweMessageOpen(true), 2000);
 
       // Request nonce and generate message
-      const nonce = await requestNonce();
+      const nonce = await getNonce();
       if (nonce == null) {
         // TODO: Maybe show some toast so user know the server is busy
         return;
       }
+
+      console.log(nonce);
 
       // Request signature
       const message = createSiweMesage(walletAddress, nonce);
@@ -67,6 +84,7 @@ const SignInBtn = () => {
           handleCloseSiweMessage();
           disconnect();
         }, 2000);
+        return;
       }
 
       const verifyResult = await verifySignature({ message, signature });
@@ -79,9 +97,7 @@ const SignInBtn = () => {
       handleConnectSuccess();
     };
 
-    console.log(walletAddress);
-
-    handleSignIn(walletAddress);
+    handleSignIn(walletAddress).finally(() => setSignaturePending(false));
   }, [walletAddress]);
 
   const handleConnectSuccess = () => {
@@ -105,9 +121,14 @@ const SignInBtn = () => {
         </button>
       )}
       {connected && (
-        <div className="text-2xl">
-          Welcome {getWalletShorthand(walletAddress)}
-        </div>
+        <>
+          <div className="text-2xl hidden md:block">
+            Welcome {getWalletShorthand(walletAddress)}
+          </div>
+          <div className="text-2xl md:hidden">
+            {getWalletShorthand(walletAddress)}
+          </div>
+        </>
       )}
       <Dialog
         open={siweMessageOpen}
