@@ -9,7 +9,7 @@ export interface TokenInfo {
 export type AvailableToken = "ETH" | "USDT" | "LINK";
 export type AvailableWallet = "MetaMask" | "WalletConnect";
 
-export const availableTokens: Array<AvailableToken> = ["ETH", "USDT", "LINK"];
+export const availableTokens: Array<AvailableToken> = ["ETH", "USDT"];
 export const availableWallets: Array<AvailableWallet> = [
   "MetaMask",
   "WalletConnect",
