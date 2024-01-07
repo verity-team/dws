@@ -10,12 +10,36 @@ import {
   useState,
 } from "react";
 import MemeInputToolbar from "./MemeInputToolbar";
+import toast from "react-hot-toast";
+
+type FileStatus = "TOO_BIG" | "INVALID_MIME" | "OK";
 
 interface MemeDropAreaProps {
   onMemeChange: (file: File) => void;
   children: ReactNode;
   fileInputRef?: Ref<HTMLInputElement>;
 }
+
+const allowedFileTypes = ["image/png", "image/jpeg", "image/gif"];
+
+const validateUploadFile = (file: File): FileStatus => {
+  // Default max file size to 1MB ~ 1.000.000 bytes
+  let maxFileSize = Number(process.env.NEXT_PUBLIC_FILE_MAX);
+  if (isNaN(maxFileSize)) {
+    maxFileSize = 1_000_000;
+  }
+
+  if (file.size > maxFileSize) {
+    return "TOO_BIG";
+  }
+
+  const isMimeValid = allowedFileTypes.some((type) => type === file.type);
+  if (!isMimeValid) {
+    return "INVALID_MIME";
+  }
+
+  return "OK";
+};
 
 const MemeDropArea = ({
   onMemeChange,
@@ -48,9 +72,23 @@ const MemeDropArea = ({
   };
 
   const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files[0]) {
-      onMemeChange(event.target.files[0]);
+    if (!event.target.files?.[0]) {
+      return;
     }
+
+    const uploadedFile = event.target.files[0];
+    const validationResult = validateUploadFile(uploadedFile);
+    if (validationResult === "TOO_BIG") {
+      toast.error("Your meme is too big. Best we can do is 1MB");
+      return;
+    }
+
+    if (validationResult === "INVALID_MIME") {
+      toast.error("Meme should be an image. We support PNG, JPG, and GIF");
+      return;
+    }
+
+    onMemeChange(event.target.files[0]);
   };
 
   const overlayStyle = useMemo(() => {
