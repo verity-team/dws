@@ -107,43 +107,50 @@ const MemeInput = ({
 
   return (
     <div>
-      <div className="w-full p-2 border-2 border-gray-100">
-        <MemeDropArea
-          onMemeChange={handleMemeChange}
-          fileInputRef={memeInputRef}
-        >
-          <div className="flex items-center p-2">
-            <Image src="/images/logo.png" width={48} height={48} alt="avatar" />
-            <input
-              className="px-4 py-2 w-full outline-none my-2 text-lg"
-              placeholder="Unveil the truth ?!"
-              {...register("caption")}
+      <div className="w-full p-2">
+        <div className="p-2 border-2 border-black rounded-lg bg-white">
+          <MemeDropArea
+            onMemeChange={handleMemeChange}
+            fileInputRef={memeInputRef}
+          >
+            <div className="flex items-center space-x-2 p-2">
+              <Image
+                src="/images/logo.png"
+                width={48}
+                height={48}
+                alt="avatar"
+              />
+              <input
+                className="px-4 py-2 w-full outline-none my-2 text-lg rounded-lg border-2 border-black"
+                placeholder="Unveil the truth ?!"
+                {...register("caption")}
+              />
+            </div>
+          </MemeDropArea>
+          {meme && (
+            <div className="container mx-auto mt-4 px-20 relative">
+              <button
+                onClick={handleMemeRemove}
+                className="absolute top-2 right-2 rounded-full bg-gray-800 p-1"
+              >
+                <CloseIcon fontSize="medium" htmlColor="white" />
+              </button>
+              <Image
+                src={URL.createObjectURL(meme)}
+                alt="meme upload image"
+                width={0}
+                height={0}
+                className="object-contain w-auto max-w-full max-h-full"
+              />
+            </div>
+          )}
+          <div className="mt-4 p-2">
+            <MemeInputToolbar
+              canSubmit={canPost}
+              onImageBtnClick={handleImageBtnClick}
+              onPostBtnClick={handleMemeUpload}
             />
           </div>
-        </MemeDropArea>
-        {meme && (
-          <div className="container mx-auto mt-4 px-20 relative">
-            <button
-              onClick={handleMemeRemove}
-              className="absolute top-2 right-2 rounded-full bg-gray-800 p-1"
-            >
-              <CloseIcon fontSize="medium" htmlColor="white" />
-            </button>
-            <Image
-              src={URL.createObjectURL(meme)}
-              alt="meme upload image"
-              width={0}
-              height={0}
-              className="object-contain w-auto max-w-full max-h-full"
-            />
-          </div>
-        )}
-        <div className="mt-4 p-2">
-          <MemeInputToolbar
-            canSubmit={canPost}
-            onImageBtnClick={handleImageBtnClick}
-            onPostBtnClick={handleMemeUpload}
-          />
         </div>
       </div>
     </div>

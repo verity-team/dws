@@ -54,7 +54,7 @@ const MemeTimeline = ({
         <SignInBtn />
       </div> */}
       <MemeNavbar />
-      {/* <div className="mt-4">
+      <div className="mt-4">
         <MemeInput onUpload={handleMemeUpload} />
       </div>
       <div>
@@ -71,7 +71,7 @@ const MemeTimeline = ({
             Loading more...
           </div>
         )}
-      </div> */}
+      </div>
     </>
   );
 };
