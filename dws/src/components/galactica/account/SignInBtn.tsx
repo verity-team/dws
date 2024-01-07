@@ -8,11 +8,17 @@ import { ClientWallet, WalletUtils } from "@/components/ClientRoot";
 import { createSiweMesage } from "@/utils/wallet/siwe";
 import { getWalletShorthand } from "@/utils/wallet/wallet";
 import { Dialog, DialogContent } from "@mui/material";
-import { memo, useContext, useEffect, useState } from "react";
+import { ReactElement, memo, useContext, useEffect, useState } from "react";
 import Image from "next/image";
 import toast from "react-hot-toast";
 import { DWS_AT_KEY } from "@/utils/const";
 import { useNonce } from "@/hooks/galactica/account/useNonce";
+
+type SignInBtnVariant = "button" | "text-only";
+
+interface SignInBtnProps {
+  variant?: SignInBtnVariant;
+}
 
 const verifyUserAccessToken = async (wallet: string): Promise<boolean> => {
   const accessToken = localStorage.getItem(DWS_AT_KEY);
@@ -34,7 +40,9 @@ const verifyUserAccessToken = async (wallet: string): Promise<boolean> => {
   return false;
 };
 
-const SignInBtn = () => {
+const SignInBtn = ({
+  variant = "button",
+}: SignInBtnProps): ReactElement<SignInBtnProps> => {
   const { connect, disconnect, requestWalletSignature } =
     useContext(WalletUtils);
   const walletAddress = useContext(ClientWallet);
@@ -113,12 +121,23 @@ const SignInBtn = () => {
   return (
     <div>
       {!connected && (
-        <button
-          className="px-4 py-2 rounded-2xl bg-red-500 hover:bg-red-600 text-white cursor-pointer disabled:cursor-not-allowed"
-          onClick={connect}
-        >
-          Sign in
-        </button>
+        <>
+          {variant === "button" ? (
+            <button
+              className="px-4 py-2 rounded-2xl bg-red-500 hover:bg-red-600 text-white cursor-pointer disabled:cursor-not-allowed"
+              onClick={connect}
+            >
+              Sign in
+            </button>
+          ) : (
+            <div
+              className="underline text-blue-700 hover:text-blue-900 cursor-pointer disabled:cursor-not-allowed"
+              onClick={connect}
+            >
+              Sign in
+            </div>
+          )}
+        </>
       )}
       {connected && (
         <>

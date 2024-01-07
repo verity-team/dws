@@ -12,8 +12,10 @@ const AdminTimeline = ({
     status: "PENDING",
   },
 }: AdminTimelineProps): ReactElement<AdminTimelineProps> => {
-  const { memes, hasNext, loadMore, isLoading, removeMeme } =
-    useLatestMeme(filter);
+  const { memes, hasNext, loadMore, isLoading, removeMeme } = useLatestMeme(
+    filter,
+    { requireInit: true }
+  );
 
   const handleLoadMore = async () => {
     if (
