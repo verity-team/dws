@@ -128,7 +128,7 @@ const MemeInput = ({
             </div>
           </MemeDropArea>
           {meme && (
-            <div className="container mx-auto mt-4 px-20 relative">
+            <div className="container mx-auto mt-4 relative">
               <button
                 onClick={handleMemeRemove}
                 className="absolute top-2 right-2 rounded-full bg-gray-800 p-1"
@@ -140,7 +140,7 @@ const MemeInput = ({
                 alt="meme upload image"
                 width={0}
                 height={0}
-                className="object-contain w-auto max-w-full max-h-full"
+                className="object-contain w-auto max-w-full max-h-[30vh] mx-auto"
               />
             </div>
           )}
