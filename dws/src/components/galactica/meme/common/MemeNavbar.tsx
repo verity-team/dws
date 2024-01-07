@@ -10,7 +10,7 @@ import SignInBtn from "../../account/SignInBtn";
 const navbarItems = [
   {
     text: "Home",
-    isActive: true,
+    isActive: false,
     href: "/",
   },
   {
@@ -25,8 +25,8 @@ const navbarItems = [
   },
   {
     text: "Memes",
-    isActive: false,
-    href: "https://truthmemes.io/memes.html",
+    isActive: true,
+    href: "#",
   },
   {
     text: "NFTs",
