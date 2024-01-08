@@ -18,16 +18,16 @@ export const getUserDonationDataKey = (account: string) =>
  * @returns {{data, error, isLoading}} Return user's data, error (if any), and request status
  */
 export const useUserDonationData = (account: string) => {
-  const defaultWaitTime = useMemo(() => {
-    const time = Number(process.env.NEXT_PUBLIC_UDATA_REFRESH_TIME_DEFAULT);
+  // const defaultWaitTime = useMemo(() => {
+  //   const time = Number(process.env.NEXT_PUBLIC_UDATA_REFRESH_TIME_DEFAULT);
 
-    if (isNaN(time)) {
-      // 5 minutes
-      return 5 * 60 * 1000;
-    }
+  //   if (isNaN(time)) {
+  //     // 5 minutes
+  //     return 5 * 60 * 1000;
+  //   }
 
-    return time;
-  }, []);
+  //   return time;
+  // }, []);
 
   const unconfirmWaitTime = useMemo(() => {
     const time = Number(process.env.NEXT_PUBLIC_UDATA_REFRESH_TIME_UNCONFIRMED);
@@ -48,23 +48,6 @@ export const useUserDonationData = (account: string) => {
     refreshInterval: waitTime,
     onErrorRetry: handleErrorRetry,
   });
-
-  useEffect(() => {
-    if (data == null || data.donations == null) {
-      return;
-    }
-
-    // If there are any unconfirmed donation, reduce the wait time
-    if (data.donations.some((donation) => donation.status === "unconfirmed")) {
-      setWaitTime(unconfirmWaitTime);
-      return;
-    }
-
-    // If none are unconfirmed, revert back to default wait time
-    if (waitTime !== defaultWaitTime) {
-      setWaitTime(defaultWaitTime);
-    }
-  }, [data]);
 
   return { data, error, isLoading };
 };

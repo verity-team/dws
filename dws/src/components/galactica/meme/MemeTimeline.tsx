@@ -1,20 +1,14 @@
 "use client";
 
-import SignInBtn from "../account/SignInBtn";
 import MemeInput from "./input/MemeInput";
 import MemeList from "./list/MemeList";
 import { useLatestMeme, usePreviewMeme } from "@/hooks/galactica/meme/useMeme";
-import {
-  useCallback,
-  useState,
-  ReactElement,
-  useContext,
-  useEffect,
-} from "react";
+import { useCallback, ReactElement, useContext, useEffect } from "react";
 import { OptimisticMemeUpload } from "@/api/galactica/meme/meme.type";
-import MemeListItem from "./list/MemeListItem";
 import { MemeFilter } from "./meme.type";
-import { ClientWallet } from "@/components/ClientRoot";
+import { Wallet, WalletUtils } from "@/components/ClientRoot";
+import { getAccessToken } from "@/hooks/galactica/account/useAccessToken";
+import { DWS_AT_KEY } from "@/utils/const";
 
 interface MemeTimelineProps {
   filter?: MemeFilter;
@@ -26,23 +20,48 @@ const MemeTimeline = ({
     status: "APPROVED",
   },
 }: MemeTimelineProps): ReactElement<MemeTimelineProps> => {
-  const account = useContext(ClientWallet);
+  const userWallet = useContext(Wallet);
+  const { connect } = useContext(WalletUtils);
+
   const { memes, loadMore, isLoading, hasNext, loadInit } = useLatestMeme(
     filter,
     { requireInit: false }
   );
   const { memes: previewMemes } = usePreviewMeme();
 
-  const [userMemes, setUserMemes] = useState<OptimisticMemeUpload[]>([]);
+  // const [userMemes, setUserMemes] = useState<OptimisticMemeUpload[]>([]);
+
+  const handleAccessTokenChange = useCallback((event: StorageEvent) => {
+    console.log(event);
+    if (event.key !== DWS_AT_KEY) {
+      return;
+    }
+
+    const accessToken = getAccessToken();
+    if (accessToken == null) {
+      return;
+    }
+
+    loadInit();
+  }, []);
 
   useEffect(() => {
-    if (account == null || account === "") {
+    window.addEventListener("storage", handleAccessTokenChange);
+
+    return () => {
+      window.removeEventListener("storage", handleAccessTokenChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    const accessToken = getAccessToken();
+    if (!userWallet.wallet || !accessToken) {
       return;
     }
 
     loadInit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [account]);
+  }, [userWallet.wallet]);
 
   const handleLoadMore = async () => {
     if (
@@ -59,13 +78,12 @@ const MemeTimeline = ({
 
   // Optimistically update the meme list UI after user upload their meme
   const handleMemeUpload = useCallback((meme: OptimisticMemeUpload) => {
-    setUserMemes((userMemes) => {
-      if (userMemes.length === 0) {
-        return [meme];
-      }
-
-      return [...userMemes, meme];
-    });
+    // setUserMemes((userMemes) => {
+    //   if (userMemes.length === 0) {
+    //     return [meme];
+    //   }
+    //   return [...userMemes, meme];
+    // });
   }, []);
 
   return (
@@ -74,7 +92,7 @@ const MemeTimeline = ({
         <MemeInput onUpload={handleMemeUpload} />
       </div>
       <div className="px-2">
-        {(account == null || account === "") && memes.length === 0 ? (
+        {!userWallet.wallet || memes.length === 0 ? (
           <>
             <MemeList
               memes={previewMemes}
@@ -83,16 +101,21 @@ const MemeTimeline = ({
             />
             <div className="fixed bottom-0 left-0 w-full bg-corange backdrop-blur-lg bg-opacity-50 mt-8 md:mt-12">
               <div className="w-full flex items-center justify-center px-4 p-8 space-x-1 text-xl cursor-pointer">
-                <SignInBtn variant="text-only" />
+                <div
+                  className="underline text-blue-700 hover:text-blue-900 cursor-pointer disabled:cursor-not-allowed"
+                  onClick={connect}
+                >
+                  Sign in
+                </div>
                 <span>to see more memes</span>
               </div>
             </div>
           </>
         ) : (
           <>
-            {userMemes.map((meme, i) => (
+            {/* {userMemes.map((meme, i) => (
               <MemeListItem {...meme} isServerMeme={false} key={i} />
-            ))}
+            ))} */}
             <MemeList
               memes={memes}
               loadMore={handleLoadMore}

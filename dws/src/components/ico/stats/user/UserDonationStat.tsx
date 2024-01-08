@@ -1,15 +1,17 @@
 "use client";
 
-import { ClientWallet } from "@/components/ClientRoot";
+import { Wallet } from "@/components/ClientRoot";
 import { useContext } from "react";
 import UserStat from "./UserStat";
 import { useUserDonationData } from "@/api/dws/user/user";
 // import { UserDonationData } from "@/api/dws/user/user.type";
 
 const UserDonationStat = () => {
-  const account = useContext(ClientWallet);
+  const userWallet = useContext(Wallet);
 
-  const { data: userDonationData, error } = useUserDonationData(account);
+  const { data: userDonationData, error } = useUserDonationData(
+    userWallet.wallet
+  );
 
   // const userDonationData: UserDonationData = {
   //   donations: [
@@ -60,7 +62,7 @@ const UserDonationStat = () => {
 
   // User have not connected, or there are no data on this user
   // Simply skip user stats rendering
-  if (account == null || userDonationData == null) {
+  if (userWallet == null || userDonationData == null) {
     return <div></div>;
   }
 

@@ -1,4 +1,4 @@
-import { WalletUtils } from "@/components/ClientRoot";
+import { IWalletUtils } from "@/components/ClientRoot";
 import { getWalletShorthand } from "@/utils/wallet/wallet";
 import { CircularProgress } from "@mui/material";
 import { MouseEvent, ReactElement, memo, useContext } from "react";

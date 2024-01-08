@@ -16,7 +16,7 @@ import { useForm } from "react-hook-form";
 import toast from "react-hot-toast";
 import { mutate } from "swr";
 import TextError from "@/components/common/TextError";
-import { ClientWallet, WalletUtils } from "@/components/ClientRoot";
+import { Wallet, WalletUtils } from "@/components/ClientRoot";
 import { useDonationData } from "@/api/dws/donation/donation";
 import { getUserDonationDataKey } from "@/api/dws/user/user";
 import { useToggle } from "@/hooks/utils/useToggle";
@@ -27,7 +27,7 @@ export interface DonateFormData {
 }
 
 const DonateForm = (): ReactElement => {
-  const account = useContext(ClientWallet);
+  const userWallet = useContext(Wallet);
   const { requestTransaction } = useContext(WalletUtils);
 
   const { tokenPrices } = useDonationData();
@@ -90,7 +90,7 @@ const DonateForm = (): ReactElement => {
   const handleDonate = async (data: DonateFormData) => {
     setLoading(true);
 
-    if (!account) {
+    if (!userWallet) {
       return;
     }
 
@@ -106,7 +106,7 @@ const DonateForm = (): ReactElement => {
       setThankOpen();
 
       // Revalidate user donations
-      await mutate(getUserDonationDataKey(account));
+      await mutate(getUserDonationDataKey(userWallet.wallet));
 
       return txHash;
     } catch (error) {
@@ -196,7 +196,7 @@ const DonateForm = (): ReactElement => {
         <div className="p-2">
           <ConnectButton
             disabled={receiveAmount === "N/A" || receiveAmount <= 0}
-            account={account}
+            account={userWallet.wallet}
             loading={isLoading}
             onDonate={handleSubmit(handleDonate)}
           />

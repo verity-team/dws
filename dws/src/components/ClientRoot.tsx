@@ -25,7 +25,7 @@ interface ClientRootProps {
   onWalletConnect?: (address: string) => void;
 }
 
-interface WalletUtils {
+interface IWalletUtils {
   connect: () => void;
   disconnect: () => void;
   requestTransaction: (
@@ -35,11 +35,19 @@ interface WalletUtils {
   requestWalletSignature: (message: string) => Promise<string>;
 }
 
+interface IWallet {
+  wallet: string;
+  setWallet: (wallet: string) => void;
+}
+
 // Wallet address
-export const ClientWallet = createContext<string>("");
+export const Wallet = createContext<IWallet>({
+  wallet: "",
+  setWallet: () => {},
+});
 
 // Functions to change wallet and disconnect wallet
-export const WalletUtils = createContext<WalletUtils>({
+export const WalletUtils = createContext<IWalletUtils>({
   connect: () => {},
   disconnect: () => {},
   requestTransaction: () => Promise.resolve(""),
@@ -149,9 +157,9 @@ const ClientRoot = ({
             requestWalletSignature: requestWalletSignature,
           }}
         >
-          <ClientWallet.Provider value={account}>
+          <Wallet.Provider value={{ wallet: account, setWallet: setAccount }}>
             {children}
-          </ClientWallet.Provider>
+          </Wallet.Provider>
         </WalletUtils.Provider>
         <Toaster />
         <ConnectModalV2
