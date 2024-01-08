@@ -17,9 +17,6 @@ const DonationStat = ({
     donation;
 
   let donateTime = getTimeElapsedString(ts);
-  if (donateTime !== "just now") {
-    donateTime += " ago";
-  }
 
   return (
     <div>
