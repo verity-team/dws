@@ -111,6 +111,7 @@ const SignInBtn = ({
 
       // Store access token
       localStorage.setItem(DWS_AT_KEY, verifyResult.accessToken);
+      window.dispatchEvent(new StorageEvent("storage", { key: DWS_AT_KEY }));
       handleConnectSuccess();
     };
 
