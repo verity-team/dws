@@ -30,7 +30,7 @@ interface MemeInputFormData {
 const MemeInput = ({
   onUpload,
 }: MemeInputProps): ReactElement<MemeInputProps> => {
-  const walletAddress = useContext(Wallet);
+  const userWallet = useContext(Wallet);
   const memeInputRef = useRef<HTMLInputElement>(null);
   const [meme, setMeme] = useState<Maybe<File>>(null);
   const {
@@ -63,7 +63,7 @@ const MemeInput = ({
       return;
     }
 
-    if (walletAddress == null || walletAddress === "") {
+    if (!userWallet.wallet) {
       // TODO: Open pop-up to prompt user to sign in
       toast.error("You need to sign-in first");
       return;
@@ -74,7 +74,7 @@ const MemeInput = ({
     const uploaded = await uploadMeme({
       meme,
       caption,
-      userId: walletAddress,
+      userId: userWallet.wallet,
     });
     if (!uploaded) {
       toast.error("Failed to upload. Please try again later");
@@ -82,7 +82,7 @@ const MemeInput = ({
     }
 
     onUpload({
-      userId: walletAddress,
+      userId: userWallet.wallet,
       fileId: URL.createObjectURL(meme),
       caption,
       createdAt: new Date().toISOString(),

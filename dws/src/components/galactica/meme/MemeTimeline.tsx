@@ -61,13 +61,12 @@ const MemeTimeline = ({
 
   // Optimistically update the meme list UI after user upload their meme
   const handleMemeUpload = useCallback((meme: OptimisticMemeUpload) => {
-    setUserMemes((userMemes) => {
-      if (userMemes.length === 0) {
-        return [meme];
-      }
-
-      return [...userMemes, meme];
-    });
+    // setUserMemes((userMemes) => {
+    //   if (userMemes.length === 0) {
+    //     return [meme];
+    //   }
+    //   return [...userMemes, meme];
+    // });
   }, []);
 
   return (
@@ -97,9 +96,9 @@ const MemeTimeline = ({
           </>
         ) : (
           <>
-            {userMemes.map((meme, i) => (
+            {/* {userMemes.map((meme, i) => (
               <MemeListItem {...meme} isServerMeme={false} key={i} />
-            ))}
+            ))} */}
             <MemeList
               memes={memes}
               loadMore={handleLoadMore}

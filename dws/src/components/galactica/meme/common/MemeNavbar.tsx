@@ -38,7 +38,7 @@ const navbarItems = [
 ];
 
 const MemeNavbar = (): ReactElement => {
-  const account = useContext(Wallet);
+  const userWallet = useContext(Wallet);
   const [isMenuOpen, setMenuOpen] = useState(false);
 
   // Avoid showing 2 navbar at the same time
@@ -73,7 +73,11 @@ const MemeNavbar = (): ReactElement => {
           <SignInBtn />
           <div className="flex items-center space-x-4">
             <button type="button" onClick={handleMenuToggle}>
-              {account ? <Avatar size={40} name={account} /> : <MenuIcon />}
+              {userWallet ? (
+                <Avatar size={40} name={userWallet.wallet} />
+              ) : (
+                <MenuIcon />
+              )}
             </button>
           </div>
         </div>

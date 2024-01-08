@@ -18,13 +18,13 @@ import {
   useState,
 } from "react";
 import toast from "react-hot-toast";
-import { Wallet, IWalletUtils } from "@/components/ClientRoot";
+import { Wallet, WalletUtils } from "@/components/ClientRoot";
 import { requestNewAffiliateCode } from "@/api/dws/affiliate/affiliate";
 import { Maybe } from "@/utils";
 import { useUserDonationData, getUserDonationData } from "@/api/dws/user/user";
 
 const AFCForm = (): ReactElement => {
-  const account = useContext(Wallet);
+  const userWallet = useContext(Wallet);
   const { connect } = useContext(WalletUtils);
 
   const { requestWalletSignature } = useContext(WalletUtils);
@@ -33,7 +33,7 @@ const AFCForm = (): ReactElement => {
   const [isLoading, setLoading] = useState(false);
   const [userCode, setUserCode] = useState("");
 
-  const { data, error } = useUserDonationData(account);
+  const { data, error } = useUserDonationData(userWallet.wallet);
 
   useEffect(() => {
     if (data == null || error != null) {
@@ -65,7 +65,7 @@ const AFCForm = (): ReactElement => {
   };
 
   const handleGenAffiliateCode = async () => {
-    if (account == null || account === "") {
+    if (!userWallet.wallet) {
       toast.error("You need to connect your wallet first");
       connect();
       return;
@@ -74,7 +74,7 @@ const AFCForm = (): ReactElement => {
     setLoading(true);
 
     // Try to (re)connect when there are no connected accounts
-    let currentAccount = account;
+    let currentAccount = userWallet.wallet;
     if (!currentAccount) {
       const wallet = await connectWallet();
       if (wallet == null) {
@@ -180,7 +180,7 @@ const AFCForm = (): ReactElement => {
                   </button>
                 )}
                 <div className="text-base italic mt-2">
-                  {!!account
+                  {!!userWallet
                     ? "Note: You will need to sign a message for verification purposes"
                     : "Note: You need to connect a wallet before you can generate affilate code"}
                 </div>

@@ -7,9 +7,11 @@ import { useUserDonationData } from "@/api/dws/user/user";
 // import { UserDonationData } from "@/api/dws/user/user.type";
 
 const UserDonationStat = () => {
-  const account = useContext(Wallet);
+  const userWallet = useContext(Wallet);
 
-  const { data: userDonationData, error } = useUserDonationData(account);
+  const { data: userDonationData, error } = useUserDonationData(
+    userWallet.wallet
+  );
 
   // const userDonationData: UserDonationData = {
   //   donations: [
@@ -60,7 +62,7 @@ const UserDonationStat = () => {
 
   // User have not connected, or there are no data on this user
   // Simply skip user stats rendering
-  if (account == null || userDonationData == null) {
+  if (userWallet == null || userDonationData == null) {
     return <div></div>;
   }
 

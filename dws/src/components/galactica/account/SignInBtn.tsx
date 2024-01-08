@@ -27,7 +27,7 @@ const SignInBtn = ({
   const { connect, disconnect, requestWalletSignature } =
     useContext(WalletUtils);
 
-  const clientWallet = useContext(Wallet);
+  const userWallet = useContext(Wallet);
 
   const { getNonce } = useNonce();
 
@@ -62,14 +62,14 @@ const SignInBtn = ({
 
       // Successfully signed in
       setConnected(true);
-      clientWallet.setWallet(validWalletAddress);
+      userWallet.setWallet(validWalletAddress);
     };
 
     trySignIn();
   }, []);
 
   useEffect(() => {
-    if (connected || !clientWallet.wallet) {
+    if (connected || !userWallet.wallet) {
       return;
     }
 
@@ -114,9 +114,9 @@ const SignInBtn = ({
       handleConnectSuccess();
     };
 
-    handleSignIn(clientWallet.wallet);
+    handleSignIn(userWallet.wallet);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientWallet.wallet]);
+  }, [userWallet.wallet]);
 
   return (
     <div>
@@ -142,10 +142,10 @@ const SignInBtn = ({
       {connected && (
         <>
           <div className="text-2xl hidden md:block">
-            Welcome {getWalletShorthand(clientWallet.wallet)}
+            Welcome {getWalletShorthand(userWallet.wallet)}
           </div>
           <div className="text-2xl md:hidden">
-            {getWalletShorthand(clientWallet.wallet)}
+            {getWalletShorthand(userWallet.wallet)}
           </div>
         </>
       )}
