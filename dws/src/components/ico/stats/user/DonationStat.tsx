@@ -26,12 +26,10 @@ const DonationStat = ({
       </div>
       <div className="mt-4 space-y-2">
         <div>
-          Donated: {Number(amount).toLocaleString()}{" "}
-          <span className="text-blue-500">${asset}</span>
+          Donated: {amount} <span className="text-blue-500">${asset}</span>
         </div>
         <div>
-          Reward: {Number(tokens).toLocaleString()}{" "}
-          <span className="text-cred">$TRUTH</span>
+          Reward: {tokens} <span className="text-cred">$TRUTH</span>
         </div>
         <div>
           Status: <span className="uppercase">{status}</span>
