@@ -18,13 +18,13 @@ import {
   useState,
 } from "react";
 import toast from "react-hot-toast";
-import { ClientWallet, WalletUtils } from "@/components/ClientRoot";
+import { Wallet, IWalletUtils } from "@/components/ClientRoot";
 import { requestNewAffiliateCode } from "@/api/dws/affiliate/affiliate";
 import { Maybe } from "@/utils";
 import { useUserDonationData, getUserDonationData } from "@/api/dws/user/user";
 
 const AFCForm = (): ReactElement => {
-  const account = useContext(ClientWallet);
+  const account = useContext(Wallet);
   const { connect } = useContext(WalletUtils);
 
   const { requestWalletSignature } = useContext(WalletUtils);

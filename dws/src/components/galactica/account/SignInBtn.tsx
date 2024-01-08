@@ -1,10 +1,7 @@
 "use client";
 
-import {
-  verifyAccessToken,
-  verifySignature,
-} from "@/api/galactica/account/account";
-import { ClientWallet, WalletUtils } from "@/components/ClientRoot";
+import { verifySignature } from "@/api/galactica/account/account";
+import { Wallet, WalletUtils } from "@/components/ClientRoot";
 import { createSiweMesage } from "@/utils/wallet/siwe";
 import { getWalletShorthand } from "@/utils/wallet/wallet";
 import { Dialog, DialogContent } from "@mui/material";
@@ -13,6 +10,10 @@ import Image from "next/image";
 import toast from "react-hot-toast";
 import { DWS_AT_KEY } from "@/utils/const";
 import { useNonce } from "@/hooks/galactica/account/useNonce";
+import {
+  removeAccessToken,
+  verifyToken,
+} from "@/hooks/galactica/account/useAccessToken";
 
 type SignInBtnVariant = "button" | "text-only";
 
@@ -20,50 +21,60 @@ interface SignInBtnProps {
   variant?: SignInBtnVariant;
 }
 
-const verifyUserAccessToken = async (wallet: string): Promise<boolean> => {
-  const accessToken = localStorage.getItem(DWS_AT_KEY);
-
-  if (accessToken == null || accessToken.trim() === "") {
-    return false;
-  }
-
-  // Verify access token with current wallet address
-  const isAcessTokenValid = await verifyAccessToken(wallet);
-
-  if (isAcessTokenValid) {
-    // No need to sign-in again
-    return true;
-  }
-
-  // If current wallet address and access token's wallet address mismatch
-  localStorage.removeItem(DWS_AT_KEY);
-  return false;
-};
-
 const SignInBtn = ({
   variant = "button",
 }: SignInBtnProps): ReactElement<SignInBtnProps> => {
   const { connect, disconnect, requestWalletSignature } =
     useContext(WalletUtils);
-  const walletAddress = useContext(ClientWallet);
+
+  const clientWallet = useContext(Wallet);
 
   const { getNonce } = useNonce();
 
   const [siweMessageOpen, setSiweMessageOpen] = useState(false);
-  const [signaturePending, setSignaturePending] = useState(false);
 
   const [connected, setConnected] = useState(false);
   const [failed, setFailed] = useState(false);
 
+  const handleConnectSuccess = () => {
+    handleCloseSiweMessage();
+    setConnected(true);
+    toast.success("Welcome to TruthMemes");
+  };
+
+  const handleCloseSiweMessage = () => {
+    setSiweMessageOpen(false);
+  };
+
   useEffect(() => {
-    if (walletAddress == null || walletAddress === "" || signaturePending) {
+    // Try to sign in
+    if (connected) {
+      return;
+    }
+
+    const trySignIn = async (): Promise<void> => {
+      let validWalletAddress = await verifyToken();
+      if (!validWalletAddress) {
+        // To be safe, try to remove access token from the local storage
+        removeAccessToken();
+        return;
+      }
+
+      // Successfully signed in
+      setConnected(true);
+      clientWallet.setWallet(validWalletAddress);
+    };
+
+    trySignIn();
+  }, []);
+
+  useEffect(() => {
+    if (connected || !clientWallet.wallet) {
       return;
     }
 
     const handleSignIn = async (walletAddress: string) => {
-      setSignaturePending(true);
-
-      const accessTokenValid = await verifyUserAccessToken(walletAddress);
+      const accessTokenValid = await verifyToken(walletAddress);
       if (accessTokenValid) {
         handleConnectSuccess();
         return;
@@ -77,8 +88,6 @@ const SignInBtn = ({
         // TODO: Maybe show some toast so user know the server is busy
         return;
       }
-
-      console.log(nonce);
 
       // Request signature
       const message = createSiweMesage(walletAddress, nonce);
@@ -105,18 +114,9 @@ const SignInBtn = ({
       handleConnectSuccess();
     };
 
-    handleSignIn(walletAddress).finally(() => setSignaturePending(false));
-  }, [walletAddress]);
-
-  const handleConnectSuccess = () => {
-    handleCloseSiweMessage();
-    setConnected(true);
-    toast.success("Welcome to TruthMemes");
-  };
-
-  const handleCloseSiweMessage = () => {
-    setSiweMessageOpen(false);
-  };
+    handleSignIn(clientWallet.wallet);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientWallet.wallet]);
 
   return (
     <div>
@@ -142,10 +142,10 @@ const SignInBtn = ({
       {connected && (
         <>
           <div className="text-2xl hidden md:block">
-            Welcome {getWalletShorthand(walletAddress)}
+            Welcome {getWalletShorthand(clientWallet.wallet)}
           </div>
           <div className="text-2xl md:hidden">
-            {getWalletShorthand(walletAddress)}
+            {getWalletShorthand(clientWallet.wallet)}
           </div>
         </>
       )}

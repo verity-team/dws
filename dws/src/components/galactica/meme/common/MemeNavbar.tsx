@@ -7,7 +7,7 @@ import MenuIcon from "@mui/icons-material/Menu";
 import NavbarItem from "@/components/landing/navbar/NavbarItem";
 import SignInBtn from "../../account/SignInBtn";
 import Avatar from "boring-avatars";
-import { ClientWallet } from "@/components/ClientRoot";
+import { Wallet } from "@/components/ClientRoot";
 
 const navbarItems = [
   {
@@ -38,7 +38,7 @@ const navbarItems = [
 ];
 
 const MemeNavbar = (): ReactElement => {
-  const account = useContext(ClientWallet);
+  const account = useContext(Wallet);
   const [isMenuOpen, setMenuOpen] = useState(false);
 
   // Avoid showing 2 navbar at the same time

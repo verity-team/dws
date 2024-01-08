@@ -16,7 +16,7 @@ import { useForm } from "react-hook-form";
 import toast from "react-hot-toast";
 import { mutate } from "swr";
 import TextError from "@/components/common/TextError";
-import { ClientWallet, WalletUtils } from "@/components/ClientRoot";
+import { Wallet, IWalletUtils } from "@/components/ClientRoot";
 import { useDonationData } from "@/api/dws/donation/donation";
 import { getUserDonationDataKey } from "@/api/dws/user/user";
 import { useToggle } from "@/hooks/utils/useToggle";
@@ -27,7 +27,7 @@ export interface DonateFormData {
 }
 
 const DonateForm = (): ReactElement => {
-  const account = useContext(ClientWallet);
+  const account = useContext(Wallet);
   const { requestTransaction } = useContext(WalletUtils);
 
   const { tokenPrices } = useDonationData();

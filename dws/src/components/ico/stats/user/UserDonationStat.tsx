@@ -1,13 +1,13 @@
 "use client";
 
-import { ClientWallet } from "@/components/ClientRoot";
+import { Wallet } from "@/components/ClientRoot";
 import { useContext } from "react";
 import UserStat from "./UserStat";
 import { useUserDonationData } from "@/api/dws/user/user";
 // import { UserDonationData } from "@/api/dws/user/user.type";
 
 const UserDonationStat = () => {
-  const account = useContext(ClientWallet);
+  const account = useContext(Wallet);
 
   const { data: userDonationData, error } = useUserDonationData(account);
 

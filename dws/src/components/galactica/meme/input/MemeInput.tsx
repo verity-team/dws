@@ -15,7 +15,7 @@ import MemeInputToolbar from "./MemeInputToolbar";
 import toast from "react-hot-toast";
 import { Maybe } from "@/utils";
 import { uploadMeme } from "@/api/galactica/meme/meme";
-import { ClientWallet } from "@/components/ClientRoot";
+import { Wallet } from "@/components/ClientRoot";
 import { useForm } from "react-hook-form";
 import { OptimisticMemeUpload } from "@/api/galactica/meme/meme.type";
 
@@ -30,7 +30,7 @@ interface MemeInputFormData {
 const MemeInput = ({
   onUpload,
 }: MemeInputProps): ReactElement<MemeInputProps> => {
-  const walletAddress = useContext(ClientWallet);
+  const walletAddress = useContext(Wallet);
   const memeInputRef = useRef<HTMLInputElement>(null);
   const [meme, setMeme] = useState<Maybe<File>>(null);
   const {
