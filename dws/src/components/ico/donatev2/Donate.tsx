@@ -11,7 +11,7 @@ const Donate = () => {
       <div className="max-w-2xl border-2 border-black rounded-2xl">
         <div className="w-full border-b-2 border-black bg-cred p-8 rounded-t-xl relative h-32">
           <Image
-            src="/images/givememoney.jpeg"
+            src="/dws-images/givememoney.jpeg"
             alt="shut up and take my money"
             fill
             className="rounded-t-xl object-cover"

@@ -115,7 +115,7 @@ const MemeInput = ({
           >
             <div className="flex items-center space-x-2 p-2">
               <Image
-                src="/images/logo.png"
+                src="/dws-images/logo.png"
                 width={48}
                 height={48}
                 alt="avatar"

@@ -15,12 +15,12 @@ const navbarItems = [
   {
     text: "Story",
     isActive: false,
-    href: "https://truthmemes.io/story.html",
+    href: "/story.html",
   },
   {
     text: "Community",
     isActive: false,
-    href: "https://truthmemes.io/community.html",
+    href: "/community.html",
   },
   {
     text: "Memes",
@@ -30,7 +30,7 @@ const navbarItems = [
   {
     text: "NFTs",
     isActive: false,
-    href: "https://truthmemes.io/nft.html",
+    href: "/nft.html",
   },
 ];
 
@@ -58,7 +58,7 @@ const Navbar = (): ReactElement => {
         {/* LOGO */}
         <a href="/">
           <Image
-            src="/images/logo-no-shadow.png"
+            src="/dws-images/logo-no-shadow.png"
             alt="truth memes logo"
             width={100}
             height={0}

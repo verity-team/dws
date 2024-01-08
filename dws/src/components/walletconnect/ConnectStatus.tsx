@@ -29,7 +29,7 @@ const ConnectStatus = ({
     >
       <div className="flex items-center justify-center min-w-max">
         <Image
-          src="/images/logo.png"
+          src="/dws-images/logo.png"
           alt="eye of truth"
           width={32}
           height={32}

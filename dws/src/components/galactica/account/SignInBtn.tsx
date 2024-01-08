@@ -160,7 +160,7 @@ const SignInBtn = ({
         <DialogContent>
           <div className="flex flex-col items-center justify-center">
             <Image
-              src="/images/logo.png"
+              src="/dws-images/logo.png"
               alt="eye of truth"
               width={64}
               height={64}

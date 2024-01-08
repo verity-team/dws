@@ -29,7 +29,7 @@ const LandingFooter = () => {
           </div>
           <div className="relative flex items-center justify-center">
             <Image
-              src="/images/wojak.png"
+              src="/dws-images/wojak.png"
               alt="soyboy"
               width={300}
               height={300}
@@ -40,7 +40,7 @@ const LandingFooter = () => {
         <div className="my-8 md:flex md:items-center md:justify-between">
           <div className="flex items-center justify-center md:space-x-2">
             <Image
-              src="/images/logo.png"
+              src="/dws-images/logo.png"
               alt="eye of truth"
               width={48}
               height={0}

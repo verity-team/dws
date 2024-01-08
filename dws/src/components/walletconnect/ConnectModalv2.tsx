@@ -204,7 +204,7 @@ const ConnectModalV2 = ({
           <div className="col-span-12 border-b border-black md:border-r md:col-span-4">
             <div className="md:p-4">
               <Image
-                src="/images/logo.png"
+                src="/dws-images/logo.png"
                 alt="eye of truth"
                 width={64}
                 height={64}

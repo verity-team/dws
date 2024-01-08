@@ -22,7 +22,7 @@ export default function Error({
   return (
     <div className="container mx-auto flex flex-col items-center justify-center space-y-4">
       <Image
-        src="/images/logo.png"
+        src="/dws-images/logo.png"
         alt="eye of truth"
         width={300}
         height={300}
