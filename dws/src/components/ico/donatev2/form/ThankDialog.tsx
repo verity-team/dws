@@ -20,8 +20,8 @@ const ThankDialog = ({
     >
       <DialogTitle className="text-2xl">Thanks for your support 🎉</DialogTitle>
       <DialogContent className="font-sans w-full py-4">
-        We are trying our best to confirm your transaction. Your donation will
-        be shown after a moment.
+        It will take a few minutes for your donation to be recorded on the
+        blockchain. Please check back later. Thank you!
       </DialogContent>
     </Dialog>
   );
