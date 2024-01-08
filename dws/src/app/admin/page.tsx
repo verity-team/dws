@@ -124,7 +124,7 @@ const AdminPage = () => {
         </div>
         <div className="relative mt-12 flex items-center justify-center">
           <Image
-            src="/images/logo.png"
+            src="/dws-images/logo.png"
             width={200}
             height={200}
             alt="eye of truth"

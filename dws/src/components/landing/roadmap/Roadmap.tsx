@@ -7,7 +7,7 @@ const Roadmap = () => {
       <div className="flex flex-col items-center justify-center">
         {/* Banner */}
         <Image
-          src="/images/roadmap.png"
+          src="/dws-images/roadmap.png"
           alt="roadmap"
           width={500}
           height={0}

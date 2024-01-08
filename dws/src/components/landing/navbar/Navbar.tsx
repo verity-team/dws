@@ -58,7 +58,7 @@ const Navbar = (): ReactElement => {
         {/* LOGO */}
         <a href="/">
           <Image
-            src="/images/logo-no-shadow.png"
+            src="/dws-images/logo-no-shadow.png"
             alt="truth memes logo"
             width={100}
             height={0}

@@ -56,7 +56,7 @@ const Banner = () => {
       </section>
       <div className="relative w-full h-[30vh] my-8 md:col-span-2 md:h-[50vh]">
         <Image
-          src="/images/banner1.png"
+          src="/dws-images/banner1.png"
           alt="soyboy"
           fill
           sizes="100vw"
