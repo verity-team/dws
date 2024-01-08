@@ -4,7 +4,7 @@ import { Donation } from "@/api/dws/user/user.type";
 import { getTimeElapsedString } from "@/utils/utils";
 import { getWalletShorthand } from "@/utils/wallet/wallet";
 import Avatar from "boring-avatars";
-import { ReactElement } from "react";
+import { ReactElement, useMemo } from "react";
 
 interface DonationStatProps {
   donation: Donation;
@@ -17,6 +17,17 @@ const DonationStat = ({
     donation;
 
   let donateTime = getTimeElapsedString(ts);
+
+  const transactionLink = ((): string => {
+    let targetNetwork = process.env.NEXT_PUBLIC_TARGET_NETWORK_ALIAS;
+    if (!targetNetwork) {
+      targetNetwork = "";
+    } else {
+      targetNetwork += ".";
+    }
+
+    return `https://${targetNetwork}etherscan.io/tx/${tx_hash}`;
+  })();
 
   return (
     <div>
@@ -37,7 +48,7 @@ const DonationStat = ({
         <div>
           Transaction:{" "}
           <a
-            href={`https://etherscan.io/tx/${tx_hash}`}
+            href={transactionLink}
             target="_blank"
             className="text-blue-500 underline hover:text-blue-700 cursor-pointer"
           >

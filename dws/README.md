@@ -30,6 +30,8 @@ yarn set version classic
 
       More info at [MetaMask Docs](https://docs.metamask.io/wallet/how-to/connect/detect-network/#chain-ids) or [Chainlist](https://chainid.network/)
 
+    - `NEXT_PUBLIC_TARGET_NETWORK_ALIAS`: Alias of the target network so we can generate link from the tx hash. If use on mainnet, we can ignore this parameter, or set it to an empty string
+
     - `NEXT_PUBLIC_WC_PROJECT_ID`: Project ID from WalletConnect. This is required to access WalletConnect Explorer and ensure its functionalities on our web application
 
       Get your project id at [WalletConnect Cloud](https://cloud.walletconnect.com/app) or use this mock project id `cc64c60e9acdab0e270dd3bd452b7fd9`
