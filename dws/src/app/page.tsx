@@ -46,9 +46,6 @@ export default function Home() {
                 <span className="text-cred">$TRUTH</span> Terms & Conditions
               </a>
             </div>
-            <div className="mt-8 md:mt-12">
-              <UserDonationStat />
-            </div>
           </div>
           <div className="relative h-[90vh] hidden md:block">
             <Image
@@ -63,6 +60,12 @@ export default function Home() {
               </h1>
             </div>
           </div>
+          <div
+            className="mt-8 md:mt-12 md:col-span-2 md:flex md:items-center md:justify-center md:w-full"
+            id="thank-you"
+          >
+            <UserDonationStat />
+          </div>
         </LandingClientRoot>
       </div>
 
@@ -70,7 +73,7 @@ export default function Home() {
         <Banner />
       </div> */}
 
-      <div className="md:mt-12 md:max-w-4xl md:mx-auto xl:max-w-5xl">
+      <div className="mt-8 md:mt-12 md:max-w-4xl md:mx-auto xl:max-w-5xl">
         <StoryBanner />
       </div>
 

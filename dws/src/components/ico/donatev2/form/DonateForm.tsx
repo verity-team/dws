@@ -118,10 +118,13 @@ const DonateForm = ({
       // Revalidate user donations
       await mutate(getUserDonationDataKey(userWallet.wallet));
 
-      return txHash;
+      const thankYouSection = document.getElementById("thank-you");
+      if (!thankYouSection) {
+        return;
+      }
+      thankYouSection.scrollIntoView({ behavior: "smooth" });
     } catch (error) {
       console.log(error);
-      return;
     } finally {
       setLoading(false);
     }
