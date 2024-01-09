@@ -183,11 +183,15 @@ export const donateERCWagmi = async (
 // TODO: Check number boundary. Use BN if needed
 export const exchangeToReward = (
   amount: number,
-  tokenPrice: number
+  tokenPrice: number,
+  rewardTokenPrice: number
 ): number => {
-  const rewardTokenPrice = Number(process.env.NEXT_PUBLIC_REWARD_PRICE);
   if (isNaN(tokenPrice)) {
-    throw new Error("Reward price is NaN");
+    throw new Error("Source token price is NaN");
+  }
+
+  if (isNaN(rewardTokenPrice)) {
+    throw new Error("Reward token price is Nan");
   }
 
   const reward = Math.ceil((amount * tokenPrice) / rewardTokenPrice);

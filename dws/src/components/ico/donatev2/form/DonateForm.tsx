@@ -17,20 +17,26 @@ import toast from "react-hot-toast";
 import { mutate } from "swr";
 import TextError from "@/components/common/TextError";
 import { Wallet, WalletUtils } from "@/components/ClientRoot";
-import { useDonationData } from "@/api/dws/donation/donation";
 import { getUserDonationDataKey } from "@/api/dws/user/user";
 import { useToggle } from "@/hooks/utils/useToggle";
 import ThankDialog from "./ThankDialog";
+import { TokenPrice } from "@/api/dws/donation/donation.type";
+
+interface DonateFormProps {
+  tokenPrices: TokenPrice[];
+  rewardPrice: number;
+}
 
 export interface DonateFormData {
   payAmount: number;
 }
 
-const DonateForm = (): ReactElement => {
+const DonateForm = ({
+  tokenPrices,
+  rewardPrice,
+}: DonateFormProps): ReactElement<DonateFormProps> => {
   const userWallet = useContext(Wallet);
   const { requestTransaction } = useContext(WalletUtils);
-
-  const { tokenPrices } = useDonationData();
 
   const [selectedToken, setSelectedToken] = useState<AvailableToken>("ETH");
   const [receiveAmount, setReceiveAmount] = useState<number | "N/A">(0);
@@ -48,6 +54,7 @@ const DonateForm = (): ReactElement => {
     handleSubmit,
     formState: { errors },
     getValues,
+    reset,
   } = useForm<DonateFormData>({
     defaultValues: { payAmount: 0 },
   });
@@ -71,7 +78,11 @@ const DonateForm = (): ReactElement => {
     }
 
     try {
-      const reward = exchangeToReward(payAmount, selectedTokenPrice);
+      const reward = exchangeToReward(
+        payAmount,
+        selectedTokenPrice,
+        rewardPrice
+      );
       setReceiveAmount(reward);
     } catch (err: any) {
       if (payAmount === 0) {
@@ -80,7 +91,7 @@ const DonateForm = (): ReactElement => {
       }
       setReceiveAmount("N/A");
     }
-  }, [getValues, selectedToken, tokenPrices]);
+  }, [getValues, selectedToken, tokenPrices, rewardPrice]);
 
   // Update price when
   useEffect(() => {
@@ -114,6 +125,7 @@ const DonateForm = (): ReactElement => {
       return;
     } finally {
       setLoading(false);
+      reset();
     }
   };
 
@@ -195,7 +207,11 @@ const DonateForm = (): ReactElement => {
         )}
         <div className="p-2">
           <ConnectButton
-            disabled={receiveAmount === "N/A" || receiveAmount <= 0}
+            disabled={
+              receiveAmount === "N/A" ||
+              receiveAmount <= 0 ||
+              isNaN(rewardPrice)
+            }
             account={userWallet.wallet}
             loading={isLoading}
             onDonate={handleSubmit(handleDonate)}

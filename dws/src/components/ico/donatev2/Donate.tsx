@@ -3,8 +3,25 @@
 import Image from "next/image";
 import DonateForm from "./form/DonateForm";
 import AFCForm from "./AFCForm";
+import { useDonationData } from "@/api/dws/donation/donation";
+import { useMemo } from "react";
 
 const Donate = () => {
+  const { tokenPrices } = useDonationData();
+
+  const truthTokenPrice = useMemo(() => {
+    if (!tokenPrices || tokenPrices.length === 0) {
+      return "N/A";
+    }
+
+    const foundToken = tokenPrices.find((token) => token.asset === "truth");
+    if (!foundToken) {
+      return "N/A";
+    }
+
+    return foundToken.price;
+  }, [tokenPrices]);
+
   return (
     <div className="flex flex-col transition-all">
       {/* Donate section */}
@@ -20,13 +37,15 @@ const Donate = () => {
 
         <div className="border-b-2 border-black">
           <div className="flex items-center justify-between p-4">
-            <div>Current price: $0</div>
-            <div>Next stage price: $0</div>
+            <div>Current price: ${truthTokenPrice} USD</div>
           </div>
         </div>
 
         <div className="bg-cblue py-2 rounded-b-2xl">
-          <DonateForm />
+          <DonateForm
+            tokenPrices={tokenPrices}
+            rewardPrice={Number(truthTokenPrice)}
+          />
         </div>
       </div>
 

@@ -23,7 +23,7 @@ const UserStat = (
   ref: ForwardedRef<HTMLDivElement>
 ): ReactElement<UserStatProps> => {
   const [activeDonation, setActiveDonation] = useState(0);
-  const maxSteps = donations.length;
+  const maxSteps = donations?.length ?? 0;
 
   const handleNextDonation = useCallback(() => {
     setActiveDonation((current) => current + 1);
@@ -32,6 +32,10 @@ const UserStat = (
   const handlePrevDonation = useCallback(() => {
     setActiveDonation((current) => current - 1);
   }, []);
+
+  if (donations == null) {
+    return <div></div>;
+  }
 
   return (
     <div className="flex flex-col items-center w-full" ref={ref}>
