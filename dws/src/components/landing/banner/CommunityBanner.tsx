@@ -1,4 +1,4 @@
-import { UsersRound } from "lucide-react";
+import { BookOpenText, UsersRound } from "lucide-react";
 
 const CommunityBanner = () => {
   return (
@@ -10,18 +10,36 @@ const CommunityBanner = () => {
         Join our growing <span className="text-cred">Meme</span> Community with
         followers in the millions
       </h2>
-      <button
-        type="button"
-        className="mt-4 px-6 py-2 bg-cred text-white rounded-3xl border-4 border-black text-2xl tracking-wide uppercase md:mt-8"
-      >
-        <a
-          className="flex items-center justify-center space-x-2 hover:text-gray-200"
-          href="https://truthmemes.io/community.html"
-        >
-          <p>Community</p>
-          <UsersRound />
-        </a>
-      </button>
+      <div className="mt-4 md:flex md:items-center md:mt-8 md:space-x-4 md:space-y-0">
+        <div>
+          <button
+            type="button"
+            className="mt-4 px-6 py-2 bg-cred text-white rounded-3xl border-4 border-black text-2xl tracking-wide uppercase md:mt-8"
+          >
+            <a
+              className="flex items-center justify-center space-x-2 hover:text-gray-200"
+              href="/community.html"
+            >
+              <p>Community</p>
+              <UsersRound />
+            </a>
+          </button>
+        </div>
+        <div>
+          <button
+            type="button"
+            className="mt-4 px-6 py-2 bg-cred text-white rounded-3xl border-4 border-black text-2xl tracking-wide uppercase md:mt-8"
+          >
+            <a
+              className="flex items-center justify-center space-x-2 hover:text-gray-200"
+              href="/story.html"
+            >
+              <p>Story</p>
+              <BookOpenText />
+            </a>
+          </button>
+        </div>
+      </div>
     </section>
   );
 };
