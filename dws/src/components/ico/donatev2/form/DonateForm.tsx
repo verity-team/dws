@@ -54,7 +54,6 @@ const DonateForm = ({
     handleSubmit,
     formState: { errors },
     getValues,
-    reset,
   } = useForm<DonateFormData>({
     defaultValues: { payAmount: 0 },
   });
@@ -125,7 +124,6 @@ const DonateForm = ({
       return;
     } finally {
       setLoading(false);
-      reset();
     }
   };
 
@@ -185,7 +183,7 @@ const DonateForm = ({
                 value={receiveAmount}
                 autoComplete="off"
               />
-              <span>TRUTH</span>
+              <span>$TRUTH</span>
             </div>
           </div>
         </div>
