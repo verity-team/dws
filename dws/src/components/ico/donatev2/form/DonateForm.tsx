@@ -54,7 +54,6 @@ const DonateForm = ({
     handleSubmit,
     formState: { errors },
     getValues,
-    reset,
   } = useForm<DonateFormData>({
     defaultValues: { payAmount: 0 },
   });
@@ -119,13 +118,15 @@ const DonateForm = ({
       // Revalidate user donations
       await mutate(getUserDonationDataKey(userWallet.wallet));
 
-      return txHash;
+      const thankYouSection = document.getElementById("thank-you");
+      if (!thankYouSection) {
+        return;
+      }
+      thankYouSection.scrollIntoView({ behavior: "smooth" });
     } catch (error) {
       console.log(error);
-      return;
     } finally {
       setLoading(false);
-      reset();
     }
   };
 
@@ -185,7 +186,7 @@ const DonateForm = ({
                 value={receiveAmount}
                 autoComplete="off"
               />
-              <span>TRUTH</span>
+              <span>$TRUTH</span>
             </div>
           </div>
         </div>

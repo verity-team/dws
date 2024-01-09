@@ -18,11 +18,11 @@ import { donate } from "@/utils/wallet/donate";
 import { disconnect, signMessage } from "@wagmi/core";
 import { EstimateGasExecutionError } from "viem";
 import { wagmiConfig, web3ModalConfig } from "./walletconnect/config";
-import { useAffiliateCode } from "@/hooks/useAffiliateCode";
+import { LAST_PROVIDER_KEY, LAST_WALLET_KEY } from "@/utils/const";
 
 interface ClientRootProps {
   children: ReactNode;
-  onWalletConnect?: (address: string) => void;
+  onWalletConnect?: (address: string, provider: AvailableWallet) => void;
 }
 
 interface IWalletUtils {
@@ -82,11 +82,29 @@ const ClientRoot = ({
   }, []);
 
   useEffect(() => {
+    const lastWallet = localStorage.getItem(LAST_WALLET_KEY);
+    if (!lastWallet) {
+      return;
+    }
+
+    const lastProvider = localStorage.getItem(
+      LAST_PROVIDER_KEY
+    ) as AvailableWallet;
+    if (!lastProvider) {
+      return;
+    }
+
+    setAccount(lastWallet);
+    setProvider(lastProvider);
+  }, []);
+
+  useEffect(() => {
     if (account === "") {
       return;
     }
-    onWalletConnect?.(account);
-  }, [account, onWalletConnect]);
+
+    onWalletConnect?.(account, provider);
+  }, [account, provider]);
 
   const connectWallet = useCallback(() => {
     setConnectWalletFormOpen(true);

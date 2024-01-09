@@ -37,7 +37,7 @@ const DonationStat = ({
       </div>
       <div className="mt-4 space-y-2">
         <div>
-          Donated: {amount} <span className="text-blue-500">${asset}</span>
+          Raised: {amount} <span className="text-blue-500">${asset}</span>
         </div>
         <div>
           Reward: {tokens} <span className="text-cred">$TRUTH</span>

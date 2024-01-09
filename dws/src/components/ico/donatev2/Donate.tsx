@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import DonateForm from "./form/DonateForm";
-import AFCForm from "./AFCForm";
 import { useDonationData } from "@/api/dws/donation/donation";
 import { useMemo } from "react";
 
