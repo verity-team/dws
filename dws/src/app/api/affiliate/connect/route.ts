@@ -1,8 +1,9 @@
-import { serverBaseRequest, HttpMethod, FailedResponse } from "@/utils/baseAPI";
 import { WalletAffiliateRequest } from "@/api/dws/affiliate/affiliate.type";
 import { Nullable } from "@/utils";
 import { NextResponse } from "next/server";
 import { isAddress } from "web3-validator";
+import { baseNextServerRequest } from "@/utils/baseApiV2";
+import { FailedResponse } from "@/utils/baseAPI";
 
 export const runtime = "edge";
 
@@ -36,11 +37,12 @@ export async function POST(request: Request): Promise<Response> {
 async function requestWalletConnection(
   donationInfo: WalletAffiliateRequest
 ): Promise<NextResponse> {
-  const response = await serverBaseRequest(
-    "/wallet/connection",
-    HttpMethod.POST,
-    donationInfo
-  );
+  const path = "/wallet/connection";
+  const response = await baseNextServerRequest("POST", {
+    path,
+    payload: donationInfo,
+    json: true,
+  });
 
   if (response == null) {
     return getDefaultErrResponse();

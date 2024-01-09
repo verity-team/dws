@@ -1,5 +1,6 @@
 import { UserDonationData } from "@/api/dws/user/user.type";
-import { serverBaseRequest, HttpMethod, FailedResponse } from "@/utils/baseAPI";
+import { FailedResponse } from "@/utils/baseAPI";
+import { baseNextServerRequest } from "@/utils/baseApiV2";
 import { NextResponse } from "next/server";
 import { isAddress } from "web3-validator";
 
@@ -19,11 +20,9 @@ export async function GET(
 }
 
 // TODO: Need more testing
-async function getUserDonation(walletAddr: string): Promise<NextResponse> {
-  const response = await serverBaseRequest(
-    `/user/data/${walletAddr}`,
-    HttpMethod.GET
-  );
+async function getUserDonation(walletAddress: string): Promise<NextResponse> {
+  const path = `/user/data/${walletAddress}`;
+  const response = await baseNextServerRequest("GET", { path });
   if (response == null) {
     return getDefaultErrResponse();
   }

@@ -123,9 +123,9 @@ export const serverBaseRequest = async (
   headers?: Headers
 ): Promise<Nullable<Response>> => {
   // Read configurations
-  const apiHost = process.env.API_URL;
+  const apiHost = process.env.DWS_API_URL;
   if (apiHost == null) {
-    console.log("API_URL not set");
+    console.log("DWS_API_URL not set");
     return null;
   }
 
@@ -140,9 +140,9 @@ export const serverBaseRequest = async (
 
 export const serverFormRequest = async (url: string, body: FormData) => {
   // Read configurations
-  const apiHost = process.env.API_URL;
+  const apiHost = process.env.DWS_API_URL;
   if (apiHost == null) {
-    console.log("API_URL not set");
+    console.log("DWS_API_URL not set");
     return null;
   }
 
