@@ -137,7 +137,7 @@ const AFCForm = (): ReactElement => {
 
   return (
     <>
-      <div className="text-center text-4xl">
+      <div className="text-center text-4xl space-x-2">
         Hype?{" "}
         <span
           className="underline cursor-pointer hover:text-blue-700"

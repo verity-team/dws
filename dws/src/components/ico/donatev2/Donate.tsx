@@ -48,11 +48,6 @@ const Donate = () => {
           />
         </div>
       </div>
-
-      {/* Share section */}
-      <div className="mt-8">
-        <AFCForm />
-      </div>
     </div>
   );
 };
