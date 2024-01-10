@@ -45,6 +45,7 @@
   },
   "devDependencies": {
     "@types/bn.js": "^5.1.2",
+    "@types/decimal.js": "^7.4.0",
     "@types/jsonwebtoken": "^9.0.5",
     "@types/lodash": "^4.14.202",
     "@types/mime": "^3.0.4",

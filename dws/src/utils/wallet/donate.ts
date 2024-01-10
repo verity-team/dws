@@ -16,12 +16,14 @@ import {
 } from "@wagmi/core";
 import { parseEther } from "viem";
 import { Maybe } from "@/utils";
+import Decimal from "decimal.js";
+import toast from "react-hot-toast";
 
 const getContractData = (
   receiver: string,
   amount: number,
   decimals: number
-): string => {
+): Maybe<string> => {
   const TRANSFER_FUNCTION_ABI = {
     constant: false,
     inputs: [
@@ -35,7 +37,12 @@ const getContractData = (
     type: "function",
   };
 
-  const contractAmount = multipleOrderOf10(new BN(amount), decimals);
+  const contractAmount = new Decimal(amount).mul(new Decimal(10).pow(decimals));
+  if (contractAmount.lessThanOrEqualTo(0)) {
+    toast.error("The amount input is too small to make a transaction");
+    return null;
+  }
+
   return encodeFunctionCall(TRANSFER_FUNCTION_ABI, [
     receiver,
     contractAmount.toString(),
@@ -139,13 +146,18 @@ export const donateERC = async (
     return null;
   }
 
+  const data = getContractData(receiveWallet, amount, tokenInfo.decimals);
+  if (data == null) {
+    return;
+  }
+
   return await ethereum.request({
     method: "eth_sendTransaction",
     params: [
       {
         from,
         to: tokenInfo.contractAddress,
-        data: getContractData(receiveWallet, amount, tokenInfo.decimals),
+        data,
         // gasLimit: '0x5028', // Customizable by the user during MetaMask confirmation.
         // maxPriorityFeePerGas: '0x3b9aca00', // Customizable by the user during MetaMask confirmation.
         // maxFeePerGas: '0x2540be400', // Customizable by the user during MetaMask confirmation.
