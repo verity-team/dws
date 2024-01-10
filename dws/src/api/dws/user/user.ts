@@ -62,7 +62,12 @@ export const getUserDonationData = async (
   account: string
 ): Promise<Nullable<UserDonationData>> => {
   try {
-    const response = await swrFetcher(getUserDonationDataKey(account));
+    const fetchKey = getUserDonationDataKey(account);
+    if (fetchKey == null) {
+      return null;
+    }
+
+    const response = await swrFetcher(fetchKey);
     return response;
   } catch {
     return null;
