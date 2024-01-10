@@ -4,15 +4,12 @@ import { Wallet } from "@/components/ClientRoot";
 import { useContext } from "react";
 import UserStat from "./UserStat";
 import { useUserDonationData } from "@/api/dws/user/user";
-import { UserDonationData } from "@/api/dws/user/user.type";
-// import { UserDonationData } from "@/api/dws/user/user.type";
+import { ReplaceAll } from "lucide-react";
 
 const UserDonationStat = () => {
   const userWallet = useContext(Wallet);
 
-  const { data: userDonationData, error } = useUserDonationData(
-    userWallet.wallet
-  );
+  const { data: userDonationData } = useUserDonationData(userWallet.wallet);
 
   // const userDonationData: UserDonationData = {
   //   donations: [
@@ -63,17 +60,29 @@ const UserDonationStat = () => {
 
   // User have not connected, or there are no data on this user
   // Simply skip user stats rendering
-  if (userWallet == null || userDonationData == null) {
-    return <div></div>;
+  if (userWallet == null || userDonationData?.donations == null) {
+    return (
+      <div className="w-full font-changa">
+        <div className="flex flex-col items-center justify-center">
+          <ReplaceAll size={64} color="#64748b" />
+          <div className="text-lg mt-4">
+            Your transaction history is currently empty
+          </div>
+          <div className="text-sm italic mt-4 font-roboto">
+            * It might take a few minutes for your transaction to be recorded on
+            the blockchain. We will try out best to deliver it as soon as
+            possible
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="md:ml-12">
-      <UserStat
-        donations={userDonationData.donations}
-        userStat={userDonationData.user_data}
-      />
-    </div>
+    <UserStat
+      donations={userDonationData.donations}
+      userStat={userDonationData.user_data}
+    />
   );
 };
 
