@@ -1,12 +1,11 @@
 ## Prerequisite
 
-- [Node 18 LTS](https://nodejs.org/en/download)
-- Yarn Classic (v1.22)
+- [Node.js 20.10.0 (LTS)](https://nodejs.org/en)
 
-- Notes: You can install the latest yarn and switch the version back to classic with
+- Install dependencies
 
-```
-yarn set version classic
+```bash
+npm install
 ```
 
 ## Setup
