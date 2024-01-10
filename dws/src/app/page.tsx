@@ -32,7 +32,7 @@ export default function Home() {
 
       <div className="mt-12 mx-8 grid grid-cols-1 md:grid-cols-2">
         <LandingClientRoot>
-          <div className="md:flex md:flex-col md:items-center md:justify-start md:origin-top md:scale-125">
+          <div className="md:flex md:flex-col md:items-center md:justify-start">
             <Donate />
             {/* Share section */}
             <div className="mt-4">
@@ -55,7 +55,7 @@ export default function Home() {
               className="object-contain w-full h-full"
             />
             <div className="w-full h-full flex items-end justify-end mt-12">
-              <h1 className="text-3xl italic tracking-wide inline-block break-words mt-2 md:text-5xl md:mr-12">
+              <h1 className="text-3xl italic tracking-wide inline-block break-words mt-2 md:text-2xl xl:text-4xl xl:mr-12">
                 <span className="text-cred">$TRUTH</span> shall be revealed
               </h1>
             </div>
