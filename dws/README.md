@@ -17,7 +17,6 @@ npm install
   - Public environment variables, use on the client side
 
     - `NEXT_PUBLIC_DONATE_PUBKEY`: A wallet address that will receive donations
-    - `NEXT_PUBLIC_REWARD_PRICE`: Fixed price for reward coin (People will receive reward coins for making donations)
     - `NEXT_PUBLIC_MIN_ETH`: Minimum value for ETH token donations
     - `NEXT_PUBLIC_MIN_USDT`: Minimum value for USDT token donations (WIP)
     - `NEXT_PUBLIC_API_TIMEOUT`: Maximum waiting time for a response (before the request get cancelled)

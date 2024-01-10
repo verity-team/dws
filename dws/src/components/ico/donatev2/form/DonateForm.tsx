@@ -139,7 +139,7 @@ const DonateForm = ({
       return minETH;
     }
 
-    if (selectedToken === "USDT") {
+    if (selectedToken === "USDT" || selectedToken === "USDC") {
       const minUSDT = Number(process.env.NEXT_PUBLIC_MIN_USDT);
       if (isNaN(minUSDT)) {
         return 5;
