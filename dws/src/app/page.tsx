@@ -60,12 +60,12 @@ export default function Home() {
               </h1>
             </div>
           </div>
-          <div
+          {/* <div
             className="mt-8 md:mt-12 md:col-span-2 md:flex md:items-center md:justify-center md:w-full"
             id="thank-you"
           >
             <UserDonationStat />
-          </div>
+          </div> */}
         </LandingClientRoot>
       </div>
 
