@@ -58,8 +58,8 @@ const Donate = () => {
     }
 
     const percent = (currentSale / targetSale) * 100;
-    if (percent < 10) {
-      return 10;
+    if (percent < 5) {
+      return 5;
     }
 
     return percent;
