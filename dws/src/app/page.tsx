@@ -30,7 +30,7 @@ export default function Home() {
         </div>
       </div> */}
 
-      <div className="mt-12 mx-8 grid grid-cols-1 md:grid-cols-2">
+      <div className="mt-4 mx-8 grid grid-cols-1 md:grid-cols-2">
         <LandingClientRoot>
           <div className="md:flex md:flex-col md:items-center md:justify-start">
             <Donate />
