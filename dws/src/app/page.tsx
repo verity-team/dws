@@ -1,4 +1,3 @@
-import Banner from "@/components/landing/banner/Banner";
 import MemeSlideshow from "@/components/landing/carousel/MemeSlideshow";
 import LandingFooter from "@/components/landing/footer/LandingFooter";
 import Navbar from "@/components/landing/navbar/Navbar";
@@ -6,12 +5,8 @@ import Newsletter from "@/components/landing/newsletter/Newsletter";
 import dynamic from "next/dynamic";
 import StoryBanner from "@/components/landing/banner/StoryBanner";
 import CommunityBanner from "@/components/landing/banner/CommunityBanner";
-import DonateForm from "@/components/ico/donatev2/form/DonateForm";
 import LandingClientRoot from "@/components/landing/LandingClientRoot";
 import Donate from "@/components/ico/donatev2/Donate";
-import DonationStat from "@/components/ico/stats/donation/DonationStat";
-import UserStat from "@/components/ico/stats/user/UserStat";
-import UserDonationStat from "@/components/ico/stats/user/UserDonationStat";
 import AFCForm from "@/components/ico/donatev2/AFCForm";
 import Image from "next/image";
 
@@ -30,7 +25,7 @@ export default function Home() {
         </div>
       </div> */}
 
-      <div className="mt-12 mx-8 grid grid-cols-1 md:grid-cols-2">
+      <div className="mt-4 mx-8 grid grid-cols-1 md:grid-cols-2">
         <LandingClientRoot>
           <div className="md:flex md:flex-col md:items-center md:justify-start">
             <Donate />

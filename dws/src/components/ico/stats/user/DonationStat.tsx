@@ -4,6 +4,7 @@ import { Donation } from "@/api/dws/user/user.type";
 import { getTimeElapsedString } from "@/utils/utils";
 import { getWalletShorthand } from "@/utils/wallet/wallet";
 import Avatar from "boring-avatars";
+import Decimal from "decimal.js";
 import { ReactElement, useMemo } from "react";
 
 interface DonationStatProps {

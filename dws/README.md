@@ -40,6 +40,8 @@ npm install
 
     - `NEXT_PUBLIC_FILE_MAX`: Maximum size for file upload (for meme upload feature)
 
+    - `NEXT_PUBLIC_TARGET_SALE=10500000`: Target amount of the token sale in dollars
+
   - Public environment variables for Galactica server
 
     - `NEXT_PUBLIC_GALACTICA_API_URL`: Galactica API server's URL

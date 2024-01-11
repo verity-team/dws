@@ -5,11 +5,14 @@ import DonateForm from "./form/DonateForm";
 import { useDonationData } from "@/api/dws/donation/donation";
 import { useCallback, useMemo } from "react";
 import { useToggle } from "@/hooks/utils/useToggle";
-import { Dialog, DialogTitle, DialogContent } from "@mui/material";
+import { Dialog, DialogContent, LinearProgress } from "@mui/material";
 import UserDonationStat from "../stats/user/UserDonationStat";
 
 const Donate = () => {
-  const { tokenPrices } = useDonationData();
+  const {
+    tokenPrices,
+    donationStat: { tokens, total },
+  } = useDonationData();
 
   const {
     isOpen: isHistoryOpen,
@@ -35,6 +38,28 @@ const Donate = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const targetSale = useMemo(() => {
+    let value = Number(process.env.NEXT_PUBLIC_TARGET_SALE);
+    if (isNaN(value)) {
+      value = 10_500_000;
+    }
+    return value;
+  }, []);
+
+  const salePercent = useMemo(() => {
+    let currentSale = Number(total);
+    if (isNaN(currentSale)) {
+      return 10;
+    }
+
+    const percent = (currentSale / targetSale) * 100;
+    if (percent < 5) {
+      return 5;
+    }
+
+    return percent;
+  }, [total, targetSale]);
+
   return (
     <>
       <div className="flex flex-col transition-all">
@@ -50,7 +75,29 @@ const Donate = () => {
           </div>
 
           <div className="border-b-2 border-black">
-            <div className="flex items-center justify-between p-4">
+            <div className="mt-4 px-4">
+              <div className="flex items-center justify-between">
+                <div className="text-xl ml-1">
+                  <span className="text-cred">
+                    {Number(tokens).toLocaleString()} $TRUTH
+                  </span>{" "}
+                  SOLD!
+                </div>
+                <div className="text-end mr-1">
+                  ${Number(total).toLocaleString()} / $
+                  {targetSale.toLocaleString()}
+                </div>
+              </div>
+
+              <LinearProgress
+                variant="determinate"
+                value={salePercent}
+                color="warning"
+                className="rounded-full h-6 border-2 border-black bg-white mt-1"
+              />
+            </div>
+
+            <div className="flex items-center justify-between px-4 mt-2 mb-4">
               <div>Current price: ${truthTokenPrice} USD</div>
               <div
                 className="text-blue-500 hover:text-blue-700 hover:underline cursor-pointer"
