@@ -1,8 +1,4 @@
-import {
-  HttpMethod,
-  baseRequest,
-  getDefaultHeaders,
-} from "../../../utils/baseAPI";
+import { baseGalacticaRequest, baseNextClientRequest } from "@/utils/baseApiV2";
 
 export const subscribeEmail = async (email: string): Promise<void> => {
   const emailAPIHost = process.env.NEXT_PUBLIC_EMAIL_API_URL;
@@ -12,14 +8,12 @@ export const subscribeEmail = async (email: string): Promise<void> => {
   }
 
   const payload = { email };
-
-  const response = await baseRequest(
-    "/subscribe.php",
-    HttpMethod.POST,
-    { host: emailAPIHost, timeout: 10000 },
+  const path = "/subscribe.php";
+  const response = await baseGalacticaRequest("POST", {
+    path,
     payload,
-    getDefaultHeaders()
-  );
+    json: true,
+  });
 
   if (response == null) {
     throw new Error("No response");
