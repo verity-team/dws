@@ -3,14 +3,9 @@
 import Image from "next/image";
 import DonateForm from "./form/DonateForm";
 import { useDonationData } from "@/api/dws/donation/donation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useToggle } from "@/hooks/utils/useToggle";
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  LinearProgress,
-} from "@mui/material";
+import { Dialog, DialogContent, LinearProgress } from "@mui/material";
 import UserDonationStat from "../stats/user/UserDonationStat";
 
 const Donate = () => {
@@ -81,11 +76,17 @@ const Donate = () => {
 
           <div className="border-b-2 border-black">
             <div className="mt-4 px-4">
-              <div className="text-xl ml-1">
-                <span className="text-cred">
-                  {Number(tokens).toLocaleString()} $TRUTH
-                </span>{" "}
-                SOLD!
+              <div className="flex items-center justify-between">
+                <div className="text-xl ml-1">
+                  <span className="text-cred">
+                    {Number(tokens).toLocaleString()} $TRUTH
+                  </span>{" "}
+                  SOLD!
+                </div>
+                <div className="text-end mr-1">
+                  ${Number(total).toLocaleString()} / $
+                  {targetSale.toLocaleString()}
+                </div>
               </div>
 
               <LinearProgress
@@ -94,13 +95,9 @@ const Donate = () => {
                 color="warning"
                 className="rounded-full h-6 border-2 border-black bg-white mt-1"
               />
-              <div className="text-end">
-                ${Number(total).toLocaleString()} / $
-                {targetSale.toLocaleString()}
-              </div>
             </div>
 
-            <div className="flex items-center justify-between px-4 my-2">
+            <div className="flex items-center justify-between px-4 mt-2 mb-4">
               <div>Current price: ${truthTokenPrice} USD</div>
               <div
                 className="text-blue-500 hover:text-blue-700 hover:underline cursor-pointer"

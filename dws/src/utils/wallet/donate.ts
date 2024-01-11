@@ -1,12 +1,6 @@
 import { toWei } from "web3-utils";
-import {
-  AvailableToken,
-  AvailableWallet,
-  contractAddrMap,
-  multipleOrderOf10,
-} from "./token";
+import { AvailableToken, AvailableWallet, contractAddrMap } from "./token";
 import { encodeFunctionCall } from "web3-eth-abi";
-import { BN } from "bn.js";
 import {
   erc20ABI,
   prepareSendTransaction,
