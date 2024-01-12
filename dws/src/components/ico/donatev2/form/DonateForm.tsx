@@ -112,7 +112,7 @@ const DonateForm = ({
         return;
       }
 
-      toast.success("Donate success");
+      toast.success("Thank you for your support!");
       setThankOpen();
 
       // Revalidate user donations
@@ -193,16 +193,15 @@ const DonateForm = ({
         {errors.payAmount && (
           <div className="p-2">
             {errors.payAmount.type === "required" && (
-              <TextError>The donate amount is required</TextError>
+              <TextError>Buy amount is required</TextError>
             )}
             {errors.payAmount.type === "min" && (
               <TextError>
-                The minimum donate amount for {selectedToken} is{" "}
-                {minDonateAmount}
+                The minimum buy amount for {selectedToken} is {minDonateAmount}
               </TextError>
             )}
             {errors.payAmount.type === "validate" && (
-              <TextError>The donate amount should be a number</TextError>
+              <TextError>Buy amount should be a number</TextError>
             )}
           </div>
         )}
