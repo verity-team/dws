@@ -13,7 +13,7 @@ const TokenSelector = ({
 }: TokenSelectorProps): ReactElement<TokenSelectorProps> => {
   return (
     // Update number of grid columns base on available tokens
-    <div className={clsx("grid grid-cols-1 gap-2 p-2", `md:grid-cols-2`)}>
+    <div className={clsx("grid grid-cols-1 gap-2 p-2", `md:grid-cols-3`)}>
       {availableTokens.map((token) => {
         if (token === selectedToken) {
           return (
