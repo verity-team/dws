@@ -20,11 +20,8 @@ export const chainsConfig = configureChains(
       return [mainnet];
     }
 
-    const targetNetworkId = Buffer.from(
-      targetNetwork.slice(2),
-      "hex"
-    ).toString();
-    if (parseInt(targetNetworkId) === sepolia.id) {
+    const targetNetworkId = parseInt(targetNetwork, 16);
+    if (targetNetworkId === sepolia.id) {
       return [sepolia];
     }
 
