@@ -297,7 +297,7 @@ const ConnectModalV2 = ({
               <div className="text-xl md:p-2">
                 Connected wallets ({accounts.length})
               </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-1 md:p-2">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:p-2">
                 {accounts.map((address, i) => (
                   <WalletOption
                     key={address}
