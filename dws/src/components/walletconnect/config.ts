@@ -1,4 +1,4 @@
-import { InjectedConnector } from "@wagmi/core";
+import { Chain, InjectedConnector } from "@wagmi/core";
 import {
   walletConnectProvider,
   EIP6963Connector,
@@ -13,10 +13,24 @@ import { publicProvider } from "wagmi/providers/public";
 const projectId = process.env.NEXT_PUBLIC_WC_PROJECT_ID ?? "";
 
 // Wagmi Config
-const { chains, publicClient } = configureChains(
-  [mainnet, sepolia],
+export const chainsConfig = configureChains(
+  ((): Chain[] => {
+    const targetNetwork = process.env.NEXT_PUBLIC_TARGET_NETWORK_ID;
+    if (!targetNetwork) {
+      return [mainnet];
+    }
+
+    const targetNetworkId = parseInt(targetNetwork, 16);
+    if (targetNetworkId === sepolia.id) {
+      return [sepolia];
+    }
+
+    return [mainnet];
+  })(),
   [walletConnectProvider({ projectId }), publicProvider()]
 );
+
+const { chains, publicClient } = chainsConfig;
 
 // TruthMemes Website Metadata
 const metadata = {
@@ -27,7 +41,7 @@ const metadata = {
 };
 
 export const wagmiConfig = createConfig({
-  autoConnect: false,
+  autoConnect: true,
   connectors: [
     new WalletConnectConnector({
       chains,
