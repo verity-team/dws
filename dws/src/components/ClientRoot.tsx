@@ -15,7 +15,7 @@ import { createWeb3Modal } from "@web3modal/wagmi/react";
 import { WagmiConfig } from "wagmi";
 import { requestSignature } from "@/utils/wallet/sign";
 import { donate } from "@/utils/wallet/donate";
-import { disconnect, getAccount, signMessage } from "@wagmi/core";
+import { connect, disconnect, getAccount, signMessage } from "@wagmi/core";
 import { EstimateGasExecutionError } from "viem";
 import { wagmiConfig, web3ModalConfig } from "./walletconnect/config";
 import { LAST_PROVIDER_KEY, LAST_WALLET_KEY } from "@/utils/const";
