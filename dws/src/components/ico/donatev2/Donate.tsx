@@ -30,8 +30,26 @@ const Donate = () => {
       return "N/A";
     }
 
-    return foundToken.price;
+    return `${foundToken.price} USD`;
   }, [tokenPrices]);
+
+  const totalTokenSale = useMemo(() => {
+    const value = Number(tokens);
+    if (isNaN(value)) {
+      return "0";
+    }
+
+    return value.toLocaleString();
+  }, [tokens]);
+
+  const totalUSDSale = useMemo(() => {
+    const value = Number(total);
+    if (isNaN(value)) {
+      return "0";
+    }
+
+    return value.toLocaleString();
+  }, [total]);
 
   const handleViewDonateHistory = useCallback(() => {
     openHistory();
@@ -78,14 +96,11 @@ const Donate = () => {
             <div className="mt-4 px-4">
               <div className="flex items-center justify-between">
                 <div className="text-xl ml-1">
-                  <span className="text-cred">
-                    {Number(tokens).toLocaleString()} $TRUTH
-                  </span>{" "}
+                  <span className="text-cred">{totalTokenSale} $TRUTH</span>{" "}
                   SOLD!
                 </div>
                 <div className="text-end mr-1">
-                  ${Number(total).toLocaleString()} / $
-                  {targetSale.toLocaleString()}
+                  ${totalUSDSale} / ${targetSale.toLocaleString()}
                 </div>
               </div>
 
@@ -98,7 +113,7 @@ const Donate = () => {
             </div>
 
             <div className="flex items-center justify-between px-4 mt-2 mb-4">
-              <div>Current price: ${truthTokenPrice} USD</div>
+              <div>Current price: ${truthTokenPrice}</div>
               <div
                 className="text-blue-500 hover:text-blue-700 hover:underline cursor-pointer"
                 onClick={handleViewDonateHistory}
