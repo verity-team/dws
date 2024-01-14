@@ -1,17 +1,24 @@
 import { toWei } from "web3-utils";
-import { AvailableToken, AvailableWallet, contractAddrMap } from "./token";
+import {
+  AvailableToken,
+  AvailableWallet,
+  TokenInfo,
+  contractAddrMap,
+} from "./token";
 import { encodeFunctionCall } from "web3-eth-abi";
 import {
   erc20ABI,
+  getPublicClient,
   prepareSendTransaction,
   prepareWriteContract,
   sendTransaction,
   writeContract,
 } from "@wagmi/core";
-import { parseEther } from "viem";
+import { formatEther, formatUnits, getContract, parseEther } from "viem";
 import { Maybe } from "@/utils";
 import Decimal from "decimal.js";
 import toast from "react-hot-toast";
+import { NOT_ENOUGH_ERR, NO_BALANCE_ERR } from "../const";
 
 const getContractData = (
   receiver: string,
@@ -50,6 +57,18 @@ export const donate = async (
   provider: AvailableWallet = "MetaMask"
 ): Promise<Maybe<string>> => {
   let txHash = null;
+
+  const walletBalance = await getBalance(token, from);
+  console.log(walletBalance);
+
+  const balance = Number(walletBalance);
+  if (walletBalance == null || isNaN(balance)) {
+    return NO_BALANCE_ERR;
+  }
+
+  if (amount > balance) {
+    return NOT_ENOUGH_ERR;
+  }
 
   if (provider === "MetaMask") {
     if (token === "ETH") {
@@ -152,9 +171,6 @@ export const donateERC = async (
         from,
         to: tokenInfo.contractAddress,
         data,
-        // gasLimit: '0x5028', // Customizable by the user during MetaMask confirmation.
-        // maxPriorityFeePerGas: '0x3b9aca00', // Customizable by the user during MetaMask confirmation.
-        // maxFeePerGas: '0x2540be400', // Customizable by the user during MetaMask confirmation.
       },
     ],
   });
@@ -184,6 +200,49 @@ export const donateERCWagmi = async (
 
   const { hash } = await writeContract(request);
   return hash;
+};
+
+export const getBalance = async (
+  token: AvailableToken,
+  walletAddress: string
+) => {
+  const client = getPublicClient();
+
+  if (token === "ETH") {
+    try {
+      const balance = await client.getBalance({
+        address: walletAddress as `0x${string}`,
+      });
+      return formatEther(balance);
+    } catch (error) {
+      console.error("Cannot get wallet ETH balance");
+      return null;
+    }
+  }
+
+  const tokenInfo = contractAddrMap.get(token);
+  if (tokenInfo == null) {
+    console.warn("Unknown ERC-20 contract address");
+    return null;
+  }
+
+  try {
+    const contract = getContract({
+      address: tokenInfo.contractAddress as `0x${string}`,
+      abi: erc20ABI,
+      publicClient: client,
+    });
+
+    const result = await contract.read.balanceOf([
+      walletAddress as `0x${string}`,
+    ]);
+    console.log(result);
+
+    return formatUnits(result, tokenInfo.decimals);
+  } catch (error) {
+    console.error("Cannot read ERC-20 balance", error);
+    return null;
+  }
 };
 
 // TODO: Check number boundary. Use BN if needed
