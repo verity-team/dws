@@ -65,7 +65,6 @@ const DonateForm = ({
   const handleSwapTokenToReward = useCallback(() => {
     const [payAmount] = getValues(["payAmount"]);
 
-    // TODO: Use API to get token price
     let selectedTokenPrice = Number(
       tokenPrices.find((price) => price.asset.toUpperCase() === selectedToken)
         ?.price

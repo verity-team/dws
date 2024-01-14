@@ -30,7 +30,7 @@ const Donate = () => {
       return "N/A";
     }
 
-    return `${foundToken.price} USD`;
+    return `${foundToken.price}`;
   }, [tokenPrices]);
 
   const totalTokenSale = useMemo(() => {
@@ -113,7 +113,7 @@ const Donate = () => {
             </div>
 
             <div className="flex items-center justify-between px-4 mt-2 mb-4">
-              <div>Current price: ${truthTokenPrice}</div>
+              <div>Current price: ${truthTokenPrice} USD</div>
               <div
                 className="text-blue-500 hover:text-blue-700 hover:underline cursor-pointer"
                 onClick={handleViewDonateHistory}

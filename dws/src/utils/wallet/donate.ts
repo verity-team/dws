@@ -251,6 +251,15 @@ export const exchangeToReward = (
   tokenPrice: number,
   rewardTokenPrice: number
 ): number => {
+  // console.log(
+  //   "Amount",
+  //   amount,
+  //   "Price",
+  //   tokenPrice,
+  //   "Reward price",
+  //   rewardTokenPrice
+  // );
+
   if (isNaN(tokenPrice)) {
     throw new Error("Source token price is NaN");
   }
