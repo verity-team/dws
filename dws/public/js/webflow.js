@@ -14713,6 +14713,11 @@
               });
 
               // end of fix
+
+              if (data.handler) {
+                data.evt = evt;
+                data.handler(data);
+              }
             });
             const CHECKBOX_CLASS_NAME = ".w-checkbox-input";
             const RADIO_INPUT_CLASS_NAME = ".w-radio-input";
