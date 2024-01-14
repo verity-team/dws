@@ -18,7 +18,12 @@ import { donate } from "@/utils/wallet/donate";
 import { connect, disconnect, getAccount, signMessage } from "@wagmi/core";
 import { EstimateGasExecutionError } from "viem";
 import { wagmiConfig, web3ModalConfig } from "./walletconnect/config";
-import { LAST_PROVIDER_KEY, LAST_WALLET_KEY } from "@/utils/const";
+import {
+  LAST_PROVIDER_KEY,
+  LAST_WALLET_KEY,
+  NOT_ENOUGH_ERR,
+  NO_BALANCE_ERR,
+} from "@/utils/const";
 import { requestAccounts } from "@/utils/wallet/wallet";
 
 interface ClientRootProps {
@@ -160,6 +165,17 @@ const ClientRoot = ({
     async (amount: number, token: AvailableToken) => {
       try {
         const txHash = await donate(account, amount, token, provider);
+
+        if (txHash === NO_BALANCE_ERR) {
+          toast.error(`No ${token} balance. Please try again later`);
+          return "";
+        }
+
+        if (txHash === NOT_ENOUGH_ERR) {
+          toast.error(`Your wallet does not have enough ${token} to proceed`);
+          return "";
+        }
+
         if (txHash == null) {
           // Will be catch under
           throw new Error();
