@@ -82,7 +82,7 @@ export const baseNextClientRequest = async (
   method: HttpMethod,
   config: RequestConfig
 ): Promise<Response> => {
-  const host = window.location.href;
+  const host = window.location.origin;
   const path = `${host}${config.path}`;
 
   return baseRequest(method, { ...config, path });
