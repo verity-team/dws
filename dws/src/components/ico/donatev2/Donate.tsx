@@ -108,7 +108,7 @@ const Donate = () => {
                 variant="determinate"
                 value={salePercent}
                 color="warning"
-                className="rounded-full h-6 border-2 border-black bg-white mt-1"
+                className="rounded-full !h-6 border-2 border-black bg-white mt-1"
               />
             </div>
 
