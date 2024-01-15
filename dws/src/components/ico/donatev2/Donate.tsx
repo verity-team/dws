@@ -39,7 +39,7 @@ const Donate = () => {
       return "0";
     }
 
-    return value.toLocaleString();
+    return value.toLocaleString("en-US");
   }, [tokens]);
 
   const totalUSDSale = useMemo(() => {
@@ -48,7 +48,7 @@ const Donate = () => {
       return "0";
     }
 
-    return value.toLocaleString();
+    return value.toLocaleString("en-US");
   }, [total]);
 
   const handleViewDonateHistory = useCallback(() => {
@@ -100,7 +100,7 @@ const Donate = () => {
                   SOLD!
                 </div>
                 <div className="text-end mr-1">
-                  ${totalUSDSale} / ${targetSale.toLocaleString()}
+                  ${totalUSDSale} / ${targetSale.toLocaleString("en-US")}
                 </div>
               </div>
 
