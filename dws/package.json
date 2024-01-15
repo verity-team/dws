@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "format": "npx prettier --write \"**/*.{ts,tsx, js, jsx, json}\"",
-    "lint": "next lint"
+    "lint": "next lint",
+    "docker:start": "docker compose -p dws -f docker-compose.yaml up -d",
+    "docker:stop": "docker compose -p dws down"
   },
   "dependencies": {
     "@emotion/react": "^11.11.1",
