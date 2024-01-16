@@ -8,9 +8,31 @@
 npm install
 ```
 
-## Setup
+## Getting started
 
-- Copy `.env.example` and rename the copy to `.env` or `.env.local`
+First, run the development server:
+
+```bash
+npm run dev
+```
+
+Or run the web application (production) inside Docker:
+
+```bash
+# Build the Docker image
+docker build -t dws .
+
+# Run the Docker image
+docker run -p 3000:3000 --name dws dws
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+Connect the website with your Metamask wallet to start making donations
+
+## Environment variable setup
+
+- Copy `.env.example` and rename the copied file to `.env` or `.env.local`
 
 - About environment variables
 
@@ -55,23 +77,3 @@ npm install
       - This is needed to show Twitter card when sharing to Twitter. More about [Twitter Card](https://developer.twitter.com/en/docs/twitter-for-websites/cards/overview/abouts-cards)
 
     - `API_TIMEOUT`: Specify API request default timeout (in ms)
-
-## Getting Started
-
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-Connect the website with your Metamask wallet to start making donations
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.

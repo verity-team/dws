@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "format": "npx prettier --write \"**/*.{ts,tsx, js, jsx, json}\"",
-    "lint": "next lint"
+    "lint": "next lint",
+    "docker:start": "docker compose -p dws -f docker-compose.yaml up",
+    "docker:stop": "docker compose -p dws down"
   },
   "dependencies": {
     "@emotion/react": "^11.11.1",
@@ -26,7 +28,7 @@
     "lodash": "^4.17.21",
     "lucide-react": "^0.305.0",
     "mime": "^3.0.0",
-    "next": "^13.5.6",
+    "next": "^14.0.4",
     "react": "^18",
     "react-dom": "^18",
     "react-hook-form": "^7.47.0",
@@ -34,7 +36,7 @@
     "react-qr-code": "^2.0.12",
     "react-share": "^5.0.3",
     "server-only": "^0.0.1",
-    "sharp": "^0.33.1",
+    "sharp": "^0.32.6",
     "siwe": "^2.1.4",
     "swr": "^2.2.4",
     "viem": "1.21.4",
@@ -46,14 +48,12 @@
   },
   "devDependencies": {
     "@types/bn.js": "^5.1.2",
-    "@types/decimal.js": "^7.4.0",
     "@types/jsonwebtoken": "^9.0.5",
     "@types/lodash": "^4.14.202",
     "@types/mime": "^3.0.4",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "@types/web3": "^1.2.2",
     "autoprefixer": "^10",
     "eslint": "^8",
     "eslint-config-next": "13.5.4",
@@ -62,7 +62,6 @@
     "tailwindcss": "^3",
     "typescript": "^5"
   },
-  "packageManager": "yarn@1.22.19",
   "prettier": {
     "trailingComma": "es5",
     "tabWidth": 2,

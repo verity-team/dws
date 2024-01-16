@@ -39,3 +39,6 @@ next-env.d.ts
 **/.yarnrc.yml
 
 /yarn.lock
+
+# Environment files
+.env
