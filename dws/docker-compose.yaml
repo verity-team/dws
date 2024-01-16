@@ -1,7 +1,7 @@
 version: "3"
 
 services:
-  dws:
+  frontend:
     container_name: dws
     restart: unless-stopped
     build:
