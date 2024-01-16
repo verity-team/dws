@@ -10,13 +10,15 @@ npm install
 
 ## Getting started
 
-First, run the development server:
+### For the development server:
 
 ```bash
 npm run dev
 ```
 
-Or run the web application (production) inside Docker:
+### For the production server
+
+- With Docker
 
 ```bash
 # Build the Docker image
@@ -26,9 +28,17 @@ docker build -t dws .
 docker run -p 3000:3000 --name dws dws
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- Without Docker
 
-Connect the website with your Metamask wallet to start making donations
+```bash
+# Build Next.js application
+npm run build
+
+# Start the output with Node.js
+node .next/standalone/server.js
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
 ## Environment variable setup
 
