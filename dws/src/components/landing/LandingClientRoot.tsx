@@ -1,10 +1,10 @@
 "use client";
 
-import { useAffiliateCode } from "@/hooks/useAffiliateCode";
 import ClientRoot from "../ClientRoot";
 import {
   ReactElement,
   ReactNode,
+  Suspense,
   createContext,
   useCallback,
   useState,
@@ -13,6 +13,9 @@ import { connectWalletWithAffiliate } from "@/api/dws/affiliate/affiliate";
 import { Maybe } from "@/utils";
 import { LAST_PROVIDER_KEY, LAST_WALLET_KEY } from "@/utils/const";
 import { AvailableWallet } from "@/utils/wallet/token";
+import { CircularProgress } from "@mui/material";
+import { useSearchParams } from "next/navigation";
+import { useAffiliateCode } from "@/hooks/useAffiliateCode";
 
 interface LandingClientRootProps {
   children: ReactNode;
