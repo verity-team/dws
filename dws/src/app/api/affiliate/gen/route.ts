@@ -1,11 +1,10 @@
 import { GenAffiliateRequest } from "@/api/dws/affiliate/affiliate.type";
 import { Nullable } from "@/utils";
+import { FailedResponse } from "@/utils/baseAPI";
 import {
-  getDefaultHeaders,
-  serverBaseRequest,
-  HttpMethod,
-  FailedResponse,
-} from "@/utils/baseAPI";
+  baseNextServerRequest,
+  getDefaultJsonHeaders,
+} from "@/utils/baseApiV2";
 import { NextResponse } from "next/server";
 import { isAddress } from "web3-validator";
 
@@ -45,17 +44,18 @@ export async function POST(request: Request): Promise<Response> {
 async function requestNewAffiliateCode(
   request: GenAffiliateRequest
 ): Promise<NextResponse> {
-  const headers = getDefaultHeaders();
+  const headers = getDefaultJsonHeaders();
   headers.append("delphi-key", request.address);
   headers.append("delphi-ts", request.timestamp.toString());
   headers.append("delphi-signature", request.signature);
 
-  const response = await serverBaseRequest(
-    "/affiliate/code",
-    HttpMethod.POST,
-    undefined,
-    headers
-  );
+  const path = "/affiliate/code";
+  const response = await baseNextServerRequest("POST", {
+    path,
+    headers,
+    payload: {},
+    json: true,
+  });
   if (response == null) {
     return getDefaultErrResponse();
   }

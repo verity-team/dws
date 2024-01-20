@@ -49,7 +49,7 @@ const ConnectButton = ({
             <CircularProgress size={24} />
           ) : (
             <div className="text-xl leading-loose tracking-wider text-gray-100">
-              Donate
+              Get $TRUTH
             </div>
           )}
         </button>

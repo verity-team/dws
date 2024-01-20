@@ -81,25 +81,28 @@ const ConnectModalV2 = ({
     setConnectStatus("connecting");
   }, []);
 
-  const switchToTargetNetwork = useCallback(() => {
-    const targetNetworkId = parseInt(
-      process.env.NEXT_PUBLIC_TARGET_NETWORK_ID ?? "0x1",
-      16
-    );
-    switchNetwork?.(targetNetworkId);
-  }, [switchNetwork]);
+  const switchToTargetNetwork = useCallback(
+    (targetNetworkId: number) => {
+      switchNetwork?.(targetNetworkId);
+    },
+    [switchNetwork]
+  );
 
   const { address } = useAccount({
     onConnect: ({ address }) => {
       if (address == null) {
         return;
       }
-      switchToTargetNetwork();
+      const targetNetworkId = parseInt(
+        process.env.NEXT_PUBLIC_TARGET_NETWORK_ID ?? "0x1",
+        16
+      );
+      switchToTargetNetwork(targetNetworkId);
     },
   });
 
   useEffect(() => {
-    if (chain == null || address == null) {
+    if (chain == null) {
       return;
     }
 
@@ -108,14 +111,23 @@ const ConnectModalV2 = ({
       16
     );
     if (chain.id !== targetNetworkId) {
-      switchToTargetNetwork();
+      switchToTargetNetwork(targetNetworkId);
+      return;
+    }
+  }, [chain]);
+
+  useEffect(() => {
+    if (address == null) {
       return;
     }
 
     setSelectedAccount(address);
     setSelectedProvider("WalletConnect");
-    handleFinalizeConnection();
-  }, [chain, address]);
+
+    if (isOpen) {
+      handleFinalizeConnection();
+    }
+  }, [address]);
 
   const handleConnectMetaMask = useCallback(async () => {
     // Make UI switch to connecting screen
@@ -297,7 +309,7 @@ const ConnectModalV2 = ({
               <div className="text-xl md:p-2">
                 Connected wallets ({accounts.length})
               </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-1 md:p-2">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:p-2">
                 {accounts.map((address, i) => (
                   <WalletOption
                     key={address}

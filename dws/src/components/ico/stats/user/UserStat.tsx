@@ -23,7 +23,7 @@ const UserStat = (
   ref: ForwardedRef<HTMLDivElement>
 ): ReactElement<UserStatProps> => {
   const [activeDonation, setActiveDonation] = useState(0);
-  const maxSteps = donations.length;
+  const maxSteps = donations?.length ?? 0;
 
   const handleNextDonation = useCallback(() => {
     setActiveDonation((current) => current + 1);
@@ -33,28 +33,25 @@ const UserStat = (
     setActiveDonation((current) => current - 1);
   }, []);
 
-  return (
-    <div className="flex flex-col items-center w-full" ref={ref}>
-      <h3 className="text-4xl tracking-wide inline-block break-words mt-2 md:text-5xl">
-        <span className="text-cred">Thanks</span> for your support
-      </h3>
+  if (donations == null) {
+    return <div></div>;
+  }
 
-      <div className="w-full mt-4 md:flex md:flex-col md:items-center">
-        <Box
-          sx={{
-            width: "100%",
-            maxWidth: 900,
-            flexGrow: 1,
-            marginTop: "0.25rem",
-          }}
-        >
-          <div className="bg-white border-2 border-b-0 border-black rounded-t-lg p-4">
-            <DonationStat donation={donations[activeDonation]} />
-          </div>
+  return (
+    <div className="w-full font-changa" ref={ref}>
+      <h3 className="text-xl">
+        <span className="font-semibold">Total balance:</span> {userStat.tokens}{" "}
+        <span className="text-cred">$TRUTH</span>
+      </h3>
+      <div className="mt-4">
+        <h3 className="text-xl font-semibold">History</h3>
+        <div className="bg-white rounded-t-lg mt-4">
+          <DonationStat donation={donations[activeDonation]} />
+        </div>
+        <div className="mt-4">
           <MobileStepper
             variant="text"
             position="static"
-            className="bg-white border-2 border-black rounded-lg"
             steps={maxSteps}
             activeStep={activeDonation}
             nextButton={
@@ -80,15 +77,6 @@ const UserStat = (
               </Button>
             }
           />
-        </Box>
-      </div>
-      <div className="w-full mt-4 flex flex-col items-center">
-        <h3 className="text-2xl tracking-wide inline-block break-words mt-2 md:text-5xl space-x-1">
-          You have a total of
-        </h3>
-        <div className="text-3xl space-x-2">
-          <span className="text-3xl">{userStat.total}</span>
-          <span className="text-cred">$TRUTH </span>!
         </div>
       </div>
     </div>

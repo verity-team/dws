@@ -1,0 +1,12 @@
+version: "3"
+
+services:
+  frontend:
+    container_name: dws
+    restart: unless-stopped
+    build:
+      context: ./
+      dockerfile: ./Dockerfile
+    command: /bin/sh -c "node server.js"
+    ports:
+      - 3000:3000

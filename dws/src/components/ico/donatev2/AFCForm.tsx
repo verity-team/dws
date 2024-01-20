@@ -7,6 +7,7 @@ import {
   DialogTitle,
   DialogContent,
   CircularProgress,
+  IconButton,
 } from "@mui/material";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import {
@@ -22,6 +23,8 @@ import { Wallet, WalletUtils } from "@/components/ClientRoot";
 import { requestNewAffiliateCode } from "@/api/dws/affiliate/affiliate";
 import { Maybe } from "@/utils";
 import { useUserDonationData, getUserDonationData } from "@/api/dws/user/user";
+import { XIcon } from "lucide-react";
+import QRCode from "react-qr-code";
 
 const AFCForm = (): ReactElement => {
   const userWallet = useContext(Wallet);
@@ -137,7 +140,7 @@ const AFCForm = (): ReactElement => {
 
   return (
     <>
-      <div className="text-center text-4xl">
+      <div className="text-center text-4xl space-x-2">
         Hype?{" "}
         <span
           className="underline cursor-pointer hover:text-blue-700"
@@ -153,8 +156,13 @@ const AFCForm = (): ReactElement => {
         maxWidth="sm"
         className="rounded-lg"
       >
-        <DialogTitle className="text-2xl">Share</DialogTitle>
-        <DialogContent className="font-sans w-full">
+        <DialogTitle className="text-2xl flex items-center justify-between">
+          <div>Share</div>
+          <IconButton onClick={handleCloseForm}>
+            <XIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent className="font-sans w-full relative">
           <div>
             {!!userCode ? (
               <>
@@ -195,9 +203,11 @@ const AFCForm = (): ReactElement => {
                   <ContentCopyIcon className="text-gray-600 hover:text-gray-900 cursor-pointer" />
                 </div>
               </div>
-              {/* <div className="flex flex-col items-center justify-center">
-                <QRCode value={sharableLink} size={100} />
-              </div> */}
+              {userCode && (
+                <div className="mt-4 flex flex-col items-center justify-center">
+                  <QRCode value={sharableLink} size={100} />
+                </div>
+              )}
             </div>
           </div>
         </DialogContent>

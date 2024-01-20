@@ -1,24 +1,54 @@
 ## Prerequisite
 
-- [Node 18 LTS](https://nodejs.org/en/download)
-- Yarn Classic (v1.22)
+- [Node.js 20.10.0 (LTS)](https://nodejs.org/en)
 
-- Notes: You can install the latest yarn and switch the version back to classic with
+- Install dependencies
 
+```bash
+npm install
 ```
-yarn set version classic
+
+## Getting started
+
+### For the development server:
+
+```bash
+npm run dev
 ```
 
-## Setup
+### For the production server
 
-- Copy `.env.example` and rename the copy to `.env` or `.env.local`
+- With Docker
+
+```bash
+# Build the Docker image
+docker build -t dws .
+
+# Run the Docker image
+docker run -p 3000:3000 --name dws dws
+```
+
+- Without Docker
+
+```bash
+# Build Next.js application
+npm run build
+
+# Start the output with Node.js
+node .next/standalone/server.js
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+## Environment variable setup
+
+- Copy `.env.example` and rename the copied file to `.env` or `.env.local`
 
 - About environment variables
 
   - Public environment variables, use on the client side
 
     - `NEXT_PUBLIC_DONATE_PUBKEY`: A wallet address that will receive donations
-    - `NEXT_PUBLIC_REWARD_PRICE`: Fixed price for reward coin (People will receive reward coins for making donations)
     - `NEXT_PUBLIC_MIN_ETH`: Minimum value for ETH token donations
     - `NEXT_PUBLIC_MIN_USDT`: Minimum value for USDT token donations (WIP)
     - `NEXT_PUBLIC_API_TIMEOUT`: Maximum waiting time for a response (before the request get cancelled)
@@ -42,6 +72,8 @@ yarn set version classic
 
     - `NEXT_PUBLIC_FILE_MAX`: Maximum size for file upload (for meme upload feature)
 
+    - `NEXT_PUBLIC_TARGET_SALE=10500000`: Target amount of the token sale in dollars
+
   - Public environment variables for Galactica server
 
     - `NEXT_PUBLIC_GALACTICA_API_URL`: Galactica API server's URL
@@ -55,23 +87,3 @@ yarn set version classic
       - This is needed to show Twitter card when sharing to Twitter. More about [Twitter Card](https://developer.twitter.com/en/docs/twitter-for-websites/cards/overview/abouts-cards)
 
     - `API_TIMEOUT`: Specify API request default timeout (in ms)
-
-## Getting Started
-
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-Connect the website with your Metamask wallet to start making donations
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.

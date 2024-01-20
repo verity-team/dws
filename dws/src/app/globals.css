@@ -22,3 +22,7 @@ body {
   background-color: #ffde00;
   overflow: visible;
 }
+
+.MuiLinearProgress-bar1Determinate {
+  @apply bg-cred rounded-full;
+}

@@ -4,6 +4,7 @@ import { Donation } from "@/api/dws/user/user.type";
 import { getTimeElapsedString } from "@/utils/utils";
 import { getWalletShorthand } from "@/utils/wallet/wallet";
 import Avatar from "boring-avatars";
+import Decimal from "decimal.js";
 import { ReactElement, useMemo } from "react";
 
 interface DonationStatProps {
@@ -37,7 +38,8 @@ const DonationStat = ({
       </div>
       <div className="mt-4 space-y-2">
         <div>
-          Donated: {amount} <span className="text-blue-500">${asset}</span>
+          Raised: {amount}{" "}
+          <span className="text-blue-500 uppercase">${asset}</span>
         </div>
         <div>
           Reward: {tokens} <span className="text-cred">$TRUTH</span>

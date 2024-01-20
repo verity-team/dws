@@ -15,14 +15,20 @@ import { createWeb3Modal } from "@web3modal/wagmi/react";
 import { WagmiConfig } from "wagmi";
 import { requestSignature } from "@/utils/wallet/sign";
 import { donate } from "@/utils/wallet/donate";
-import { disconnect, signMessage } from "@wagmi/core";
+import { connect, disconnect, getAccount, signMessage } from "@wagmi/core";
 import { EstimateGasExecutionError } from "viem";
 import { wagmiConfig, web3ModalConfig } from "./walletconnect/config";
-import { useAffiliateCode } from "@/hooks/useAffiliateCode";
+import {
+  LAST_PROVIDER_KEY,
+  LAST_WALLET_KEY,
+  NOT_ENOUGH_ERR,
+  NO_BALANCE_ERR,
+} from "@/utils/const";
+import { requestAccounts } from "@/utils/wallet/wallet";
 
 interface ClientRootProps {
   children: ReactNode;
-  onWalletConnect?: (address: string) => void;
+  onWalletConnect?: (address: string, provider: AvailableWallet) => void;
 }
 
 interface IWalletUtils {
@@ -79,14 +85,72 @@ const ClientRoot = ({
 
       window.location.reload();
     });
+
+    ethereum.on("accountsChanged", (accounts: string[]) => {
+      if (accounts.length === 0) {
+        setAccount("");
+        connectWallet();
+      }
+
+      if (accounts[0] !== account) {
+        setAccount(accounts[0]);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    const tryReconnect = async (
+      lastWallet: string,
+      lastProvider: AvailableWallet
+    ) => {
+      if (lastProvider === "MetaMask") {
+        const connectedAccounts = await requestAccounts();
+        if (connectedAccounts.includes(lastWallet)) {
+          setAccount(lastWallet);
+          setProvider(lastProvider);
+          return;
+        }
+
+        if (connectedAccounts.length === 0) {
+          return;
+        }
+
+        setAccount(connectedAccounts[0]);
+        setProvider("MetaMask");
+        return;
+      }
+
+      // Provider = WalletConnect
+      const account = getAccount();
+      if (!account?.address) {
+        return;
+      }
+      setAccount(account.address);
+      setProvider("WalletConnect");
+    };
+
+    const lastWallet = localStorage.getItem(LAST_WALLET_KEY);
+    if (!lastWallet) {
+      return;
+    }
+
+    const lastProvider = localStorage.getItem(
+      LAST_PROVIDER_KEY
+    ) as AvailableWallet;
+    if (!lastProvider) {
+      return;
+    }
+
+    tryReconnect(lastWallet, lastProvider);
   }, []);
 
   useEffect(() => {
     if (account === "") {
       return;
     }
-    onWalletConnect?.(account);
-  }, [account, onWalletConnect]);
+
+    onWalletConnect?.(account, provider);
+  }, [account, provider]);
 
   const connectWallet = useCallback(() => {
     setConnectWalletFormOpen(true);
@@ -101,6 +165,17 @@ const ClientRoot = ({
     async (amount: number, token: AvailableToken) => {
       try {
         const txHash = await donate(account, amount, token, provider);
+
+        if (txHash === NO_BALANCE_ERR) {
+          toast.error(`No ${token} balance. Please try again later`);
+          return "";
+        }
+
+        if (txHash === NOT_ENOUGH_ERR) {
+          toast.error(`Your wallet does not have enough ${token} to proceed`);
+          return "";
+        }
+
         if (txHash == null) {
           // Will be catch under
           throw new Error();

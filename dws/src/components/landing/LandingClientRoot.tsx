@@ -2,9 +2,17 @@
 
 import { useAffiliateCode } from "@/hooks/useAffiliateCode";
 import ClientRoot from "../ClientRoot";
-import { ReactElement, ReactNode, createContext, useCallback } from "react";
+import {
+  ReactElement,
+  ReactNode,
+  createContext,
+  useCallback,
+  useState,
+} from "react";
 import { connectWalletWithAffiliate } from "@/api/dws/affiliate/affiliate";
 import { Maybe } from "@/utils";
+import { LAST_PROVIDER_KEY, LAST_WALLET_KEY } from "@/utils/const";
+import { AvailableWallet } from "@/utils/wallet/token";
 
 interface LandingClientRootProps {
   children: ReactNode;
@@ -18,15 +26,24 @@ const LandingClientRoot = ({
 }: LandingClientRootProps): ReactElement<LandingClientRootProps> => {
   const affiliateCode = useAffiliateCode();
 
+  const [affiliateCodeConnected, setAffiliateCodeConnected] = useState(false);
+
   const handleWalletConnect = useCallback(
-    (address: string) => {
+    async (address: string, provider: AvailableWallet) => {
       let afc = "none";
       if (affiliateCode != null && affiliateCode !== "") {
         afc = affiliateCode;
       }
-      connectWalletWithAffiliate({ address, code: afc });
+
+      localStorage.setItem(LAST_WALLET_KEY, address);
+      localStorage.setItem(LAST_PROVIDER_KEY, provider);
+
+      if (!affiliateCodeConnected) {
+        await connectWalletWithAffiliate({ address, code: afc });
+        setAffiliateCodeConnected(true);
+      }
     },
-    [affiliateCode]
+    [affiliateCode, affiliateCodeConnected]
   );
 
   return (

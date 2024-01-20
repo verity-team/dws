@@ -5,8 +5,13 @@ import useSWRImmutable from "swr/immutable";
 import { UserDonationData } from "./user.type";
 
 // For data revalidation when sending new donations
-export const getUserDonationDataKey = (account: string) =>
-  `/api/donation/user/${account}`;
+export const getUserDonationDataKey = (account: string) => {
+  if (!account) {
+    return null;
+  }
+
+  return `/api/donation/user/${account}`;
+};
 
 // For long-term use of data, have data refresh integrated
 /**
@@ -57,7 +62,12 @@ export const getUserDonationData = async (
   account: string
 ): Promise<Nullable<UserDonationData>> => {
   try {
-    const response = await swrFetcher(getUserDonationDataKey(account));
+    const fetchKey = getUserDonationDataKey(account);
+    if (fetchKey == null) {
+      return null;
+    }
+
+    const response = await swrFetcher(fetchKey);
     return response;
   } catch {
     return null;

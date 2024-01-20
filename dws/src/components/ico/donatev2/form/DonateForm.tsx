@@ -17,20 +17,26 @@ import toast from "react-hot-toast";
 import { mutate } from "swr";
 import TextError from "@/components/common/TextError";
 import { Wallet, WalletUtils } from "@/components/ClientRoot";
-import { useDonationData } from "@/api/dws/donation/donation";
 import { getUserDonationDataKey } from "@/api/dws/user/user";
 import { useToggle } from "@/hooks/utils/useToggle";
 import ThankDialog from "./ThankDialog";
+import { TokenPrice } from "@/api/dws/donation/donation.type";
+
+interface DonateFormProps {
+  tokenPrices: TokenPrice[];
+  rewardPrice: number;
+}
 
 export interface DonateFormData {
   payAmount: number;
 }
 
-const DonateForm = (): ReactElement => {
+const DonateForm = ({
+  tokenPrices,
+  rewardPrice,
+}: DonateFormProps): ReactElement<DonateFormProps> => {
   const userWallet = useContext(Wallet);
   const { requestTransaction } = useContext(WalletUtils);
-
-  const { tokenPrices } = useDonationData();
 
   const [selectedToken, setSelectedToken] = useState<AvailableToken>("ETH");
   const [receiveAmount, setReceiveAmount] = useState<number | "N/A">(0);
@@ -59,7 +65,6 @@ const DonateForm = (): ReactElement => {
   const handleSwapTokenToReward = useCallback(() => {
     const [payAmount] = getValues(["payAmount"]);
 
-    // TODO: Use API to get token price
     let selectedTokenPrice = Number(
       tokenPrices.find((price) => price.asset.toUpperCase() === selectedToken)
         ?.price
@@ -71,7 +76,11 @@ const DonateForm = (): ReactElement => {
     }
 
     try {
-      const reward = exchangeToReward(payAmount, selectedTokenPrice);
+      const reward = exchangeToReward(
+        payAmount,
+        selectedTokenPrice,
+        rewardPrice
+      );
       setReceiveAmount(reward);
     } catch (err: any) {
       if (payAmount === 0) {
@@ -80,7 +89,7 @@ const DonateForm = (): ReactElement => {
       }
       setReceiveAmount("N/A");
     }
-  }, [getValues, selectedToken, tokenPrices]);
+  }, [getValues, selectedToken, tokenPrices, rewardPrice]);
 
   // Update price when
   useEffect(() => {
@@ -102,16 +111,19 @@ const DonateForm = (): ReactElement => {
         return;
       }
 
-      toast.success("Donate success");
+      toast.success("Thank you for your support!");
       setThankOpen();
 
       // Revalidate user donations
       await mutate(getUserDonationDataKey(userWallet.wallet));
 
-      return txHash;
+      const thankYouSection = document.getElementById("thank-you");
+      if (!thankYouSection) {
+        return;
+      }
+      thankYouSection.scrollIntoView({ behavior: "smooth" });
     } catch (error) {
       console.log(error);
-      return;
     } finally {
       setLoading(false);
     }
@@ -126,7 +138,7 @@ const DonateForm = (): ReactElement => {
       return minETH;
     }
 
-    if (selectedToken === "USDT") {
+    if (selectedToken === "USDT" || selectedToken === "USDC") {
       const minUSDT = Number(process.env.NEXT_PUBLIC_MIN_USDT);
       if (isNaN(minUSDT)) {
         return 5;
@@ -173,29 +185,32 @@ const DonateForm = (): ReactElement => {
                 value={receiveAmount}
                 autoComplete="off"
               />
-              <span>TRUTH</span>
+              <span>$TRUTH</span>
             </div>
           </div>
         </div>
         {errors.payAmount && (
           <div className="p-2">
             {errors.payAmount.type === "required" && (
-              <TextError>The donate amount is required</TextError>
+              <TextError>Buy amount is required</TextError>
             )}
             {errors.payAmount.type === "min" && (
               <TextError>
-                The minimum donate amount for {selectedToken} is{" "}
-                {minDonateAmount}
+                The minimum buy amount for {selectedToken} is {minDonateAmount}
               </TextError>
             )}
             {errors.payAmount.type === "validate" && (
-              <TextError>The donate amount should be a number</TextError>
+              <TextError>Buy amount should be a number</TextError>
             )}
           </div>
         )}
         <div className="p-2">
           <ConnectButton
-            disabled={receiveAmount === "N/A" || receiveAmount <= 0}
+            disabled={
+              receiveAmount === "N/A" ||
+              receiveAmount <= 0 ||
+              isNaN(rewardPrice)
+            }
             account={userWallet.wallet}
             loading={isLoading}
             onDonate={handleSubmit(handleDonate)}

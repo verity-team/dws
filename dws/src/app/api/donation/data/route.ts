@@ -1,11 +1,12 @@
-import { serverBaseRequest, HttpMethod } from "@/utils/baseAPI";
+import { baseNextServerRequest } from "@/utils/baseApiV2";
 import { NextRequest, NextResponse } from "next/server";
 
 export const revalidate = 60; // seconds
 export const runtime = "edge";
 
 export async function GET(request: NextRequest) {
-  const response = await serverBaseRequest("/donation/data", HttpMethod.GET);
+  const path = "/donation/data";
+  const response = await baseNextServerRequest("GET", { path });
 
   // Something is wrong with API setup
   if (response == null) {

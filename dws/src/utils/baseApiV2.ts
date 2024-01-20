@@ -82,7 +82,7 @@ export const baseNextClientRequest = async (
   method: HttpMethod,
   config: RequestConfig
 ): Promise<Response> => {
-  const host = window.location.href;
+  const host = window.location.origin;
   const path = `${host}${config.path}`;
 
   return baseRequest(method, { ...config, path });
@@ -94,6 +94,21 @@ export const baseNextServerRequest = async (
   config: RequestConfig
 ): Promise<Response> => {
   const host = process.env.DWS_API_URL;
+  const path = `${host}${config.path}`;
+
+  return baseRequest(method, { ...config, path });
+};
+
+export const baseEmailServerRequest = async (
+  method: HttpMethod,
+  config: RequestConfig
+): Promise<Response> => {
+  const host = process.env.NEXT_PUBLIC_EMAIL_API_URL;
+  if (host == null || host.trim() === "") {
+    console.warn("Email subscription endpoint not set");
+    throw new Error();
+  }
+
   const path = `${host}${config.path}`;
 
   return baseRequest(method, { ...config, path });
