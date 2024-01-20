@@ -2,9 +2,9 @@
 
 import MemeListItem from "./MemeListItem";
 import { ReactElement, memo, useEffect, useRef } from "react";
-import { roboto } from "@/app/fonts";
 import { MemeUpload } from "@/api/galactica/meme/meme.type";
 import AdminMemeListItem from "@/components/admin/list/AdminMemeListItem";
+import { roboto } from "@/app/fonts";
 
 interface MemeListProps {
   memes: MemeUpload[];

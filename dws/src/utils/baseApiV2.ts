@@ -1,3 +1,5 @@
+import { Maybe } from "@/utils";
+
 export type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
 
 interface RequestConfig {
@@ -112,4 +114,31 @@ export const baseEmailServerRequest = async (
   const path = `${host}${config.path}`;
 
   return baseRequest(method, { ...config, path });
+};
+
+export const safeFetch = async (
+  fetchFn: () => Promise<Response>,
+  errorMessage?: string
+): Promise<Maybe<Response>> => {
+  let response = null;
+  try {
+    response = await fetchFn();
+  } catch (error) {
+    console.error(error, errorMessage);
+  }
+  return response;
+};
+
+export const safeParseJson = async <T>(
+  response: Response,
+  errorMessage?: string
+): Promise<Maybe<T>> => {
+  let parseData = null;
+  try {
+    parseData = await response.json();
+  } catch (error) {
+    console.error("Failed to parse JSON", error, errorMessage);
+  }
+
+  return parseData;
 };

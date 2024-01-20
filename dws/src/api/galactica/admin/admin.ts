@@ -1,4 +1,9 @@
-import { baseGalacticaRequest, getDefaultJsonHeaders } from "@/utils/baseApiV2";
+import {
+  baseGalacticaRequest,
+  getDefaultJsonHeaders,
+  safeFetch,
+  safeParseJson,
+} from "@/utils/baseApiV2";
 import {
   ChangeMemeStatusRequest,
   SignInWithCredentialsRequest,
@@ -19,21 +24,11 @@ const requestChangeMemeStatus = async (
   const headers = getDefaultJsonHeaders();
   headers.append("Authorization", `Bearer ${accessToken}`);
 
-  try {
-    const response = await baseGalacticaRequest("PATCH", {
-      path,
-      payload,
-      headers,
-      json: true,
-    });
-    if (!response.ok) {
-      throw new Error(`Bad response code ${response.status}`);
-    }
-  } catch (error) {
-    console.error(
-      "Failed to update meme status",
-      JSON.stringify(error, null, 2)
-    );
+  const response = await safeFetch(
+    () => baseGalacticaRequest("PATCH", { path, payload, headers, json: true }),
+    "Failed to update meme status"
+  );
+  if (response == null || !response.ok) {
     return false;
   }
 
@@ -69,19 +64,11 @@ export const requestAccessTokenVerification = async (
   const headers = getDefaultJsonHeaders();
   headers.append("Authorization", `Bearer ${accessToken}`);
 
-  try {
-    const response = await baseGalacticaRequest("POST", {
-      path,
-      headers,
-    });
-    if (!response.ok) {
-      throw new Error(`Bad response code ${response.status}`);
-    }
-  } catch (error) {
-    console.error(
-      "Failed to verify admin access token",
-      JSON.stringify(error, null, 2)
-    );
+  const response = await safeFetch(
+    () => baseGalacticaRequest("POST", { path, headers }),
+    "Failed to verify admin's access token"
+  );
+  if (response == null || !response.ok) {
     return false;
   }
 
@@ -98,29 +85,18 @@ export const requestSignInWithCredentials = async (
     password,
   };
 
-  let response = null;
-  try {
-    response = await baseGalacticaRequest("POST", {
-      path,
-      payload,
-      json: true,
-    });
-    if (response == null || !response.ok) {
-      throw new Error(`Bad response code ${response.status}`);
-    }
-  } catch (error) {
-    console.error(
-      "Failed to verify admin access token",
-      JSON.stringify(error, null, 2)
-    );
+  const response = await safeFetch(
+    () => baseGalacticaRequest("POST", { path, payload }),
+    "Failed to verify admin's access token"
+  );
+  if (response == null || !response.ok) {
     return null;
   }
 
-  try {
-    const data = await response.json();
-    return data.accessToken;
-  } catch (error) {
-    console.error("Cannot parse SignInWithCredentialsRequest's response");
+  const data = await safeParseJson<{ accessToken: string }>(response);
+  if (data == null) {
     return null;
   }
+
+  return data.accessToken;
 };

@@ -5,7 +5,14 @@ import { Wallet, WalletUtils } from "@/components/ClientRoot";
 import { createSiweMesage } from "@/utils/wallet/siwe";
 import { getWalletShorthand } from "@/utils/wallet/wallet";
 import { Dialog, DialogContent } from "@mui/material";
-import { ReactElement, memo, useContext, useEffect, useState } from "react";
+import {
+  ReactElement,
+  memo,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import Image from "next/image";
 import toast from "react-hot-toast";
 import { DWS_AT_KEY } from "@/utils/const";
@@ -42,9 +49,9 @@ const SignInBtn = ({
     toast.success("Welcome to TruthMemes");
   };
 
-  const handleCloseSiweMessage = () => {
+  const handleCloseSiweMessage = useCallback(() => {
     setSiweMessageOpen(false);
-  };
+  }, []);
 
   useEffect(() => {
     // Try to sign in
@@ -80,12 +87,14 @@ const SignInBtn = ({
         return;
       }
 
-      setTimeout(() => setSiweMessageOpen(true), 2000);
+      setSiweMessageOpen(true);
 
       // Request nonce and generate message
       const nonce = await getNonce();
       if (nonce == null) {
         // TODO: Maybe show some toast so user know the server is busy
+        toast.error("Cannot contact server");
+        setSiweMessageOpen(false);
         return;
       }
 
@@ -97,9 +106,9 @@ const SignInBtn = ({
         signature = await requestWalletSignature(message);
       } catch (error) {
         setFailed(true);
+        disconnect();
         setTimeout(() => {
           handleCloseSiweMessage();
-          disconnect();
         }, 2000);
         return;
       }
