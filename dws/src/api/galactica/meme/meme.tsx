@@ -6,7 +6,7 @@ import {
 import { MemeUpload, MemeUploadDTO } from "./meme.type";
 import { Maybe, PaginationRequest, PaginationResponse } from "@/utils";
 import { MemeFilter } from "@/components/galactica/meme/meme.type";
-import { baseGalacticaRequest } from "@/utils/baseApiV2";
+import { baseGalacticaRequest, safeFetch } from "@/utils/baseApiV2";
 import toast from "react-hot-toast";
 
 export const uploadMeme = async ({
@@ -87,7 +87,7 @@ export const getPreviewMeme = async (): Promise<
   PaginationResponse<MemeUpload>
 > => {
   const path = "/meme/preview";
-  const response = await baseGalacticaRequest("GET", { path });
+  const response = await safeFetch(() => baseGalacticaRequest("GET", { path }));
 
   const defaultData: PaginationResponse<MemeUpload> = {
     data: [],
