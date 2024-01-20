@@ -1,38 +1,31 @@
 import { Maybe } from "@/utils";
-import { clientBaseRequest, HttpMethod } from "@/utils/baseAPI";
 import {
   NonceInfo,
   VerifySignaturePayload,
   VerifySignatureResponse,
 } from "./account.type";
+import {
+  baseGalacticaRequest,
+  safeFetch,
+  safeParseJson,
+} from "@/utils/baseApiV2";
 
 export const requestNonce = async (): Promise<Maybe<NonceInfo>> => {
-  const response = await clientBaseRequest(
-    "/auth/nonce",
-    HttpMethod.GET,
-    null,
-    process.env.NEXT_PUBLIC_GALACTICA_API_URL
-  );
-
+  const path = "/auth/nonce";
+  const response = await safeFetch(() => baseGalacticaRequest("GET", { path }));
   if (response == null || !response.ok) {
     return null;
   }
 
-  try {
-    const result = await response.json();
-    return result;
-  } catch {
-    return null;
-  }
+  const data = await safeParseJson<NonceInfo>(response);
+  return data;
 };
 
 export const verifyAccessToken = async (address: string): Promise<boolean> => {
-  const response = await clientBaseRequest(
-    "/auth/verify/user",
-    HttpMethod.POST,
-    { address },
-    process.env.NEXT_PUBLIC_GALACTICA_API_URL,
-    true
+  const path = "/auth/verify/user";
+  const payload = { address };
+  const response = await safeFetch(() =>
+    baseGalacticaRequest("POST", { path, payload, json: true })
   );
   if (response == null || !response.ok) {
     return false;
@@ -45,20 +38,14 @@ export const verifyAccessToken = async (address: string): Promise<boolean> => {
 export const verifySignature = async (
   payload: VerifySignaturePayload
 ): Promise<Maybe<VerifySignatureResponse>> => {
-  const response = await clientBaseRequest(
-    "/auth/verify/siwe",
-    HttpMethod.POST,
-    payload,
-    process.env.NEXT_PUBLIC_GALACTICA_API_URL
+  const path = "/auth/verify/siwe";
+  const response = await safeFetch(() =>
+    baseGalacticaRequest("POST", { path, payload, json: true })
   );
   if (response == null || !response.ok) {
     return null;
   }
 
-  try {
-    const result = await response.json();
-    return result;
-  } catch {
-    return null;
-  }
+  const result = await safeParseJson<VerifySignatureResponse>(response);
+  return result;
 };

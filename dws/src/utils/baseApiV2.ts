@@ -119,7 +119,7 @@ export const baseEmailServerRequest = async (
 export const safeFetch = async (
   fetchFn: () => Promise<Response>,
   errorMessage?: string
-): Maybe<Response> => {
+): Promise<Maybe<Response>> => {
   let response = null;
   try {
     response = await fetchFn();
@@ -132,7 +132,7 @@ export const safeFetch = async (
 export const safeParseJson = async <T>(
   response: Response,
   errorMessage?: string
-): Maybe<T> => {
+): Promise<Maybe<T>> => {
   let parseData = null;
   try {
     parseData = await response.json();
