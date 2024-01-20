@@ -6,8 +6,13 @@ import {
 import { MemeUpload, MemeUploadDTO } from "./meme.type";
 import { Maybe, PaginationRequest, PaginationResponse } from "@/utils";
 import { MemeFilter } from "@/components/galactica/meme/meme.type";
-import { baseGalacticaRequest, safeFetch } from "@/utils/baseApiV2";
+import {
+  baseGalacticaRequest,
+  safeFetch,
+  safeParseJson,
+} from "@/utils/baseApiV2";
 import toast from "react-hot-toast";
+import { err, res } from "pino-std-serializers";
 
 export const uploadMeme = async ({
   meme,
@@ -25,13 +30,18 @@ export const uploadMeme = async ({
 
   formData.append("fileName", meme);
 
-  const response = await clientFormRequest(
-    "/meme",
-    formData,
-    process.env.NEXT_PUBLIC_GALACTICA_API_URL,
-    true
-  );
-  if (response == null || !response.ok) {
+  try {
+    const response = await clientFormRequest(
+      "/meme",
+      formData,
+      process.env.NEXT_PUBLIC_GALACTICA_API_URL,
+      true
+    );
+    if (response == null || !response.ok) {
+      return false;
+    }
+  } catch (error) {
+    console.error("Cannot upload meme", error);
     return false;
   }
 
@@ -50,14 +60,6 @@ export const getLatestMeme = async (
     filter
   );
 
-  const response = await clientBaseRequest(
-    "/meme/latest?" + new URLSearchParams(searchParams),
-    HttpMethod.GET,
-    null,
-    process.env.NEXT_PUBLIC_GALACTICA_API_URL,
-    true
-  );
-
   const defaultData = {
     data: [],
     pagination: {
@@ -65,6 +67,9 @@ export const getLatestMeme = async (
       total: 0,
     },
   };
+
+  const path = `/meme/latest?${new URLSearchParams(searchParams).toString()}`;
+  const response = await safeFetch(() => baseGalacticaRequest("GET", { path }));
 
   if (response == null || !response.ok) {
     if (response?.status === 429) {
@@ -74,13 +79,12 @@ export const getLatestMeme = async (
     return defaultData;
   }
 
-  try {
-    const data = await response.json();
-    return data;
-  } catch {
-    console.error("Failed to parse data");
+  const data = await safeParseJson<PaginationResponse<MemeUpload>>(response);
+  if (data == null) {
     return defaultData;
   }
+
+  return data;
 };
 
 export const getPreviewMeme = async (): Promise<
@@ -106,55 +110,45 @@ export const getPreviewMeme = async (): Promise<
     return defaultData;
   }
 
-  try {
-    const data = await response.json();
-    return data;
-  } catch {
-    console.error("Failed to parse data");
+  const data = await safeParseJson<PaginationResponse<MemeUpload>>(response);
+  if (!data) {
     return defaultData;
   }
+
+  return data;
 };
 
 export const getSingleMeme = async (id: string): Promise<Maybe<MemeUpload>> => {
   const path = `/meme/${id}`;
 
-  let response = null;
-  try {
-    response = await baseGalacticaRequest("GET", { path });
-    if (response == null || !response.ok) {
-      if (response?.status === 429) {
-        toast.error("Too many request. Please try again later");
-      }
-      return null;
-    }
-  } catch (error) {
-    console.error("Request error:", JSON.stringify(error, null, 2));
+  const response = await safeFetch(() => baseGalacticaRequest("GET", { path }));
+  if (response == null) {
     return null;
   }
 
-  try {
-    const data = await response.json();
-    return data;
-  } catch {
-    console.error("Failed to parse data");
+  if (!response.ok) {
+    if (response.status === 429) {
+      toast.error("Too many request. Please try again later");
+    }
     return null;
   }
+
+  const data = await safeParseJson<MemeUpload>(response);
+  return data;
 };
 
 export const getMemeImage = async (id: string): Promise<Maybe<Blob>> => {
   const path = `/meme/image/${id}`;
 
-  let response = null;
-  try {
-    response = await baseGalacticaRequest("GET", { path });
-    if (response == null || !response.ok) {
-      if (response?.status === 429) {
-        toast.error("Too many request. Please try again later");
-      }
-      return null;
+  const response = await safeFetch(() => baseGalacticaRequest("GET", { path }));
+  if (response == null) {
+    return null;
+  }
+
+  if (!response.ok) {
+    if (response.status === 429) {
+      toast.error("Too many request");
     }
-  } catch (error) {
-    console.error("Request error:", JSON.stringify(error, null, 2));
     return null;
   }
 
