@@ -75,56 +75,62 @@ const SignInBtn = ({
     trySignIn();
   }, []);
 
+  const handleSignIn = async () => {
+    if (!userWallet.wallet) {
+      connect();
+      return;
+    }
+
+    const walletAddress = userWallet.wallet;
+
+    const accessTokenValid = await verifyToken(userWallet.wallet);
+    if (accessTokenValid) {
+      handleConnectSuccess();
+      return;
+    }
+
+    setSiweMessageOpen(true);
+
+    // Request nonce and generate message
+    const nonce = await getNonce();
+    if (nonce == null) {
+      toast.error("Cannot contact server");
+      setSiweMessageOpen(false);
+      return;
+    }
+
+    // Request signature
+    const message = createSiweMesage(walletAddress, nonce);
+
+    let signature = "";
+    try {
+      signature = await requestWalletSignature(message);
+    } catch (error) {
+      setFailed(true);
+      disconnect();
+      setTimeout(() => {
+        handleCloseSiweMessage();
+      }, 2000);
+      return;
+    }
+
+    const verifyResult = await verifySignature({ message, signature });
+    if (verifyResult == null) {
+      return;
+    }
+
+    // Store access token
+    localStorage.setItem(DWS_AT_KEY, verifyResult.accessToken);
+    window.dispatchEvent(new StorageEvent("storage", { key: DWS_AT_KEY }));
+    handleConnectSuccess();
+  };
+
   useEffect(() => {
     if (connected || !userWallet.wallet) {
       return;
     }
 
-    const handleSignIn = async (walletAddress: string) => {
-      const accessTokenValid = await verifyToken(walletAddress);
-      if (accessTokenValid) {
-        handleConnectSuccess();
-        return;
-      }
-
-      setSiweMessageOpen(true);
-
-      // Request nonce and generate message
-      const nonce = await getNonce();
-      if (nonce == null) {
-        // TODO: Maybe show some toast so user know the server is busy
-        toast.error("Cannot contact server");
-        setSiweMessageOpen(false);
-        return;
-      }
-
-      // Request signature
-      const message = createSiweMesage(walletAddress, nonce);
-
-      let signature = "";
-      try {
-        signature = await requestWalletSignature(message);
-      } catch (error) {
-        setFailed(true);
-        disconnect();
-        setTimeout(() => {
-          handleCloseSiweMessage();
-        }, 2000);
-        return;
-      }
-
-      const verifyResult = await verifySignature({ message, signature });
-      if (verifyResult == null) {
-        return;
-      }
-
-      // Store access token
-      localStorage.setItem(DWS_AT_KEY, verifyResult.accessToken);
-      window.dispatchEvent(new StorageEvent("storage", { key: DWS_AT_KEY }));
-      handleConnectSuccess();
-    };
-
-    handleSignIn(userWallet.wallet);
+    handleSignIn();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userWallet.wallet]);
 
@@ -135,14 +141,14 @@ const SignInBtn = ({
           {variant === "button" ? (
             <button
               className="px-4 py-2 rounded-2xl bg-red-500 hover:bg-red-600 text-white cursor-pointer disabled:cursor-not-allowed"
-              onClick={connect}
+              onClick={handleSignIn}
             >
               Sign in
             </button>
           ) : (
             <div
               className="underline text-blue-700 hover:text-blue-900 cursor-pointer disabled:cursor-not-allowed"
-              onClick={connect}
+              onClick={handleSignIn}
             >
               Sign in
             </div>
