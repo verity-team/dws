@@ -77,7 +77,6 @@ const MemeInput = ({
       userId: userWallet.wallet,
     });
     if (!uploaded) {
-      toast.error("Failed to upload. Please try again later");
       return;
     }
 
