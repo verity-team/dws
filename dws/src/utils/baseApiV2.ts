@@ -9,10 +9,13 @@ interface RequestConfig {
   payload?: unknown;
 }
 
-export const getDefaultJsonHeaders = (): Headers => {
+export const getDefaultJsonHeaders = (jwt?: string): Headers => {
   const headers = new Headers();
   headers.append("Content-Type", "application/json");
   headers.append("Accept", "application/json");
+  if (jwt) {
+    headers.append("Authorization", `Bearer ${jwt}`);
+  }
   return headers;
 };
 

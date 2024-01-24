@@ -25,7 +25,7 @@ const navbarItems = [
   {
     text: "Memes",
     isActive: false,
-    href: "/memes.html",
+    href: "/meme",
   },
   {
     text: "NFTs",

@@ -39,7 +39,7 @@ const SignInBtn = ({
   const { getNonce } = useNonce();
 
   const [siweMessageOpen, setSiweMessageOpen] = useState(false);
-
+  const [txPending, setTxPending] = useState(false);
   const [connected, setConnected] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -76,6 +76,10 @@ const SignInBtn = ({
   }, []);
 
   const handleSignIn = async () => {
+    if (connected || txPending) {
+      return;
+    }
+
     if (!userWallet.wallet) {
       connect();
       return;
@@ -104,6 +108,7 @@ const SignInBtn = ({
 
     let signature = "";
     try {
+      setTxPending(true);
       signature = await requestWalletSignature(message);
     } catch (error) {
       setFailed(true);
@@ -112,6 +117,8 @@ const SignInBtn = ({
         handleCloseSiweMessage();
       }, 2000);
       return;
+    } finally {
+      setTxPending(false);
     }
 
     const verifyResult = await verifySignature({ message, signature });

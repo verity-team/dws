@@ -92,7 +92,7 @@ const MemeTimeline = ({
         <MemeInput onUpload={handleMemeUpload} />
       </div>
       <div className="px-2">
-        {!userWallet.wallet || memes.length === 0 ? (
+        {!userWallet.wallet ? (
           <>
             <MemeList
               memes={previewMemes}

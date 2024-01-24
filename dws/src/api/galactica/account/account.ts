@@ -6,9 +6,11 @@ import {
 } from "./account.type";
 import {
   baseGalacticaRequest,
+  getDefaultJsonHeaders,
   safeFetch,
   safeParseJson,
 } from "@/utils/baseApiV2";
+import { DWS_AT_KEY } from "@/utils/const";
 
 export const requestNonce = async (): Promise<Maybe<NonceInfo>> => {
   const path = "/auth/nonce";
@@ -24,8 +26,15 @@ export const requestNonce = async (): Promise<Maybe<NonceInfo>> => {
 export const verifyAccessToken = async (address: string): Promise<boolean> => {
   const path = "/auth/verify/user";
   const payload = { address };
+
+  const accessToken = localStorage.getItem(DWS_AT_KEY);
+  if (!accessToken) {
+    return false;
+  }
+  const headers = getDefaultJsonHeaders(accessToken);
+
   const response = await safeFetch(() =>
-    baseGalacticaRequest("POST", { path, payload, json: true })
+    baseGalacticaRequest("POST", { path, payload, headers, json: true })
   );
   if (response == null || !response.ok) {
     return false;

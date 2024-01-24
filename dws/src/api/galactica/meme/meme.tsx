@@ -1,8 +1,4 @@
-import {
-  HttpMethod,
-  clientBaseRequest,
-  clientFormRequest,
-} from "@/utils/baseAPI";
+import { clientFormRequest } from "@/utils/baseAPI";
 import { MemeUpload, MemeUploadDTO } from "./meme.type";
 import { Maybe, PaginationRequest, PaginationResponse } from "@/utils";
 import { MemeFilter } from "@/components/galactica/meme/meme.type";
@@ -12,7 +8,6 @@ import {
   safeParseJson,
 } from "@/utils/baseApiV2";
 import toast from "react-hot-toast";
-import { err, res } from "pino-std-serializers";
 
 export const uploadMeme = async ({
   meme,
@@ -37,7 +32,19 @@ export const uploadMeme = async ({
       process.env.NEXT_PUBLIC_GALACTICA_API_URL,
       true
     );
-    if (response == null || !response.ok) {
+    if (response == null) {
+      return false;
+    }
+
+    if (!response.ok) {
+      if (response.status === 409) {
+        toast("This meme have been uploaded before!", { icon: "👎" });
+        return false;
+      }
+
+      toast.error(
+        "Something wrong happend when uploading your meme. Please try again later"
+      );
       return false;
     }
   } catch (error) {
