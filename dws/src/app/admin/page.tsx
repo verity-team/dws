@@ -12,6 +12,7 @@ import { Box, Tabs, Tab } from "@mui/material";
 import Image from "next/image";
 import { SyntheticEvent, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import toast from "react-hot-toast";
 
 const categories: MemeUploadStatus[] = ["PENDING", "APPROVED", "DENIED"];
 
@@ -65,6 +66,7 @@ const AdminPage = () => {
       data.password
     );
     if (accessToken == null) {
+      toast.error("Wrong username or password!");
       return;
     }
 
