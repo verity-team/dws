@@ -86,7 +86,7 @@ export const requestSignInWithCredentials = async (
   };
 
   const response = await safeFetch(
-    () => baseGalacticaRequest("POST", { path, payload }),
+    () => baseGalacticaRequest("POST", { path, payload, json: true }),
     "Failed to verify admin's access token"
   );
   if (response == null || !response.ok) {
