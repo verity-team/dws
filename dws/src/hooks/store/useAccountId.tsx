@@ -1,12 +1,11 @@
 import { requestAccessTokenVerification } from "@/api/galactica/admin/admin";
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 
 interface AccountId {
   accessToken: string;
   getAccessToken: () => string;
   setAccessToken: (newAccessToken: string) => void;
-  verifyAccessToken: () => Promise<boolean>;
 }
 
 const useAccountId = create<AccountId>()(
