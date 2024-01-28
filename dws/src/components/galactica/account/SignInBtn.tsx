@@ -15,12 +15,8 @@ import {
 } from "react";
 import Image from "next/image";
 import toast from "react-hot-toast";
-import { DWS_AT_KEY } from "@/utils/const";
 import { useNonce } from "@/hooks/galactica/account/useNonce";
-import {
-  removeAccessToken,
-  verifyToken,
-} from "@/hooks/galactica/account/useAccessToken";
+import useAccountId from "@/hooks/store/useAccountId";
 
 type SignInBtnVariant = "button" | "text-only";
 
@@ -35,6 +31,8 @@ const SignInBtn = ({
     useContext(WalletUtils);
 
   const userWallet = useContext(Wallet);
+
+  const { accessToken, setAccessToken } = useAccountId();
 
   const { getNonce } = useNonce();
 
@@ -127,8 +125,7 @@ const SignInBtn = ({
     }
 
     // Store access token
-    localStorage.setItem(DWS_AT_KEY, verifyResult.accessToken);
-    window.dispatchEvent(new StorageEvent("storage", { key: DWS_AT_KEY }));
+    setAccessToken(verifyResult.accessToken);
     handleConnectSuccess();
   };
 

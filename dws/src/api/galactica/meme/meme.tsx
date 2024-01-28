@@ -168,7 +168,7 @@ export const getMemeImage = async (id: string): Promise<Maybe<Blob>> => {
   }
 };
 
-const withFilter = (
+export const withFilter = (
   searchParams: Record<string, string>,
   filter?: MemeFilter
 ): Record<string, string> => {

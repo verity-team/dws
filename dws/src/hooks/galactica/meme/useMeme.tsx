@@ -2,11 +2,22 @@ import {
   getLatestMeme,
   getMemeImage,
   getPreviewMeme,
+  withFilter,
 } from "@/api/galactica/meme/meme";
 import { MemeUpload } from "@/api/galactica/meme/meme.type";
+import page from "@/app/page";
 import { MemeFilter } from "@/components/galactica/meme/meme.type";
-import { PaginationRequest } from "@/utils";
+import { PaginationRequest, PaginationResponse } from "@/utils";
+import {
+  safeFetch,
+  baseGalacticaRequest,
+  safeParseJson,
+} from "@/utils/baseApiV2";
+import { filter } from "lodash";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import toast from "react-hot-toast";
+import useSWRImmutable from "swr/immutable";
+import useSWRInfinite from "swr/infinite";
 
 const LIMIT = 5;
 
@@ -14,149 +25,102 @@ interface UseLatestMemeConfig {
   requireInit?: boolean;
 }
 
-export const useLatestMeme = (
-  filter?: MemeFilter,
-  config?: UseLatestMemeConfig
-) => {
-  const [memes, setMemes] = useState<MemeUpload[]>([]);
-  const [page, setPage] = useState<number>(0);
-  const [total, setTotal] = useState<number>(0);
-
-  const loadingState = useRef(false);
-
-  const hasNext = useMemo(() => {
-    if (page == 0) {
-      return true;
+const getLatestMemeKey =
+  (filter?: MemeFilter) =>
+  (pageIndex: number, previousPageData?: PaginationResponse<MemeUpload>) => {
+    // End of meme list
+    if (previousPageData && !previousPageData.data.length) {
+      return null;
     }
 
-    return page * LIMIT < total;
-  }, [page, total]);
-
-  const loadInit = async () => {
-    const paginationSettings: PaginationRequest = {
-      offset: 0,
-      limit: LIMIT,
-    };
-    const { data, pagination } = await getLatestMeme(
-      paginationSettings,
+    const searchParams = withFilter(
+      {
+        offset: String(pageIndex * LIMIT),
+        limit: String(LIMIT),
+      },
       filter
     );
-    if (data.length === 0) {
-      // Avoid state mutation on empty data
-      if (memes.length > 0) {
-        setMemes([]);
-      }
-      return;
-    }
 
-    setMemes(data);
-    setPage(1);
-    setTotal(pagination.total);
+    const path = `/meme/latest?${new URLSearchParams(searchParams).toString()}`;
+    console.log("Querying paginated response for", path);
+    return path;
   };
 
-  useEffect(() => {
-    if (!config?.requireInit) {
-      return;
-    }
+export const useLatestMeme = (filter?: MemeFilter) => {
+  const { data, size, setSize, isLoading, error } = useSWRInfinite(
+    getLatestMemeKey(filter),
+    async (path: string): Promise<MemeUpload[]> => {
+      const response = await baseGalacticaRequest("GET", { path });
 
-    const init = async () => {
-      await loadInit();
-      loadingState.current = false;
-    };
-
-    init();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter?.status]);
-
-  const loadMore = async () => {
-    if (loadingState.current || !hasNext) {
-      return;
-    }
-
-    loadingState.current = true;
-    try {
-      const paginationSettings: PaginationRequest = {
-        offset: page * LIMIT,
-        limit: LIMIT,
-      };
-      const { data } = await getLatestMeme(paginationSettings, filter);
-      if (data.length === 0) {
-        // Avoid state mutation on empty data
-        return;
+      if (response == null || !response.ok) {
+        return [];
       }
-      setMemes((memes) => [...memes, ...data]);
-      setPage((page) => page + 1);
-    } catch (error) {
-      console.error("Cannot load more", error);
-    } finally {
-      loadingState.current = false;
+
+      const data =
+        await safeParseJson<PaginationResponse<MemeUpload>>(response);
+      if (!data?.data) {
+        return [];
+      }
+
+      return data.data;
     }
-  };
+  );
 
-  const removeMeme = useCallback((memeId: string) => {
-    setMemes((memes) => memes.filter((meme) => meme.fileId !== memeId));
-  }, []);
+  // Flat and dedupe the data to ready to use format
+  const memes = useMemo(() => {
+    if (!data) {
+      return [];
+    }
 
-  const clear = () => {
-    setMemes([]);
+    const memeIdMap = new Map<string, boolean>();
+    const result: MemeUpload[] = [];
+
+    for (const page of data) {
+      for (const meme of page) {
+        // Skip duplicate memes
+        if (memeIdMap.has(meme.fileId)) {
+          continue;
+        }
+
+        memeIdMap.set(meme.fileId, true);
+        result.push(meme);
+      }
+    }
+
+    return result;
+  }, [data]);
+
+  // Load next page
+  const loadMore = () => {
+    setSize((size) => size + 1);
   };
 
   return {
     memes,
-    hasNext,
-    isLoading: loadingState.current,
-    loadInit,
     loadMore,
-    clear,
-    removeMeme,
+    isLoading,
   };
 };
 
 export const usePreviewMeme = () => {
-  const [memes, setMemes] = useState<MemeUpload[]>([]);
-
-  const loadInit = useCallback(async () => {
-    const { data } = await getPreviewMeme();
-    if (data.length === 0) {
-      // Avoid state mutation on empty data
-      return;
-    }
-
-    setMemes(data);
-  }, []);
-
-  useEffect(() => {
-    loadInit();
-  }, []);
-
-  return { memes };
+  const { data, isLoading } = useSWRImmutable("preview", getPreviewMeme);
+  return { memes: data, isLoading };
 };
 
-export const useMemeImage = () => {
-  const [url, setUrl] = useState("");
+export const useMemeImage = (fileId: string) => {
+  const { data, isLoading } = useSWRImmutable(fileId, getMemeImage);
 
-  const loadingState = useRef(true);
-
-  const getImage = useCallback(async (id: string) => {
-    loadingState.current = true;
-
-    try {
-      const blob = await getMemeImage(id);
-      if (blob == null) {
-        return;
-      }
-
-      setUrl(URL.createObjectURL(blob));
-    } catch (error) {
-      console.error(error);
-    } finally {
-      loadingState.current = false;
+  const imageUrl = useMemo(() => {
+    if (!data) {
+      return null;
     }
-  }, []);
+
+    return URL.createObjectURL(data);
+  }, [data]);
 
   return {
-    loading: loadingState.current,
-    url,
-    getMemeImage: getImage,
+    imageRaw: data,
+    imageUrl,
+    isLoading,
   };
 };

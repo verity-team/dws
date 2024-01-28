@@ -20,7 +20,7 @@ import { useForm } from "react-hook-form";
 import { OptimisticMemeUpload } from "@/api/galactica/meme/meme.type";
 
 interface MemeInputProps {
-  onUpload: (meme: OptimisticMemeUpload) => void;
+  onUpload?: (meme: OptimisticMemeUpload) => void;
 }
 
 interface MemeInputFormData {
@@ -80,7 +80,7 @@ const MemeInput = ({
       return;
     }
 
-    onUpload({
+    onUpload?.({
       userId: userWallet.wallet,
       fileId: URL.createObjectURL(meme),
       caption,
