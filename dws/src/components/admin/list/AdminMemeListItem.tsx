@@ -14,6 +14,7 @@ import {
 } from "@/api/galactica/admin/admin";
 import toast from "react-hot-toast";
 import { DWS_AT_KEY } from "@/utils/const";
+import useAccountId from "@/hooks/store/useAccountId";
 
 interface AdminMemeListItemProps {
   userId: string;
@@ -36,6 +37,8 @@ const AdminMemeListItem = ({
 }: AdminMemeListItemProps): ReactElement<AdminMemeListItemProps> => {
   const { url, loading, getMemeImage } = useMemeImage();
 
+  const { accessToken } = useAccountId();
+
   useEffect(() => {
     // No need to query image from server if it's not a server meme
     if (!isServerMeme) {
@@ -57,7 +60,6 @@ const AdminMemeListItem = ({
   }
 
   const handleApproveMeme = async () => {
-    const accessToken = localStorage.getItem(DWS_AT_KEY);
     if (!accessToken) {
       return;
     }
@@ -73,7 +75,6 @@ const AdminMemeListItem = ({
   };
 
   const handleDeclineMeme = async () => {
-    const accessToken = localStorage.getItem(DWS_AT_KEY);
     if (!accessToken) {
       return;
     }
@@ -89,7 +90,6 @@ const AdminMemeListItem = ({
   };
 
   const handleRevertMemeStatus = async () => {
-    const accessToken = localStorage.getItem(DWS_AT_KEY);
     if (!accessToken) {
       return;
     }
