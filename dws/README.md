@@ -28,6 +28,12 @@ docker build -t dws .
 docker run -p 3000:3000 --name dws dws
 ```
 
+- With Docker Compose
+
+```bash
+docker compose -p dws up --build
+```
+
 - Without Docker
 
 ```bash
@@ -35,7 +41,7 @@ docker run -p 3000:3000 --name dws dws
 npm run build
 
 # Start the output with Node.js
-node .next/standalone/server.js
+npm start
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
