@@ -1,3 +1,5 @@
+const path = require("path");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   webpack: (config) => {
@@ -6,11 +8,6 @@ const nextConfig = {
   },
   compiler: {
     removeConsole: process.env.NODE_ENV === "production",
-  },
-  experimental: {
-    outputFileTracingIncludes: {
-      "/image": ["./node_modules/@img/**"],
-    },
   },
   output: "standalone",
 };
