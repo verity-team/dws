@@ -85,8 +85,10 @@ export const useLatestMeme = (filter?: MemeFilter) => {
 
   return {
     memes,
-    loadMore,
+    size,
     isLoading,
+    error,
+    loadMore,
   };
 };
 
