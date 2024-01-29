@@ -7,6 +7,7 @@ import {
 import AdminTimeline from "@/components/admin/AdminTimeline";
 import TextError from "@/components/common/TextError";
 import { MemeUploadStatus } from "@/components/galactica/meme/meme.type";
+import AdminMemeTimeline from "@/components/galactica/memeV2/admin/AdminMemeTimeline";
 import useAccountId from "@/hooks/store/useAccountId";
 import { Box, Tabs, Tab } from "@mui/material";
 import Image from "next/image";
@@ -163,7 +164,7 @@ const AdminPage = () => {
             </Tabs>
           </Box>
         </Box>
-        <AdminTimeline filter={{ status: selectedCategory }} />
+        <AdminMemeTimeline filter={{ status: selectedCategory }} />
       </div>
       <div className="col-span-3"></div>
     </div>

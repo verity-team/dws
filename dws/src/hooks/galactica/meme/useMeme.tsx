@@ -7,7 +7,7 @@ import { MemeUpload } from "@/api/galactica/meme/meme.type";
 import { MemeFilter } from "@/components/galactica/meme/meme.type";
 import { PaginationResponse } from "@/utils";
 import { baseGalacticaRequest, safeParseJson } from "@/utils/baseApiV2";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import useSWRImmutable from "swr/immutable";
 import useSWRInfinite from "swr/infinite";
 
@@ -17,7 +17,7 @@ const getLatestMemeKey =
   (filter?: MemeFilter) =>
   (pageIndex: number, previousPageData?: PaginationResponse<MemeUpload>) => {
     // End of meme list
-    if (previousPageData && !previousPageData.data.length) {
+    if (previousPageData?.data && !previousPageData.data.length) {
       return null;
     }
 
@@ -30,7 +30,6 @@ const getLatestMemeKey =
     );
 
     const path = `/meme/latest?${new URLSearchParams(searchParams).toString()}`;
-    console.log("Querying paginated response for", path);
     return path;
   };
 
@@ -53,6 +52,24 @@ export const useLatestMeme = (filter?: MemeFilter) => {
       return data.data;
     }
   );
+
+  const [ended, setEnded] = useState(false);
+
+  useEffect(() => {
+    // Keep trying for page 1
+    if (!data) {
+      return;
+    }
+
+    const lastData = data.at(data.length - 1);
+    if (!lastData) {
+      return;
+    }
+
+    if (lastData.length === 0) {
+      setEnded(true);
+    }
+  }, [data]);
 
   // Flat and dedupe the data to ready to use format
   const memes = useMemo(() => {
@@ -80,6 +97,9 @@ export const useLatestMeme = (filter?: MemeFilter) => {
 
   // Load next page
   const loadMore = () => {
+    if (ended) {
+      return;
+    }
     setSize((size) => size + 1);
   };
 

@@ -48,8 +48,8 @@ const MemeTimeline = ({
   }, [listEndFlag]);
 
   return (
-    <div className="w-full h-full">
-      <div>
+    <div className="w-full">
+      <div className="space-y-4">
         {memes.map((meme) => (
           <ItemLayout key={meme.fileId} meme={meme} />
         ))}
