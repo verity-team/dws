@@ -1,29 +1,17 @@
 import {
-  getLatestMeme,
   getMemeImage,
   getPreviewMeme,
   withFilter,
 } from "@/api/galactica/meme/meme";
 import { MemeUpload } from "@/api/galactica/meme/meme.type";
-import page from "@/app/page";
 import { MemeFilter } from "@/components/galactica/meme/meme.type";
-import { PaginationRequest, PaginationResponse } from "@/utils";
-import {
-  safeFetch,
-  baseGalacticaRequest,
-  safeParseJson,
-} from "@/utils/baseApiV2";
-import { filter } from "lodash";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import toast from "react-hot-toast";
+import { PaginationResponse } from "@/utils";
+import { baseGalacticaRequest, safeParseJson } from "@/utils/baseApiV2";
+import { useMemo } from "react";
 import useSWRImmutable from "swr/immutable";
 import useSWRInfinite from "swr/infinite";
 
 const LIMIT = 5;
-
-interface UseLatestMemeConfig {
-  requireInit?: boolean;
-}
 
 const getLatestMemeKey =
   (filter?: MemeFilter) =>
