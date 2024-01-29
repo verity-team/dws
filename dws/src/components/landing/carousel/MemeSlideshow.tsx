@@ -47,10 +47,8 @@ const MemeSlideshow = () => {
                 <Image
                   src={src}
                   alt={`meme number ${index + 1}`}
-                  width={0}
-                  height={0}
-                  sizes="100vw 100vh"
-                  className="border-4 border-black box-border rounded-lg w-auto h-auto max-h-full object-contain"
+                  fill
+                  className="rounded-lg w-auto h-auto max-h-full object-contain aspect-square bg-black border-4 border-black"
                 />
               </SlideshowItem>
             ))}

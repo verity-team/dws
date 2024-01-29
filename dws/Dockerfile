@@ -2,7 +2,7 @@ FROM node:20-alpine AS base
 
 # INSTALL DEPENDENCIES
 FROM base AS deps
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat python3 make eudev-dev
 WORKDIR /app
 
 # Install dependencies based on the preferred package manager
