@@ -1,11 +1,19 @@
+import {
+  requestApproveMeme,
+  requestDeclineMeme,
+  requestRevertMemeReview,
+} from "@/api/galactica/admin/admin";
 import { MemeUpload } from "@/api/galactica/meme/meme.type";
 import { roboto } from "@/app/fonts";
+import AdminToolbar from "@/components/admin/list/AdminMemeToolbar";
 import { useMemeImage } from "@/hooks/galactica/meme/useMeme";
+import useAccountId from "@/hooks/store/useAccountId";
 import { getTimeElapsedString } from "@/utils/utils";
 import { getWalletShorthand } from "@/utils/wallet/wallet";
 import { CircularProgress } from "@mui/material";
 import Avatar from "boring-avatars";
 import Image from "next/image";
+import toast from "react-hot-toast";
 
 interface MemeItemProps {
   meme: MemeUpload;
@@ -14,7 +22,51 @@ interface MemeItemProps {
 const MemeItem = ({ meme }: MemeItemProps) => {
   const { imageUrl, isLoading } = useMemeImage(meme.fileId);
 
-  const { userId, caption, createdAt } = meme;
+  const { userId, caption, createdAt, status, fileId } = meme;
+
+  const { accessToken } = useAccountId();
+
+  const handleApproveMeme = async () => {
+    if (!accessToken) {
+      return;
+    }
+
+    const succeed = await requestApproveMeme(accessToken, fileId);
+    if (!succeed) {
+      toast.error("Failed to approve meme");
+      return;
+    }
+
+    toast.success("Meme approved");
+  };
+
+  const handleDeclineMeme = async () => {
+    if (!accessToken) {
+      return;
+    }
+
+    const succeed = await requestDeclineMeme(accessToken, fileId);
+    if (!succeed) {
+      toast.error("Failed to decline meme");
+      return;
+    }
+
+    toast.success("Meme declined");
+  };
+
+  const handleRevertMemeStatus = async () => {
+    if (!accessToken) {
+      return;
+    }
+
+    const succeed = await requestRevertMemeReview(accessToken, fileId);
+    if (!succeed) {
+      toast.error("Failed to revert meme's status");
+      return;
+    }
+
+    toast.success("Meme is now in the pending list");
+  };
 
   return (
     <div className={`${roboto.className} cursor-pointer`}>
@@ -48,6 +100,12 @@ const MemeItem = ({ meme }: MemeItemProps) => {
             />
           </div>
         )}
+        <AdminToolbar
+          memeStatus={status}
+          onApprove={handleApproveMeme}
+          onDeny={handleDeclineMeme}
+          onRevert={handleRevertMemeStatus}
+        />
       </div>
     </div>
   );
