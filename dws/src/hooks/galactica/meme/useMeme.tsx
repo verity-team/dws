@@ -13,63 +13,49 @@ import useSWRInfinite from "swr/infinite";
 
 const LIMIT = 5;
 
-const getLatestMemeKey =
-  (filter?: MemeFilter) =>
-  (pageIndex: number, previousPageData?: PaginationResponse<MemeUpload>) => {
-    // End of meme list
-    if (previousPageData?.data && !previousPageData.data.length) {
-      return null;
-    }
+const requestLatestMeme = async (
+  queryParamters: string[]
+): Promise<MemeUpload[]> => {
+  const response = await baseGalacticaRequest("GET", {
+    path: queryParamters[0],
+  });
 
-    const searchParams = withFilter(
-      {
-        offset: String(pageIndex * LIMIT),
-        limit: String(LIMIT),
-      },
-      filter
-    );
+  if (response == null || !response.ok) {
+    return [];
+  }
 
-    const path = `/meme/latest?${new URLSearchParams(searchParams).toString()}`;
-    return path;
-  };
+  const data = await safeParseJson<PaginationResponse<MemeUpload>>(response);
+  if (!data?.data) {
+    return [];
+  }
+
+  return data.data;
+};
 
 export const useLatestMeme = (filter?: MemeFilter) => {
   const { data, size, setSize, isLoading, error } = useSWRInfinite(
-    getLatestMemeKey(filter),
-    async (path: string): Promise<MemeUpload[]> => {
-      const response = await baseGalacticaRequest("GET", { path });
+    (pageIndex: number, previousPageData?: PaginationResponse<MemeUpload>) => {
+      const targetStatus = filter?.status ?? "APPROVED";
 
-      if (response == null || !response.ok) {
-        return [];
+      // End of meme list
+      if (previousPageData?.data && !previousPageData.data.length) {
+        return null;
       }
 
-      const data =
-        await safeParseJson<PaginationResponse<MemeUpload>>(response);
-      if (!data?.data) {
-        return [];
+      if (pageIndex === 0) {
+        return [
+          `/meme/latest?offset=0&limit=5&status=${filter?.status}`,
+          targetStatus,
+        ];
       }
 
-      return data.data;
-    }
+      const offset = pageIndex * LIMIT;
+      const path = `/meme/latest?offset=${offset}&limit=${LIMIT}&status=${targetStatus}`;
+      return [path, targetStatus];
+    },
+    requestLatestMeme,
+    { revalidateFirstPage: false }
   );
-
-  const [ended, setEnded] = useState(false);
-
-  useEffect(() => {
-    // Keep trying for page 1
-    if (!data) {
-      return;
-    }
-
-    const lastData = data.at(data.length - 1);
-    if (!lastData) {
-      return;
-    }
-
-    if (lastData.length === 0) {
-      setEnded(true);
-    }
-  }, [data]);
 
   // Flat and dedupe the data to ready to use format
   const memes = useMemo(() => {
@@ -97,9 +83,6 @@ export const useLatestMeme = (filter?: MemeFilter) => {
 
   // Load next page
   const loadMore = () => {
-    if (ended) {
-      return;
-    }
     setSize((size) => size + 1);
   };
 
@@ -109,6 +92,7 @@ export const useLatestMeme = (filter?: MemeFilter) => {
     isLoading,
     error,
     loadMore,
+    setSize,
   };
 };
 

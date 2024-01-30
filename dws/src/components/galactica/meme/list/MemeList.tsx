@@ -44,7 +44,7 @@ const MemeList = ({
     };
   }, [loadMore]);
 
-  if (memes.length === 0 && !isLoading) {
+  if (memes?.length === 0 && !isLoading) {
     return (
       <div className="py-8 flex items-center justify-center">
         No memes for today

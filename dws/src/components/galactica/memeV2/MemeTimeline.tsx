@@ -59,7 +59,7 @@ const MemeTimeline = ({
             <div>Loading</div>
           </div>
         )}
-        <div ref={listEndFlag}></div>
+        {memes.length > 0 && <div ref={listEndFlag}></div>}
       </div>
     </div>
   );
