@@ -71,7 +71,7 @@ export const getLatestMeme = async (
     data: [],
     pagination: {
       ...pagination,
-      total: 0,
+      total: -1,
     },
   };
 

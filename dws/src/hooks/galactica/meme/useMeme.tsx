@@ -1,98 +1,97 @@
 import {
+  getLatestMeme,
   getMemeImage,
   getPreviewMeme,
   withFilter,
 } from "@/api/galactica/meme/meme";
 import { MemeUpload } from "@/api/galactica/meme/meme.type";
 import { MemeFilter } from "@/components/galactica/meme/meme.type";
-import { PaginationResponse } from "@/utils";
-import { baseGalacticaRequest, safeParseJson } from "@/utils/baseApiV2";
+import { safeFetch } from "@/utils/baseApiV2";
 import { useEffect, useMemo, useState } from "react";
 import useSWRImmutable from "swr/immutable";
-import useSWRInfinite from "swr/infinite";
 
 const LIMIT = 5;
 
-const requestLatestMeme = async (
-  queryParamters: string[]
-): Promise<MemeUpload[]> => {
-  const response = await baseGalacticaRequest("GET", {
-    path: queryParamters[0],
-  });
-
-  if (response == null || !response.ok) {
-    return [];
-  }
-
-  const data = await safeParseJson<PaginationResponse<MemeUpload>>(response);
-  if (!data?.data) {
-    return [];
-  }
-
-  return data.data;
-};
-
 export const useLatestMeme = (filter?: MemeFilter) => {
-  const { data, size, setSize, isLoading, error } = useSWRInfinite(
-    (pageIndex: number, previousPageData?: PaginationResponse<MemeUpload>) => {
-      const targetStatus = filter?.status ?? "APPROVED";
+  const [page, setPage] = useState(-1);
+  const [ended, setEnded] = useState(false);
+  const [loaded, setLoaded] = useState<number[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<MemeUpload[]>([]);
+  const [dataTotal, setDataTotal] = useState(-1);
 
-      // End of meme list
-      if (previousPageData?.data && !previousPageData.data.length) {
-        return null;
-      }
+  const resetState = () => {
+    setPage(0);
+    setEnded(false);
+    setLoaded([]);
+    setLoading(false);
+    setData([]);
+    setDataTotal(-1);
+  };
 
-      if (pageIndex === 0) {
-        return [
-          `/meme/latest?offset=0&limit=5&status=${filter?.status}`,
-          targetStatus,
-        ];
-      }
+  useEffect(() => {
+    resetState();
+  }, [filter]);
 
-      const offset = pageIndex * LIMIT;
-      const path = `/meme/latest?offset=${offset}&limit=${LIMIT}&status=${targetStatus}`;
-      return [path, targetStatus];
-    },
-    requestLatestMeme,
-    { revalidateFirstPage: false }
-  );
+  const loadInit = async () => {
+    setLoading(true);
 
-  // Flat and dedupe the data to ready to use format
-  const memes = useMemo(() => {
-    if (!data) {
-      return [];
+    const targetStatus = filter?.status ?? "APPROVED";
+    const response = await getLatestMeme(
+      { offset: 0, limit: LIMIT },
+      { status: targetStatus }
+    );
+    if (response.data.length === 0 || response.data.length < LIMIT) {
+      setEnded(true);
+    }
+    if (dataTotal === -1) {
+      setDataTotal(response.pagination.total);
     }
 
-    const memeIdMap = new Map<string, boolean>();
-    const result: MemeUpload[] = [];
+    setData((data) => [...data, ...response.data]);
 
-    for (const page of data) {
-      for (const meme of page) {
-        // Skip duplicate memes
-        if (memeIdMap.has(meme.fileId)) {
-          continue;
-        }
+    setLoaded([0]);
+    setPage(0);
 
-        memeIdMap.set(meme.fileId, true);
-        result.push(meme);
-      }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    loadInit();
+  }, [filter]);
+
+  const loadMore = async () => {
+    setLoading(true);
+
+    const targetStatus = filter?.status ?? "APPROVED";
+    const nextPage = page + 1;
+    const offset = nextPage * LIMIT;
+
+    const response = await getLatestMeme(
+      { offset, limit: LIMIT },
+      { status: targetStatus }
+    );
+    if (response.data.length === 0 || response.data.length < LIMIT) {
+      setEnded(true);
     }
 
-    return result;
-  }, [data]);
+    if (dataTotal === -1) {
+      setDataTotal(response.pagination.total);
+    }
 
-  // Load next page
-  const loadMore = () => {
-    setSize((size) => size + 1);
+    setData((data) => [...data, ...response.data]);
+
+    setLoaded((loadedPages) => [...loadedPages, nextPage]);
+    setPage(nextPage);
+
+    setLoading(false);
   };
 
   return {
-    memes,
-    size,
-    isLoading,
-    error,
+    data,
+    loading,
+    ended,
     loadMore,
-    setSize,
   };
 };
 

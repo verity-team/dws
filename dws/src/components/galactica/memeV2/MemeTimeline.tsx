@@ -1,8 +1,9 @@
-import { ReactElement, useEffect, useRef } from "react";
+import { ReactElement, useEffect, useRef, useState } from "react";
 import { MemeFilter } from "../meme/meme.type";
 import { MemeUpload } from "@/api/galactica/meme/meme.type";
 import { useLatestMeme } from "@/hooks/galactica/meme/useMeme";
 import { CircularProgress } from "@mui/material";
+import InfiniteScroll from "react-infinite-scroll-component";
 
 interface MemeTimelineItemProps {
   meme: MemeUpload;
@@ -18,49 +19,30 @@ const MemeTimeline = ({
   filter,
   ItemLayout,
 }: MemeTimelineProps): ReactElement<MemeTimelineProps> => {
-  const { memes, isLoading, loadMore } = useLatestMeme(filter);
-
-  const listEndFlag = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries[0] || !entries[0].isIntersecting) {
-          return;
-        }
-
-        loadMore();
-      },
-      { threshold: 1 }
-    );
-
-    const end = listEndFlag.current;
-    if (!end) {
-      return;
-    }
-
-    observer.observe(end);
-    return () => {
-      observer.unobserve(end);
-    };
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listEndFlag]);
+  const { data, ended, loadMore } = useLatestMeme(filter);
 
   return (
     <div className="w-full">
-      <div className="space-y-4">
-        {memes.map((meme) => (
+      <InfiniteScroll
+        dataLength={data.length}
+        next={loadMore}
+        hasMore={!ended}
+        loader={
+          <div className="w-full flex flex-col items-center justify-center p-8">
+            <CircularProgress />
+            <div className="mt-4">Loading...</div>
+          </div>
+        }
+        endMessage={
+          <p className="text-center p-8 text-xl">
+            <b>Yay! You have seen it all</b>
+          </p>
+        }
+      >
+        {data.map((meme) => (
           <ItemLayout key={meme.fileId} meme={meme} />
         ))}
-        {isLoading && (
-          <div>
-            <CircularProgress />
-            <div>Loading</div>
-          </div>
-        )}
-        {memes.length > 0 && <div ref={listEndFlag}></div>}
-      </div>
+      </InfiniteScroll>
     </div>
   );
 };
