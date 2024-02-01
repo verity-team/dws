@@ -56,12 +56,15 @@ const SignInBtn = ({
 
   useEffect(() => {
     // Try to sign in
-    if (connected) {
+    if (connected || !userWallet.wallet || !accessToken) {
       return;
     }
 
     const trySignIn = async (): Promise<void> => {
-      let validWalletAddress = await verifyAccessToken();
+      let validWalletAddress = await verifyAccessToken(
+        userWallet.wallet,
+        accessToken
+      );
       if (!validWalletAddress) {
         // To be safe, try to remove access token from the local storage
         return;
@@ -69,13 +72,13 @@ const SignInBtn = ({
 
       // Successfully signed in
       setConnected(true);
-      userWallet.setWallet(validWalletAddress);
     };
 
     trySignIn();
   }, []);
 
   const handleSignIn = async () => {
+    setFailed(false);
     if (connected || txPending) {
       return;
     }
@@ -87,7 +90,10 @@ const SignInBtn = ({
 
     const walletAddress = userWallet.wallet;
 
-    const accessTokenValid = await verifyToken(userWallet.wallet);
+    const accessTokenValid = await verifyAccessToken(
+      userWallet.wallet,
+      accessToken
+    );
     if (accessTokenValid) {
       handleConnectSuccess();
       return;

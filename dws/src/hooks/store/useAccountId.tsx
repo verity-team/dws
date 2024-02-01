@@ -1,3 +1,4 @@
+import { verifyAccessToken } from "@/api/galactica/account/account";
 import { requestAccessTokenVerification } from "@/api/galactica/admin/admin";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
@@ -13,16 +14,6 @@ const useAccountId = create<AccountId>()(
       accessToken: "",
       setAccessToken: (newAccessToken) =>
         set(() => ({ accessToken: newAccessToken })),
-      verifyAccessToken: async () => {
-        const currentAccessToken = get().accessToken;
-        if (!currentAccessToken) {
-          return false;
-        }
-
-        const isValid =
-          await requestAccessTokenVerification(currentAccessToken);
-        return isValid;
-      },
     }),
     {
       name: "dws-account-id",

@@ -23,15 +23,14 @@ export const requestNonce = async (): Promise<Maybe<NonceInfo>> => {
   return data;
 };
 
-export const verifyAccessToken = async (address: string): Promise<boolean> => {
+export const verifyAccessToken = async (
+  address: string,
+  jwt: string
+): Promise<boolean> => {
   const path = "/auth/verify/user";
   const payload = { address };
 
-  const accessToken = localStorage.getItem(DWS_AT_KEY);
-  if (!accessToken) {
-    return false;
-  }
-  const headers = getDefaultJsonHeaders(accessToken);
+  const headers = getDefaultJsonHeaders(jwt);
 
   const response = await safeFetch(() =>
     baseGalacticaRequest("POST", { path, payload, headers, json: true })
