@@ -1,6 +1,9 @@
 "use client";
 
-import { verifySignature } from "@/api/galactica/account/account";
+import {
+  verifyAccessToken,
+  verifySignature,
+} from "@/api/galactica/account/account";
 import { Wallet, WalletUtils } from "@/components/ClientRoot";
 import { createSiweMesage } from "@/utils/wallet/siwe";
 import { getWalletShorthand } from "@/utils/wallet/wallet";
@@ -58,10 +61,9 @@ const SignInBtn = ({
     }
 
     const trySignIn = async (): Promise<void> => {
-      let validWalletAddress = await verifyToken();
+      let validWalletAddress = await verifyAccessToken();
       if (!validWalletAddress) {
         // To be safe, try to remove access token from the local storage
-        removeAccessToken();
         return;
       }
 

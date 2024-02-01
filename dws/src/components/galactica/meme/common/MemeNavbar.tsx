@@ -1,8 +1,15 @@
 "use client";
 
 import Image from "next/image";
-import { ReactElement, useContext, useLayoutEffect, useState } from "react";
-import { Collapse } from "@mui/material";
+import {
+  ReactElement,
+  useContext,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
+import { Collapse, Menu, MenuItem } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import NavbarItem from "@/components/landing/navbar/NavbarItem";
 import SignInBtn from "../../account/SignInBtn";
@@ -41,6 +48,8 @@ const MemeNavbar = (): ReactElement => {
   const userWallet = useContext(Wallet);
   const [isMenuOpen, setMenuOpen] = useState(false);
 
+  const anchorElement = useRef(null);
+
   // Avoid showing 2 navbar at the same time
   useLayoutEffect(() => {
     const closeCollapseMenu = () => {
@@ -52,8 +61,12 @@ const MemeNavbar = (): ReactElement => {
     return () => window.removeEventListener("resize", closeCollapseMenu);
   }, []);
 
-  const handleMenuToggle = () => {
-    setMenuOpen((isOpen) => !isOpen);
+  const handleMenuOpen = () => {
+    setMenuOpen(true);
+  };
+
+  const handleMenuClose = () => {
+    setMenuOpen(false);
   };
 
   return (
@@ -64,7 +77,7 @@ const MemeNavbar = (): ReactElement => {
           <Image
             src="/dws-images/logo-no-shadow.png"
             alt="truth memes logo"
-            width={100}
+            width={64}
             height={0}
             className="max-w-[200px]"
           />
@@ -72,28 +85,28 @@ const MemeNavbar = (): ReactElement => {
         <div className="flex items-center space-x-4">
           <SignInBtn />
           <div className="flex items-center space-x-4">
-            <button type="button" onClick={handleMenuToggle}>
-              {userWallet ? (
-                <Avatar size={40} name={userWallet.wallet} />
-              ) : (
-                <MenuIcon />
-              )}
+            <button type="button" onClick={handleMenuOpen} ref={anchorElement}>
+              <MenuIcon className="w-12 h-12" />
             </button>
           </div>
         </div>
       </div>
-      <Collapse in={isMenuOpen} timeout="auto" unmountOnExit>
-        <nav className="flex flex-col items-center justify-center space-y-1">
-          {navbarItems.map((item) => (
+      <Menu
+        anchorEl={anchorElement.current}
+        open={isMenuOpen}
+        onClose={handleMenuClose}
+        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+      >
+        {navbarItems.map((item) => (
+          <MenuItem key={item.text} className="font-changa">
             <NavbarItem
               text={item.text}
               isActive={item.isActive}
               href={item.href}
-              key={item.text}
             />
-          ))}
-        </nav>
-      </Collapse>
+          </MenuItem>
+        ))}
+      </Menu>
     </div>
   );
 };
