@@ -12,6 +12,25 @@ import useSWRImmutable from "swr/immutable";
 
 const LIMIT = 5;
 
+const mergeMemeList = (source: MemeUpload[], incoming: MemeUpload[]) => {
+  const memeIdSet = new Set();
+
+  for (const meme of source) {
+    memeIdSet.add(meme.fileId);
+  }
+
+  const result = [...source];
+  for (const meme of incoming) {
+    if (memeIdSet.has(meme.fileId)) {
+      continue;
+    }
+    memeIdSet.add(meme.fileId);
+    result.push(meme);
+  }
+
+  return result;
+};
+
 export const useLatestMeme = (filter?: MemeFilter) => {
   const [page, setPage] = useState(-1);
   const [ended, setEnded] = useState(false);
@@ -48,7 +67,7 @@ export const useLatestMeme = (filter?: MemeFilter) => {
       setDataTotal(response.pagination.total);
     }
 
-    setData((data) => [...data, ...response.data]);
+    setData(response.data);
 
     setLoaded([0]);
     setPage(0);
@@ -79,7 +98,7 @@ export const useLatestMeme = (filter?: MemeFilter) => {
       setDataTotal(response.pagination.total);
     }
 
-    setData((data) => [...data, ...response.data]);
+    setData(mergeMemeList(data, response.data));
 
     setLoaded((loadedPages) => [...loadedPages, nextPage]);
     setPage(nextPage);
