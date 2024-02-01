@@ -33,6 +33,7 @@
     "react-dom": "^18",
     "react-hook-form": "^7.47.0",
     "react-hot-toast": "^2.4.1",
+    "react-infinite-scroll-component": "^6.1.0",
     "react-qr-code": "^2.0.12",
     "react-share": "^5.0.3",
     "server-only": "^0.0.1",
@@ -44,7 +45,8 @@
     "web3": "^4.3.0",
     "web3-eth-abi": "^4.1.2",
     "web3-utils": "^4.0.6",
-    "web3-validator": "^2.0.2"
+    "web3-validator": "^2.0.2",
+    "zustand": "^4.5.0"
   },
   "devDependencies": {
     "@types/bn.js": "^5.1.2",

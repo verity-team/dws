@@ -3,12 +3,9 @@
 import MemeInput from "./input/MemeInput";
 import MemeList from "./list/MemeList";
 import { useLatestMeme, usePreviewMeme } from "@/hooks/galactica/meme/useMeme";
-import { useCallback, ReactElement, useContext, useEffect } from "react";
-import { OptimisticMemeUpload } from "@/api/galactica/meme/meme.type";
+import { ReactElement, useContext } from "react";
 import { MemeFilter } from "./meme.type";
 import { Wallet, WalletUtils } from "@/components/ClientRoot";
-import { getAccessToken } from "@/hooks/galactica/account/useAccessToken";
-import { DWS_AT_KEY } from "@/utils/const";
 
 interface MemeTimelineProps {
   filter?: MemeFilter;
@@ -25,43 +22,9 @@ const MemeTimeline = ({
 
   const { memes, loadMore, isLoading, hasNext, loadInit } = useLatestMeme(
     filter,
-    { requireInit: false }
+    { requireInit: true }
   );
   const { memes: previewMemes } = usePreviewMeme();
-
-  // const [userMemes, setUserMemes] = useState<OptimisticMemeUpload[]>([]);
-
-  const handleAccessTokenChange = useCallback((event: StorageEvent) => {
-    console.log(event);
-    if (event.key !== DWS_AT_KEY) {
-      return;
-    }
-
-    const accessToken = getAccessToken();
-    if (accessToken == null) {
-      return;
-    }
-
-    loadInit();
-  }, []);
-
-  useEffect(() => {
-    window.addEventListener("storage", handleAccessTokenChange);
-
-    return () => {
-      window.removeEventListener("storage", handleAccessTokenChange);
-    };
-  }, []);
-
-  useEffect(() => {
-    const accessToken = getAccessToken();
-    if (!userWallet.wallet || !accessToken) {
-      return;
-    }
-
-    loadInit();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userWallet.wallet]);
 
   const handleLoadMore = async () => {
     if (
@@ -76,20 +39,10 @@ const MemeTimeline = ({
     await loadMore();
   };
 
-  // Optimistically update the meme list UI after user upload their meme
-  const handleMemeUpload = useCallback((meme: OptimisticMemeUpload) => {
-    // setUserMemes((userMemes) => {
-    //   if (userMemes.length === 0) {
-    //     return [meme];
-    //   }
-    //   return [...userMemes, meme];
-    // });
-  }, []);
-
   return (
     <>
       <div className="mt-4">
-        <MemeInput onUpload={handleMemeUpload} />
+        <MemeInput />
       </div>
       <div className="px-2">
         {!userWallet.wallet ? (

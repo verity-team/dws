@@ -7,7 +7,8 @@ import {
 import AdminTimeline from "@/components/admin/AdminTimeline";
 import TextError from "@/components/common/TextError";
 import { MemeUploadStatus } from "@/components/galactica/meme/meme.type";
-import { DWS_AT_KEY } from "@/utils/const";
+import AdminMemeTimeline from "@/components/galactica/memeV2/admin/AdminMemeTimeline";
+import useAccountId from "@/hooks/store/useAccountId";
 import { Box, Tabs, Tab } from "@mui/material";
 import Image from "next/image";
 import { SyntheticEvent, useEffect, useState } from "react";
@@ -37,24 +38,24 @@ const AdminPage = () => {
     },
   });
 
+  const { accessToken, setAccessToken } = useAccountId();
+
   useEffect(() => {
-    const authenticate = async () => {
-      const accessToken = localStorage.getItem(DWS_AT_KEY);
-      if (!accessToken) {
+    if (!accessToken) {
+      setSignedIn(false);
+      return;
+    }
+
+    requestAccessTokenVerification(accessToken).then((isAuthenticated) => {
+      if (!isAuthenticated) {
+        setSignedIn(false);
         return;
       }
 
-      // Request server verification
-      const verified = await requestAccessTokenVerification(accessToken);
-      if (!verified) {
-        return;
-      }
-
+      // Usable access token
       setSignedIn(true);
-    };
-
-    authenticate();
-  }, []);
+    });
+  }, [accessToken]);
 
   const handleCategoryChange = (_: SyntheticEvent, value: MemeUploadStatus) => {
     setSelectedCategory(value);
@@ -69,8 +70,7 @@ const AdminPage = () => {
       toast.error("Wrong username or password!");
       return;
     }
-
-    localStorage.setItem(DWS_AT_KEY, accessToken);
+    setAccessToken(accessToken);
     setSignedIn(true);
   };
 
@@ -164,7 +164,7 @@ const AdminPage = () => {
             </Tabs>
           </Box>
         </Box>
-        <AdminTimeline filter={{ status: selectedCategory }} />
+        <AdminMemeTimeline filter={{ status: selectedCategory }} />
       </div>
       <div className="col-span-3"></div>
     </div>

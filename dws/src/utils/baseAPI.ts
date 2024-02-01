@@ -138,23 +138,6 @@ export const serverBaseRequest = async (
   return baseRequest(url, method, { host: apiHost, timeout }, body, headers);
 };
 
-export const serverFormRequest = async (url: string, body: FormData) => {
-  // Read configurations
-  const apiHost = process.env.DWS_API_URL;
-  if (apiHost == null) {
-    console.log("DWS_API_URL not set");
-    return null;
-  }
-
-  let timeout: number = Number(process.env.API_TIMEOUT);
-  if (isNaN(timeout)) {
-    console.log("API_TIMEOUT not set. Using fallback value");
-    timeout = 10000;
-  }
-
-  return baseFormRequest(url, { host: apiHost, timeout, auth: true }, body);
-};
-
 export const clientBaseRequest = async (
   url: string,
   method: HttpMethod,

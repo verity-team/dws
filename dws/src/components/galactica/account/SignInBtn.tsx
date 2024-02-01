@@ -1,6 +1,9 @@
 "use client";
 
-import { verifySignature } from "@/api/galactica/account/account";
+import {
+  verifyAccessToken,
+  verifySignature,
+} from "@/api/galactica/account/account";
 import { Wallet, WalletUtils } from "@/components/ClientRoot";
 import { createSiweMesage } from "@/utils/wallet/siwe";
 import { getWalletShorthand } from "@/utils/wallet/wallet";
@@ -15,12 +18,8 @@ import {
 } from "react";
 import Image from "next/image";
 import toast from "react-hot-toast";
-import { DWS_AT_KEY } from "@/utils/const";
 import { useNonce } from "@/hooks/galactica/account/useNonce";
-import {
-  removeAccessToken,
-  verifyToken,
-} from "@/hooks/galactica/account/useAccessToken";
+import useAccountId from "@/hooks/store/useAccountId";
 
 type SignInBtnVariant = "button" | "text-only";
 
@@ -35,6 +34,8 @@ const SignInBtn = ({
     useContext(WalletUtils);
 
   const userWallet = useContext(Wallet);
+
+  const { accessToken, setAccessToken } = useAccountId();
 
   const { getNonce } = useNonce();
 
@@ -55,27 +56,29 @@ const SignInBtn = ({
 
   useEffect(() => {
     // Try to sign in
-    if (connected) {
+    if (connected || !userWallet.wallet || !accessToken) {
       return;
     }
 
     const trySignIn = async (): Promise<void> => {
-      let validWalletAddress = await verifyToken();
+      let validWalletAddress = await verifyAccessToken(
+        userWallet.wallet,
+        accessToken
+      );
       if (!validWalletAddress) {
         // To be safe, try to remove access token from the local storage
-        removeAccessToken();
         return;
       }
 
       // Successfully signed in
       setConnected(true);
-      userWallet.setWallet(validWalletAddress);
     };
 
     trySignIn();
   }, []);
 
   const handleSignIn = async () => {
+    setFailed(false);
     if (connected || txPending) {
       return;
     }
@@ -87,7 +90,10 @@ const SignInBtn = ({
 
     const walletAddress = userWallet.wallet;
 
-    const accessTokenValid = await verifyToken(userWallet.wallet);
+    const accessTokenValid = await verifyAccessToken(
+      userWallet.wallet,
+      accessToken
+    );
     if (accessTokenValid) {
       handleConnectSuccess();
       return;
@@ -127,8 +133,7 @@ const SignInBtn = ({
     }
 
     // Store access token
-    localStorage.setItem(DWS_AT_KEY, verifyResult.accessToken);
-    window.dispatchEvent(new StorageEvent("storage", { key: DWS_AT_KEY }));
+    setAccessToken(verifyResult.accessToken);
     handleConnectSuccess();
   };
 

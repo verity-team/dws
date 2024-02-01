@@ -2,161 +2,118 @@ import {
   getLatestMeme,
   getMemeImage,
   getPreviewMeme,
+  withFilter,
 } from "@/api/galactica/meme/meme";
 import { MemeUpload } from "@/api/galactica/meme/meme.type";
 import { MemeFilter } from "@/components/galactica/meme/meme.type";
-import { PaginationRequest } from "@/utils";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { safeFetch } from "@/utils/baseApiV2";
+import { useEffect, useMemo, useState } from "react";
+import useSWRImmutable from "swr/immutable";
 
 const LIMIT = 5;
 
-interface UseLatestMemeConfig {
-  requireInit?: boolean;
-}
+export const useLatestMeme = (filter?: MemeFilter) => {
+  const [page, setPage] = useState(-1);
+  const [ended, setEnded] = useState(false);
+  const [loaded, setLoaded] = useState<number[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<MemeUpload[]>([]);
+  const [dataTotal, setDataTotal] = useState(-1);
 
-export const useLatestMeme = (
-  filter?: MemeFilter,
-  config?: UseLatestMemeConfig
-) => {
-  const [memes, setMemes] = useState<MemeUpload[]>([]);
-  const [page, setPage] = useState<number>(0);
-  const [total, setTotal] = useState<number>(0);
-
-  const loadingState = useRef(false);
-
-  const hasNext = useMemo(() => {
-    if (page == 0) {
-      return true;
-    }
-
-    return page * LIMIT < total;
-  }, [page, total]);
-
-  const loadInit = async () => {
-    const paginationSettings: PaginationRequest = {
-      offset: 0,
-      limit: LIMIT,
-    };
-    const { data, pagination } = await getLatestMeme(
-      paginationSettings,
-      filter
-    );
-    if (data.length === 0) {
-      // Avoid state mutation on empty data
-      if (memes.length > 0) {
-        setMemes([]);
-      }
-      return;
-    }
-
-    setMemes(data);
-    setPage(1);
-    setTotal(pagination.total);
+  const resetState = () => {
+    setPage(0);
+    setEnded(false);
+    setLoaded([]);
+    setLoading(false);
+    setData([]);
+    setDataTotal(-1);
   };
 
   useEffect(() => {
-    if (!config?.requireInit) {
-      return;
+    resetState();
+  }, [filter]);
+
+  const loadInit = async () => {
+    setLoading(true);
+
+    const targetStatus = filter?.status ?? "APPROVED";
+    const response = await getLatestMeme(
+      { offset: 0, limit: LIMIT },
+      { status: targetStatus }
+    );
+    if (response.data.length === 0 || response.data.length < LIMIT) {
+      setEnded(true);
+    }
+    if (dataTotal === -1) {
+      setDataTotal(response.pagination.total);
     }
 
-    const init = async () => {
-      await loadInit();
-      loadingState.current = false;
-    };
+    setData((data) => [...data, ...response.data]);
 
-    init();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter?.status]);
+    setLoaded([0]);
+    setPage(0);
 
-  const loadMore = async () => {
-    if (loadingState.current || !hasNext) {
-      return;
-    }
-
-    loadingState.current = true;
-    try {
-      const paginationSettings: PaginationRequest = {
-        offset: page * LIMIT,
-        limit: LIMIT,
-      };
-      const { data } = await getLatestMeme(paginationSettings, filter);
-      if (data.length === 0) {
-        // Avoid state mutation on empty data
-        return;
-      }
-      setMemes((memes) => [...memes, ...data]);
-      setPage((page) => page + 1);
-    } catch (error) {
-      console.error("Cannot load more", error);
-    } finally {
-      loadingState.current = false;
-    }
+    setLoading(false);
   };
 
-  const removeMeme = useCallback((memeId: string) => {
-    setMemes((memes) => memes.filter((meme) => meme.fileId !== memeId));
-  }, []);
+  useEffect(() => {
+    loadInit();
+  }, [filter]);
 
-  const clear = () => {
-    setMemes([]);
+  const loadMore = async () => {
+    setLoading(true);
+
+    const targetStatus = filter?.status ?? "APPROVED";
+    const nextPage = page + 1;
+    const offset = nextPage * LIMIT;
+
+    const response = await getLatestMeme(
+      { offset, limit: LIMIT },
+      { status: targetStatus }
+    );
+    if (response.data.length === 0 || response.data.length < LIMIT) {
+      setEnded(true);
+    }
+
+    if (dataTotal === -1) {
+      setDataTotal(response.pagination.total);
+    }
+
+    setData((data) => [...data, ...response.data]);
+
+    setLoaded((loadedPages) => [...loadedPages, nextPage]);
+    setPage(nextPage);
+
+    setLoading(false);
   };
 
   return {
-    memes,
-    hasNext,
-    isLoading: loadingState.current,
-    loadInit,
+    data,
+    loading,
+    ended,
     loadMore,
-    clear,
-    removeMeme,
   };
 };
 
 export const usePreviewMeme = () => {
-  const [memes, setMemes] = useState<MemeUpload[]>([]);
-
-  const loadInit = useCallback(async () => {
-    const { data } = await getPreviewMeme();
-    if (data.length === 0) {
-      // Avoid state mutation on empty data
-      return;
-    }
-
-    setMemes(data);
-  }, []);
-
-  useEffect(() => {
-    loadInit();
-  }, []);
-
-  return { memes };
+  const { data, isLoading } = useSWRImmutable("preview", getPreviewMeme);
+  return { memes: data, isLoading };
 };
 
-export const useMemeImage = () => {
-  const [url, setUrl] = useState("");
+export const useMemeImage = (fileId: string) => {
+  const { data, isLoading } = useSWRImmutable(fileId, getMemeImage);
 
-  const loadingState = useRef(true);
-
-  const getImage = useCallback(async (id: string) => {
-    loadingState.current = true;
-
-    try {
-      const blob = await getMemeImage(id);
-      if (blob == null) {
-        return;
-      }
-
-      setUrl(URL.createObjectURL(blob));
-    } catch (error) {
-      console.error(error);
-    } finally {
-      loadingState.current = false;
+  const imageUrl = useMemo(() => {
+    if (!data) {
+      return null;
     }
-  }, []);
+
+    return URL.createObjectURL(data);
+  }, [data]);
 
   return {
-    loading: loadingState.current,
-    url,
-    getMemeImage: getImage,
+    imageRaw: data,
+    imageUrl,
+    isLoading,
   };
 };
