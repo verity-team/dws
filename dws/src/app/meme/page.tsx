@@ -2,6 +2,7 @@
 
 import ClientRoot from "@/components/ClientRoot";
 import MemeNavbar from "@/components/galactica/meme/common/MemeNavbar";
+import MemeInput from "@/components/galactica/meme/input/MemeInput";
 import UserMemeTimeline from "@/components/galactica/memeV2/user/UserMemeTimeline";
 
 const TruthMemePage = () => {
@@ -12,6 +13,7 @@ const TruthMemePage = () => {
           <MemeNavbar />
         </div>
         <div className="col-span-12 md:col-span-4 md:col-start-5">
+          <MemeInput />
           <UserMemeTimeline />
         </div>
       </div>
