@@ -13,7 +13,6 @@ import {
   requestRevertMemeReview,
 } from "@/api/galactica/admin/admin";
 import toast from "react-hot-toast";
-import { DWS_AT_KEY } from "@/utils/const";
 import useAccountId from "@/hooks/store/useAccountId";
 
 interface AdminMemeListItemProps {

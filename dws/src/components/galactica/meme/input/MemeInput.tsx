@@ -18,6 +18,7 @@ import { uploadMeme } from "@/api/galactica/meme/meme";
 import { Wallet } from "@/components/ClientRoot";
 import { useForm } from "react-hook-form";
 import { OptimisticMemeUpload } from "@/api/galactica/meme/meme.type";
+import useAccountId from "@/hooks/store/useAccountId";
 
 interface MemeInputProps {
   onUpload?: (meme: OptimisticMemeUpload) => void;
@@ -31,6 +32,7 @@ const MemeInput = ({
   onUpload,
 }: MemeInputProps): ReactElement<MemeInputProps> => {
   const userWallet = useContext(Wallet);
+  const { accessToken } = useAccountId();
   const memeInputRef = useRef<HTMLInputElement>(null);
   const [meme, setMeme] = useState<Maybe<File>>(null);
   const {
@@ -63,7 +65,7 @@ const MemeInput = ({
       return;
     }
 
-    if (!userWallet.wallet) {
+    if (!userWallet.wallet || !accessToken) {
       // TODO: Open pop-up to prompt user to sign in
       toast.error("You need to sign-in first");
       return;
@@ -71,11 +73,15 @@ const MemeInput = ({
 
     // Use API to upload meme to server
     const caption = getValues("caption");
-    const uploaded = await uploadMeme({
-      meme,
-      caption,
-      userId: userWallet.wallet,
-    });
+    const uploaded = await uploadMeme(
+      {
+        meme,
+        caption,
+        userId: userWallet.wallet,
+      },
+      accessToken
+    );
+
     if (!uploaded) {
       return;
     }

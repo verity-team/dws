@@ -10,7 +10,6 @@ import {
   safeFetch,
   safeParseJson,
 } from "@/utils/baseApiV2";
-import { DWS_AT_KEY } from "@/utils/const";
 
 export const requestNonce = async (): Promise<Maybe<NonceInfo>> => {
   const path = "/auth/nonce";

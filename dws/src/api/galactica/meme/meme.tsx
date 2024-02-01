@@ -1,4 +1,4 @@
-import { clientFormRequest } from "@/utils/baseAPI";
+import { clientFormRequest, getDefaultHeaders } from "@/utils/baseAPI";
 import { MemeUpload, MemeUploadDTO } from "./meme.type";
 import { Maybe, PaginationRequest, PaginationResponse } from "@/utils";
 import { MemeFilter } from "@/components/galactica/meme/meme.type";
@@ -9,11 +9,10 @@ import {
 } from "@/utils/baseApiV2";
 import toast from "react-hot-toast";
 
-export const uploadMeme = async ({
-  meme,
-  caption,
-  userId,
-}: MemeUploadDTO): Promise<boolean> => {
+export const uploadMeme = async (
+  { meme, caption, userId }: MemeUploadDTO,
+  jwt: string
+): Promise<boolean> => {
   const formData = new FormData();
 
   // Construct formData
@@ -25,30 +24,31 @@ export const uploadMeme = async ({
 
   formData.append("fileName", meme);
 
-  try {
-    const response = await clientFormRequest(
-      "/meme",
-      formData,
-      process.env.NEXT_PUBLIC_GALACTICA_API_URL,
-      true
+  const path = "/meme";
+  const headers = new Headers();
+  headers.append("Authorization", `Bearer ${jwt}`);
+
+  const response = await safeFetch(() =>
+    baseGalacticaRequest("POST", { path, payload: formData, headers })
+  );
+  if (response == null) {
+    return false;
+  }
+
+  if (!response.ok) {
+    if (response.status === 409) {
+      toast("This meme have been uploaded before!", { icon: "👎" });
+      return false;
+    }
+
+    if (response.status === 429) {
+      toast("That's too much meme for a day", { icon: "😵" });
+      return false;
+    }
+
+    toast.error(
+      "Something wrong happend when uploading your meme. Please try again later"
     );
-    if (response == null) {
-      return false;
-    }
-
-    if (!response.ok) {
-      if (response.status === 409) {
-        toast("This meme have been uploaded before!", { icon: "👎" });
-        return false;
-      }
-
-      toast.error(
-        "Something wrong happend when uploading your meme. Please try again later"
-      );
-      return false;
-    }
-  } catch (error) {
-    console.error("Cannot upload meme", error);
     return false;
   }
 
