@@ -39,7 +39,7 @@ const ShareButton = ({
     <>
       <button
         type="button"
-        className="flex items-center justify-center px-4 py-2 rounded-lg hover:bg-slate-200 m-1"
+        className="flex items-center justify-center px-4 py-2 rounded-lg hover:bg-yellow-500 m-1"
         onClick={handleShareClick}
       >
         <ShareIcon className="text-2xl" />
@@ -67,7 +67,7 @@ const ShareButton = ({
             className="w-full"
             onClick={closeShareDropdown}
           >
-            <div className="flex items-center">
+            <div className="flex items-center font-changa">
               <TwitterIcon size={32} round />
               <div className="ml-2">Twitter</div>
             </div>
@@ -75,7 +75,7 @@ const ShareButton = ({
         </MenuItem>
         <MenuItem>
           <div
-            className="flex items-center justify-between"
+            className="flex items-center justify-between font-changa"
             onClick={handleCopyClick}
           >
             <div className="flex items-center justify-center p-2 bg-slate-200 rounded-full">

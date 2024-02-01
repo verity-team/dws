@@ -22,11 +22,11 @@ const ItemToolbar = ({
     <div className="grid grid-cols-3">
       <button
         type="button"
-        className="flex items-center justify-center px-4 py-2 rounded-lg hover:bg-slate-200 m-1"
+        className="flex items-center justify-center px-4 py-2 rounded-lg hover:bg-yellow-500 m-1"
         onClick={handleLikeClick}
       >
         <ThumbUpIconOutlined className="text-2xl" />
-        <div className="ml-1.5 text-lg font-changa">Like</div>
+        <div className="ml-1.5 text-lg font-changa">Upvote</div>
       </button>
       <div></div>
       <ShareButton memeId={memeId} />

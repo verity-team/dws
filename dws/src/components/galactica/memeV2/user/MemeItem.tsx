@@ -71,7 +71,7 @@ const MemeItem = ({ meme }: MemeItemProps) => {
 
   return (
     <div className={`${roboto.className} cursor-pointer`}>
-      <div className="w-full mt-6 border-b border-gray-100">
+      <div className="w-full mt-6 py-4">
         <div className="flex items-center justify-start space-x-4">
           <Avatar size={40} name={userId} variant="marble" />
           <div>
@@ -101,7 +101,7 @@ const MemeItem = ({ meme }: MemeItemProps) => {
             />
           </div>
         )}
-        <div className="mt-2">
+        <div className="mt-4">
           <ItemToolbar memeId={fileId} />
         </div>
       </div>
