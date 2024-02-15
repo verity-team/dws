@@ -1,6 +1,8 @@
 package data
 
 import (
+	"errors"
+
 	"github.com/goccy/go-json"
 
 	"github.com/shopspring/decimal"
@@ -30,8 +32,13 @@ func GetKrakenETHPrice() (decimal.Decimal, error) {
 		return decimal.Zero, err
 	}
 
-	// Extract the ETH price from the "c" array (the first element)
-	priceString := krakenResponse.Result["XETHZUSD"].C[0]
+	var priceString string
+	if len(krakenResponse.Result["XETHZUSD"].C) > 0 {
+		// Extract the ETH price from the "c" array (the first element)
+		priceString = krakenResponse.Result["XETHZUSD"].C[0]
+	} else {
+		return decimal.Zero, errors.New("invalid price data received from kraken")
+	}
 
 	// Parse the priceString as a decimal
 	price, err := decimal.NewFromString(priceString)
