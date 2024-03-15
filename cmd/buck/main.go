@@ -237,21 +237,15 @@ func main() {
 
 	g.Go(func() error {
 		// shut down live/ready probe server if needed
-		for {
-			select {
-			case <-ctx.Done():
-				// The context is canceled
-				log.Info("buck/http - context canceled, stopping..")
-				sdc, cancel := context.WithTimeout(ctx, 3*time.Second)
-				defer cancel()
-				if err := e.Shutdown(sdc); err != nil {
-					log.Error(err)
-				}
-				return ctx.Err()
-			case <-time.After(5 * time.Second):
-				// all good -- carry on
-			}
+		<-ctx.Done()
+		// The context is canceled
+		log.Info("buck/http - context canceled, stopping..")
+		sdc, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+		if err := e.Shutdown(sdc); err != nil {
+			log.Error(err)
 		}
+		return ctx.Err()
 	})
 
 	g.Go(func() error {
@@ -259,17 +253,11 @@ func main() {
 		s.StartAsync()
 
 		// shut down cron jobs if needed
-		for {
-			select {
-			case <-ctx.Done():
-				// The context is canceled
-				log.Info("buck/cron - context canceled, stopping..")
-				s.StopBlockingChan()
-				return ctx.Err()
-			case <-time.After(5 * time.Second):
-				// all good -- carry on
-			}
-		}
+		<-ctx.Done()
+		// The context is canceled
+		log.Info("buck/cron - context canceled, stopping..")
+		s.StopBlockingChan()
+		return ctx.Err()
 	})
 
 	if err := g.Wait(); err != nil {
