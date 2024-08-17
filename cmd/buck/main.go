@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/go-co-op/gocron"
@@ -167,9 +169,41 @@ func main() {
 		return
 	}
 
+	var ctype c.CrawlerType
+
+	switch {
+	case *monitorFinal:
+		ctype = c.Finalized
+	case *monitorLatest:
+		ctype = c.Latest
+	case *monitorOld:
+		ctype = c.OldUnconfirmed
+	}
+
+	// listen for interrupt signals (like Ctrl-C).
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// create an errorgroup.
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		select {
+		case <-sigChan:
+			log.Infof("buck/%v: received an interrupt, canceling...", ctype)
+			cancel()
+		case <-ctx.Done():
+			log.Infof("buck/%v: interrupt handler, canceling...", ctype)
+			// If context is done, return the context error.
+			return ctx.Err()
+		}
+		return nil
+	})
 	s := gocron.NewScheduler(time.UTC)
 	s.SingletonModeAll()
-	g, ctx := errgroup.WithContext(context.Background())
 
 	if *monitorLatest {
 		_, err = s.Every("1m").Do(monitorETH, context.WithValue(ctx, c.BuckContext, &latestCtxt))
@@ -215,7 +249,7 @@ func main() {
 	e.GET("/ready", func(c echo.Context) error {
 		select {
 		case <-ctx.Done():
-			log.Info("buck - context canceled")
+			log.Infof("buck/%v - context canceled", ctype)
 			return c.String(http.StatusServiceUnavailable, "{}\n")
 		default:
 			// all good, carry on
@@ -239,7 +273,7 @@ func main() {
 		// shut down live/ready probe server if needed
 		<-ctx.Done()
 		// The context is canceled
-		log.Info("buck/http - context canceled, stopping..")
+		log.Infof("buck/%v/http - context canceled, stopping..", ctype)
 		sdc, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 		if err := e.Shutdown(sdc); err != nil {
@@ -255,15 +289,15 @@ func main() {
 		// shut down cron jobs if needed
 		<-ctx.Done()
 		// The context is canceled
-		log.Info("buck/cron - context canceled, stopping..")
+		log.Infof("buck/%v/cron - context canceled, stopping..", ctype)
 		s.StopBlockingChan()
 		return ctx.Err()
 	})
 
 	if err := g.Wait(); err != nil {
-		log.Errorf("errgroup.Wait(): %v", err)
+		log.Errorf("buck/%v: errgroup.Wait(): %v", ctype, err)
 	}
-	log.Info("buck shutting down")
+	log.Infof("buck/%v shutting down", ctype)
 }
 
 func runReadyProbe(ctxt c.Context) error {

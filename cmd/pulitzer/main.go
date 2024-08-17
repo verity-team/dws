@@ -6,7 +6,10 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/go-co-op/gocron"
@@ -44,10 +47,33 @@ func main() {
 	port := flag.Uint("port", 8081, "Port for the healthcheck server")
 	flag.Parse()
 
+	// listen for interrupt signals (like Ctrl-C).
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// create an errorgroup.
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		select {
+		case <-sigChan:
+			log.Info("pulitzer: received an interrupt, canceling...")
+			cancel()
+		case <-ctx.Done():
+			log.Info("pulitzer: interrupt handler, canceling...")
+			// If context is done, return the context error.
+			return ctx.Err()
+		}
+		return nil
+	})
+
+	ctx = context.WithValue(ctx, common.DBHandle, dbh)
+
 	s := gocron.NewScheduler(time.UTC)
 	s.SingletonModeAll()
-	g, ctx := errgroup.WithContext(context.Background())
-	ctx = context.WithValue(ctx, common.DBHandle, dbh)
 
 	_, err = s.Every("1m").Do(getETHPrice, ctx)
 	if err != nil {
