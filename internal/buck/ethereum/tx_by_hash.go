@@ -98,11 +98,13 @@ func parseTxByHash(body []byte) ([]c.TxByHash, error) {
 	if err != nil {
 		return nil, err
 	}
-	var res []c.TxByHash = make([]c.TxByHash, len(resp))
-	for i, d := range resp {
-		if d.Result != nil {
-			res[i] = *d.Result
+	var res []c.TxByHash
+	for _, d := range resp {
+		if d.Result == nil {
+			log.Warnf("tx not found on chain (id: %d), skipping", d.ID)
+			continue
 		}
+		res = append(res, *d.Result)
 	}
 	return res, nil
 }

@@ -112,9 +112,10 @@ func main() {
 	g.Go(func() error {
 		// run live/ready probe server
 		err := e.Start(fmt.Sprintf(":%d", *port))
-		if !errors.Is(err, http.ErrServerClosed) {
-			log.Error(err)
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
 		}
+		log.Error(err)
 		return err
 	})
 
@@ -181,6 +182,10 @@ func checkPriceDeviation(prices []decimal.Decimal) error {
 		for j := i + 1; j < len(prices); j++ {
 			price1 := prices[i]
 			price2 := prices[j]
+
+			if price1.IsZero() || price2.IsZero() {
+				return fmt.Errorf("zero price encountered: %s and %s", price1.StringFixed(2), price2.StringFixed(2))
+			}
 
 			// Calculate the percentage deviation
 			deviation := price1.Sub(price2).Div(price1).Abs()
