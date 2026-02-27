@@ -66,7 +66,7 @@ func main() {
 		log.Fatal("error sending request:", err)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	log.Info("Status Code:", resp.Status)
 	if resp.StatusCode != http.StatusOK {

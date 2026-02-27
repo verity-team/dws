@@ -78,7 +78,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer dbh.Close()
+	defer func() { _ = dbh.Close() }()
 	dbh.SetMaxOpenConns(10)
 	dbh.SetMaxIdleConns(5)
 	dbh.SetConnMaxLifetime(5 * time.Minute)

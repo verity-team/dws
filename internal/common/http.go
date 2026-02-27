@@ -43,7 +43,7 @@ func HTTPGet(params HTTPParams) ([]byte, error) {
 		log.Error(err)
 		return nil, err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 
 	// Read the response body
 	responseBody, err := io.ReadAll(response.Body)
@@ -73,7 +73,7 @@ func HTTPPost(params HTTPParams) ([]byte, error) {
 		log.Error(err)
 		return nil, err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 
 	// Read the response body
 	responseBody, err := io.ReadAll(response.Body)

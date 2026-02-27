@@ -135,7 +135,7 @@ func parseInputData(abis map[string]abi.ABI, erc20, input string) (string, decim
 	// look up ABI
 	abi, ok := abis[erc20]
 	if !ok {
-		return "", decimal.Zero, fmt.Errorf("No ABI for ERC-20 '%s'", erc20)
+		return "", decimal.Zero, fmt.Errorf("no ABI for ERC-20 '%s'", erc20)
 	}
 	di, err := hex.DecodeString(input[2:])
 	if err != nil {
