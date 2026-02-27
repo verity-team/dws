@@ -32,16 +32,16 @@ func GetHistoricalPriceFromBinance(ts time.Time) ([]Kline, error) {
 		return nil, err
 	}
 
-	klines := make([]Kline, len(klineData))
-	for idx, kline := range klineData {
+	var klines []Kline
+	for _, kline := range klineData {
 		if len(kline) != 12 {
-			log.Error("binance: klines: invalid data format")
+			log.Error("binance: klines: invalid data format, skipping entry")
 			continue
 		}
 
 		datum, ok := kline[4].(string)
 		if !ok {
-			return nil, fmt.Errorf("invalid close price: '%s'", kline[4])
+			return nil, fmt.Errorf("invalid close price: '%v'", kline[4])
 		}
 		p, err := decimal.NewFromString(datum)
 		if err != nil {
@@ -50,7 +50,7 @@ func GetHistoricalPriceFromBinance(ts time.Time) ([]Kline, error) {
 		}
 		datum, ok = kline[5].(string)
 		if !ok {
-			return nil, fmt.Errorf("invalid volume figure: '%s'", kline[5])
+			return nil, fmt.Errorf("invalid volume figure: '%v'", kline[5])
 		}
 		v, err := decimal.NewFromString(datum)
 		if err != nil {
@@ -59,15 +59,14 @@ func GetHistoricalPriceFromBinance(ts time.Time) ([]Kline, error) {
 		}
 		fval, ok := kline[6].(float64)
 		if !ok {
-			return nil, fmt.Errorf("invalid closing time: '%s'", kline[6])
+			return nil, fmt.Errorf("invalid closing time: '%v'", kline[6])
 		}
 		ct := time.Unix(int64(fval/1000), 0)
-		k := Kline{
+		klines = append(klines, Kline{
 			ClosePrice: p,
 			Volume:     v,
 			CloseTime:  ct.UTC(),
-		}
-		klines[idx] = k
+		})
 	}
 	return klines, nil
 }

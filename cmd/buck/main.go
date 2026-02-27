@@ -79,6 +79,9 @@ func main() {
 		log.Fatal(err)
 	}
 	defer dbh.Close()
+	dbh.SetMaxOpenConns(10)
+	dbh.SetMaxIdleConns(5)
+	dbh.SetConnMaxLifetime(5 * time.Minute)
 
 	ctxt.DB = dbh
 	ctxt.UpdateLastBlock = true
@@ -244,7 +247,7 @@ func main() {
 		return c.String(http.StatusOK, "{}\n")
 	})
 	e.GET("/version", func(c echo.Context) error {
-		return c.String(http.StatusOK, fmt.Sprintf(`{"version": "%s"}`, version))
+		return c.JSON(http.StatusOK, map[string]string{"version": version})
 	})
 	e.GET("/ready", func(c echo.Context) error {
 		select {

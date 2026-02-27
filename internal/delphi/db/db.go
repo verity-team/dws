@@ -96,10 +96,9 @@ func GetDonationData(db *sqlx.DB) (*api.DonationData, error) {
 		LIMIT 1
 		`
 	var ethp api.Price
-	err := db.Get(&ethp, q1)
-	if err != nil {
-		err = fmt.Errorf("failed to fetch an ETH price that is newer than 3 minutes, %w", err)
-		log.Error(err)
+	if ethErr := db.Get(&ethp, q1); ethErr != nil {
+		ethErr = fmt.Errorf("failed to fetch an ETH price that is newer than 3 minutes, %w", ethErr)
+		log.Error(ethErr)
 	}
 
 	// truth token price
@@ -111,7 +110,7 @@ func GetDonationData(db *sqlx.DB) (*api.DonationData, error) {
 		LIMIT 1
 		`
 	var truthp api.Price
-	err = db.Get(&truthp, q2)
+	err := db.Get(&truthp, q2)
 	if err != nil {
 		err = fmt.Errorf("failed to fetch the TRUTH price, %w", err)
 		log.Error(err)
