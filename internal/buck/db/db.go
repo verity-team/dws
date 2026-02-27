@@ -97,9 +97,10 @@ func PersistTxs(ctxt c.Context, bn uint64, ethPrice decimal.Decimal, txs []c.Tra
 
 	for _, tx := range txs {
 		tx.Price = tokenPrice.StringFixed(5)
-		tx.Tokens, tx.USDAmount, err = calcTokens(tx, tokenPrice, ethPrice)
-		if err != nil {
-			// something is wrong with this tx -- skip it
+		var calcErr error
+		tx.Tokens, tx.USDAmount, calcErr = calcTokens(tx, tokenPrice, ethPrice)
+		if calcErr != nil {
+			log.Warnf("skipping tx %s: %v", tx.Hash, calcErr)
 			continue
 		}
 		log.Infof("persisting tx: %5s -- a: %s, ausd: %s, t: %s, %s", tx.Asset, tx.Value, tx.USDAmount, tx.Tokens, tx.Hash)
@@ -314,7 +315,12 @@ func GetOldestUnconfirmed(dbh *sqlx.DB) (uint64, error) {
 
 func updateDonationStats(dtx *sqlx.Tx, ctxt c.Context) (decimal.Decimal, decimal.Decimal, decimal.Decimal, error) {
 	q1 := `
-		WITH DonationSum AS (
+		WITH OldStats AS (
+			 SELECT tokens AS old_tokens
+			 FROM donation_stats
+			 LIMIT 1
+		),
+		DonationSum AS (
 			 SELECT
 				  SUM(usd_amount) AS total_usd_amount,
 				  SUM(tokens) AS total_tokens
@@ -324,7 +330,7 @@ func updateDonationStats(dtx *sqlx.Tx, ctxt c.Context) (decimal.Decimal, decimal
 		UPDATE donation_stats
 		SET total = (SELECT total_usd_amount FROM DonationSum),
 			 tokens = (SELECT total_tokens FROM DonationSum)
-		RETURNING total, tokens, (SELECT tokens FROM donation_stats)
+		RETURNING total, tokens, (SELECT old_tokens FROM OldStats)
 		`
 	var newTotal, newTokens, oldTokens decimal.Decimal
 	err := dtx.QueryRowx(q1).Scan(&newTotal, &newTokens, &oldTokens)
@@ -473,10 +479,13 @@ func confirmSingleTx(dtx *sqlx.Tx, tx c.TxByHash) (decimal.Decimal, decimal.Deci
 	var amount, tokens decimal.Decimal
 	err := dtx.QueryRowx(q, tx.BlockNumber, tx.FBBlockTime, tx.Hash).Scan(&amount, &tokens)
 	if err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
-			err = fmt.Errorf("failed to confirm single transaction (%s), %w", tx.Hash, err)
-			log.Error(err)
+		if errors.Is(err, sql.ErrNoRows) {
+			// tx was already confirmed or no longer unconfirmed
+			log.Infof("tx '%s' not found with status 'unconfirmed', skipping", tx.Hash)
+			return decimal.Zero, decimal.Zero, nil
 		}
+		err = fmt.Errorf("failed to confirm single transaction (%s), %w", tx.Hash, err)
+		log.Error(err)
 		return decimal.Zero, decimal.Zero, err
 	}
 	return amount, tokens, nil

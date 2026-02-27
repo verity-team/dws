@@ -16,6 +16,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"
 	"github.com/verity-team/dws/api"
+	"github.com/verity-team/dws/internal/common"
 	"github.com/verity-team/dws/internal/delphi/db"
 )
 
@@ -60,6 +61,10 @@ func (s *DelphiServer) ConnectWallet(ctx echo.Context) error {
 		log.Error(err)
 		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
+	if !common.IsValidETHAddress(cr.Address) {
+		cerr := api.Error{Code: 102, Message: "invalid ethereum address"}
+		return ctx.JSON(http.StatusBadRequest, cerr)
+	}
 	if err = db.ConnectWallet(s.db, cr); err != nil {
 		cerr, err := getError(104, "failed to log wallet connection", err)
 		log.Error(err)
@@ -98,6 +103,10 @@ func (s *DelphiServer) getUserData(address string) (*api.UserDataResult, error) 
 }
 
 func (s *DelphiServer) UserData(ctx echo.Context, address string) error {
+	if !common.IsValidETHAddress(address) {
+		cerr := api.Error{Code: 103, Message: "invalid ethereum address"}
+		return ctx.JSON(http.StatusBadRequest, cerr)
+	}
 	udr, err := s.getUserData(address)
 	if err != nil {
 		cerr, _ := getError(106, "", err)
@@ -121,7 +130,7 @@ func (s *DelphiServer) Ready(ctx echo.Context) error {
 func (s *DelphiServer) Version(ctx echo.Context) error {
 	version = fmt.Sprintf("delphi::%s::%s", bts, rev)
 	log.Info("version = ", version)
-	return ctx.String(http.StatusOK, fmt.Sprintf(`{"version": "%s"}`, version))
+	return ctx.JSON(http.StatusOK, map[string]string{"version": version})
 }
 
 func verifySig(from, msg, sigHex string) bool {
@@ -179,7 +188,14 @@ func authTSTooOld(authTS time.Time) bool {
 }
 
 func formMsg(urlPath string, authTS time.Time) string {
-	path := strings.Join(strings.Split(urlPath, "/")[1:], " ")
+	parts := strings.Split(urlPath, "/")[1:]
+	var nonEmpty []string
+	for _, p := range parts {
+		if p != "" {
+			nonEmpty = append(nonEmpty, p)
+		}
+	}
+	path := strings.Join(nonEmpty, " ")
 	return fmt.Sprintf("%s, %s", path, authTS.Format("2006-01-02 15:04:05-07:00"))
 }
 
@@ -241,7 +257,7 @@ func (s *DelphiServer) DonationData(ctx echo.Context) error {
 	dd.ReceivingAddress = ra
 	// if we failed to fetch an ETH price and the campaign is not closed yet,
 	// the status should be set to "paused"
-	if dd.Prices[0].Price == "0.00" && dd.Status != api.Closed {
+	if len(dd.Prices) > 0 && (dd.Prices[0].Price == "" || dd.Prices[0].Price == "0.00") && dd.Status != api.Closed {
 		dd.Status = api.Paused
 	}
 	return ctx.JSON(http.StatusOK, *dd)

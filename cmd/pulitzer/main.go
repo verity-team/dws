@@ -42,7 +42,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer dbh.Close()
+	defer func() { _ = dbh.Close() }()
+	dbh.SetMaxOpenConns(10)
+	dbh.SetMaxIdleConns(5)
+	dbh.SetConnMaxLifetime(5 * time.Minute)
 
 	port := flag.Uint("port", 8081, "Port for the healthcheck server")
 	flag.Parse()
@@ -92,7 +95,7 @@ func main() {
 		return c.String(http.StatusOK, "{}\n")
 	})
 	e.GET("/version", func(c echo.Context) error {
-		return c.String(http.StatusOK, fmt.Sprintf(`{"version": "%s"}`, version))
+		return c.JSON(http.StatusOK, map[string]string{"version": version})
 	})
 	e.GET("/ready", func(c echo.Context) error {
 		select {
@@ -112,9 +115,10 @@ func main() {
 	g.Go(func() error {
 		// run live/ready probe server
 		err := e.Start(fmt.Sprintf(":%d", *port))
-		if !errors.Is(err, http.ErrServerClosed) {
-			log.Error(err)
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
 		}
+		log.Error(err)
 		return err
 	})
 
@@ -123,7 +127,7 @@ func main() {
 		<-ctx.Done()
 		// The context is canceled
 		log.Info("pulitzer/http - context canceled, stopping..")
-		sdc, cancel := context.WithTimeout(ctx, 3*time.Second)
+		sdc, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		if err := e.Shutdown(sdc); err != nil {
 			log.Error(err)
@@ -181,6 +185,10 @@ func checkPriceDeviation(prices []decimal.Decimal) error {
 		for j := i + 1; j < len(prices); j++ {
 			price1 := prices[i]
 			price2 := prices[j]
+
+			if price1.IsZero() || price2.IsZero() {
+				return fmt.Errorf("zero price encountered: %s and %s", price1.StringFixed(2), price2.StringFixed(2))
+			}
 
 			// Calculate the percentage deviation
 			deviation := price1.Sub(price2).Div(price1).Abs()

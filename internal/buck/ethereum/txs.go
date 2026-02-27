@@ -118,14 +118,14 @@ func markFailedTxs(ctxt c.Context, bn uint64, txs []c.Transaction) error {
 		log.Error(err)
 		return err
 	}
-	for i, tx := range txs {
+	for i := range txs {
 		rcpt := rcpts[i]
-		if tx.Hash != rcpt.TransactionHash {
-			err = fmt.Errorf("block: %d -- receipt hash ('%s') does not match tx hash ('%s')", bn, rcpt.TransactionHash, tx.Hash)
+		if txs[i].Hash != rcpt.TransactionHash {
+			err = fmt.Errorf("block: %d -- receipt hash ('%s') does not match tx hash ('%s')", bn, rcpt.TransactionHash, txs[i].Hash)
 			return err
 		}
 		if strings.ToLower(rcpt.Status) != "0x1" {
-			tx.Status = string(api.Failed)
+			txs[i].Status = string(api.Failed)
 		}
 	}
 	return nil
@@ -135,7 +135,7 @@ func parseInputData(abis map[string]abi.ABI, erc20, input string) (string, decim
 	// look up ABI
 	abi, ok := abis[erc20]
 	if !ok {
-		return "", decimal.Zero, fmt.Errorf("No ABI for ERC-20 '%s'", erc20)
+		return "", decimal.Zero, fmt.Errorf("no ABI for ERC-20 '%s'", erc20)
 	}
 	di, err := hex.DecodeString(input[2:])
 	if err != nil {
@@ -154,7 +154,23 @@ func parseInputData(abis map[string]abi.ABI, erc20, input string) (string, decim
 		return "", decimal.Zero, fmt.Errorf("failed to unpack input, '%s'", input)
 	}
 
-	value := decimal.NewFromBigInt(args["_value"].(*big.Int), 0)
-	to := args["_to"].(ethc.Address).String()
+	rawValue, ok := args["_value"]
+	if !ok {
+		return "", decimal.Zero, fmt.Errorf("missing '_value' in input args, '%s'", input)
+	}
+	bigValue, ok := rawValue.(*big.Int)
+	if !ok {
+		return "", decimal.Zero, fmt.Errorf("unexpected type for '_value' in input, '%s'", input)
+	}
+	rawTo, ok := args["_to"]
+	if !ok {
+		return "", decimal.Zero, fmt.Errorf("missing '_to' in input args, '%s'", input)
+	}
+	toAddr, ok := rawTo.(ethc.Address)
+	if !ok {
+		return "", decimal.Zero, fmt.Errorf("unexpected type for '_to' in input, '%s'", input)
+	}
+	value := decimal.NewFromBigInt(bigValue, 0)
+	to := toAddr.String()
 	return to, value, nil
 }

@@ -78,7 +78,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer dbh.Close()
+	defer func() { _ = dbh.Close() }()
+	dbh.SetMaxOpenConns(10)
+	dbh.SetMaxIdleConns(5)
+	dbh.SetConnMaxLifetime(5 * time.Minute)
 
 	ctxt.DB = dbh
 	ctxt.UpdateLastBlock = true
@@ -244,7 +247,7 @@ func main() {
 		return c.String(http.StatusOK, "{}\n")
 	})
 	e.GET("/version", func(c echo.Context) error {
-		return c.String(http.StatusOK, fmt.Sprintf(`{"version": "%s"}`, version))
+		return c.JSON(http.StatusOK, map[string]string{"version": version})
 	})
 	e.GET("/ready", func(c echo.Context) error {
 		select {
@@ -263,9 +266,10 @@ func main() {
 	g.Go(func() error {
 		// run live/ready probe server
 		err := e.Start(fmt.Sprintf(":%d", *port))
-		if !errors.Is(err, http.ErrServerClosed) {
-			log.Error(err)
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
 		}
+		log.Error(err)
 		return err
 	})
 
@@ -274,7 +278,7 @@ func main() {
 		<-ctx.Done()
 		// The context is canceled
 		log.Infof("buck/%v/http - context canceled, stopping..", ctype)
-		sdc, cancel := context.WithTimeout(ctx, 3*time.Second)
+		sdc, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		if err := e.Shutdown(sdc); err != nil {
 			log.Error(err)

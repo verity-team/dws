@@ -3,10 +3,17 @@ package common
 import (
 	"fmt"
 	"math/big"
+	"regexp"
 	"strings"
 
 	"github.com/shopspring/decimal"
 )
+
+var ethAddressRe = regexp.MustCompile(`^0x[0-9a-fA-F]{40}$`)
+
+func IsValidETHAddress(address string) bool {
+	return ethAddressRe.MatchString(address)
+}
 
 func HexStringToDecimal(hexValue string) (decimal.Decimal, error) {
 	// Remove "0x" prefix if present

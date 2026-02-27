@@ -107,9 +107,14 @@ func GetDSN() string {
 	if !present {
 		log.Fatal("DWS_DB_DATABASE variable not set")
 	}
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable TimeZone=UTC", host, port, user, passwd, database)
+	sslmode := "require"
+	if sm, ok := os.LookupEnv("DWS_DB_SSLMODE"); ok {
+		sslmode = sm
+	}
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s TimeZone=UTC", host, port, user, passwd, database, sslmode)
 
 	log.Infof("host: '%s'", host)
 	log.Infof("database: '%s'", database)
+	log.Infof("sslmode: '%s'", sslmode)
 	return dsn
 }
