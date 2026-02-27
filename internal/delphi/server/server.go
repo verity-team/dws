@@ -241,7 +241,7 @@ func (s *DelphiServer) DonationData(ctx echo.Context) error {
 	dd.ReceivingAddress = ra
 	// if we failed to fetch an ETH price and the campaign is not closed yet,
 	// the status should be set to "paused"
-	if dd.Prices[0].Price == "0.00" && dd.Status != api.Closed {
+	if len(dd.Prices) > 0 && (dd.Prices[0].Price == "" || dd.Prices[0].Price == "0.00") && dd.Status != api.Closed {
 		dd.Status = api.Paused
 	}
 	return ctx.JSON(http.StatusOK, *dd)

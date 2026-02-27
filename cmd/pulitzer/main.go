@@ -123,7 +123,7 @@ func main() {
 		<-ctx.Done()
 		// The context is canceled
 		log.Info("pulitzer/http - context canceled, stopping..")
-		sdc, cancel := context.WithTimeout(ctx, 3*time.Second)
+		sdc, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		if err := e.Shutdown(sdc); err != nil {
 			log.Error(err)
