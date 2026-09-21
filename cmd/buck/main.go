@@ -58,11 +58,23 @@ func main() {
 		log.Fatal(err)
 	}
 
-	ctxt, err := c.GetContext(erc20Json, saleParamJSON)
+	daddr = strings.ToLower(strings.TrimSpace(daddr))
+	if !c.IsValidETHAddress(daddr) {
+		log.Fatal("DWS_DONATION_ADDRESS is not a valid ethereum address")
+	}
+
+	// the erc-20 ABI map doubles as the set of assets buck is able to process;
+	// it is needed to validate the erc-20 configuration below
+	abi, err := eth.InitABI()
+	if err != nil {
+		log.Fatalf("failed to initialize the erc-20 ABI, %v", err)
+	}
+
+	ctxt, err := c.GetContext(erc20Json, saleParamJSON, abi)
 	if err != nil {
 		log.Fatal(err)
 	}
-	ctxt.ReceivingAddr = strings.ToLower(daddr)
+	ctxt.ReceivingAddr = daddr
 	ctxt.ETHRPCURL = url
 	debugStore, present := os.LookupEnv("DWS_DEBUG_DATA_STORE")
 	if present {
@@ -106,12 +118,6 @@ func main() {
 		"--monitor-old-unconfirmed": *monitorOld,
 	}
 
-	abi, err := eth.InitABI()
-	if err != nil {
-		return
-	}
-	ctxt.ABI = abi
-
 	// latest blocks
 	latestCtxt := *ctxt
 	latestCtxt.CrawlerType = c.Latest
@@ -125,31 +131,27 @@ func main() {
 	oldCtxt.CrawlerType = c.OldUnconfirmed
 
 	if (*lbn > -1) && (*fbn > -1) {
-		log.Error("pick either -set-latest XOR -set-final but not both")
-		return
+		log.Fatal("pick either -set-latest XOR -set-final but not both")
 	}
 
 	if *lbn >= 0 {
 		err = db.SetLastBlock(latestCtxt, "eth", uint64(*lbn))
 		if err != nil {
-			log.Error(err)
-			return
+			log.Fatal(err)
 		}
 		return
 	}
 	if *fbn >= 0 {
 		err = db.SetLastBlock(finalCtxt, "eth", uint64(*fbn))
 		if err != nil {
-			log.Error(err)
-			return
+			log.Fatal(err)
 		}
 		return
 	}
 
 	numberOfModes, err := checkFlags(modes)
 	if err != nil {
-		log.Error(err)
-		return
+		log.Fatal(err)
 	}
 	// nothing to do?
 	if numberOfModes == 0 {
@@ -166,8 +168,7 @@ func main() {
 			err = processETH(latestCtxt, uint64(*singleBlock))
 		}
 		if err != nil {
-			log.Errorf("failed to process single block %d, %v", *singleBlock, err)
-			return
+			log.Fatalf("failed to process single block %d, %v", *singleBlock, err)
 		}
 		return
 	}
@@ -217,8 +218,7 @@ func main() {
 	if *monitorLatest {
 		_, err = s.Every("1m").Do(monitorETH, context.WithValue(ctx, c.BuckContext, &latestCtxt))
 		if err != nil {
-			log.Error(err)
-			return
+			log.Fatal(err)
 		}
 	}
 
@@ -229,8 +229,7 @@ func main() {
 		}
 		_, err = s.Every("1m").Do(monitorETH, context.WithValue(ctx, c.BuckContext, &finalCtxt))
 		if err != nil {
-			log.Error(err)
-			return
+			log.Fatal(err)
 		}
 	}
 
@@ -242,10 +241,14 @@ func main() {
 		oldCtxt.UpdateLastBlock = false
 		_, err = s.Every("15m").Do(monitorOldUnconfirmed, context.WithValue(ctx, c.BuckContext, &oldCtxt))
 		if err != nil {
-			log.Error(err)
-			return
+			log.Fatal(err)
 		}
 	}
+
+	// gocron discards the error a scheduled job returns unless an error event
+	// listener is registered; it only covers the jobs scheduled so far, hence
+	// this call comes after all of the s.Every(..).Do(..) calls above
+	c.RegisterJobErrorListener(s, fmt.Sprintf("buck/%v", ctype))
 
 	// healthcheck endpoints
 	e := echo.New()
@@ -300,14 +303,24 @@ func main() {
 		<-ctx.Done()
 		// The context is canceled
 		log.Infof("buck/%v/cron - context canceled, stopping..", ctype)
-		s.StopBlockingChan()
+		// StopBlockingChan() is a no-op for a scheduler started with
+		// StartAsync(); Stop() waits for the jobs that are still running so
+		// that the database handle is not closed underneath them
+		s.Stop()
 		return ctx.Err()
 	})
 
-	if err := g.Wait(); err != nil {
+	// a context cancelation is how an orderly shutdown ends, anything else is
+	// a failure the orchestrator needs to see (crash loop backoff, alerting)
+	failed := false
+	if err := g.Wait(); err != nil && !errors.Is(err, context.Canceled) {
 		log.Errorf("buck/%v: errgroup.Wait(): %v", ctype, err)
+		failed = true
 	}
 	log.Infof("buck/%v shutting down", ctype)
+	if failed {
+		os.Exit(1)
+	}
 }
 
 func runReadyProbe(ctxt c.Context) error {
