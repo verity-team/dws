@@ -64,9 +64,7 @@ func SetLastBlock(ctxt c.Context, chain string, lbn uint64) error {
 	return nil
 }
 
-func PersistTxs(ctxt c.Context, bn uint64, ethPrice decimal.Decimal, txs []c.Transaction) error {
-	var err error
-
+func PersistTxs(ctxt c.Context, bn uint64, ethPrice decimal.Decimal, txs []c.Transaction) (err error) {
 	if ctxt.CrawlerType != c.Latest && ctxt.CrawlerType != c.Finalized {
 		err = fmt.Errorf("invalid crawler type: %s", ctxt.CrawlerType)
 		log.Error(err)
@@ -90,8 +88,11 @@ func PersistTxs(ctxt c.Context, bn uint64, ethPrice decimal.Decimal, txs []c.Tra
 	defer func() {
 		if err != nil {
 			dtx.Rollback() // nolint:errcheck
-		} else {
-			dtx.Commit() // nolint:errcheck
+			return
+		}
+		if cerr := dtx.Commit(); cerr != nil {
+			err = fmt.Errorf("failed to commit block #%d transaction, %w", bn, cerr)
+			log.Error(err)
 		}
 	}()
 
@@ -111,7 +112,8 @@ func PersistTxs(ctxt c.Context, bn uint64, ethPrice decimal.Decimal, txs []c.Tra
 	}
 
 	if ctxt.CrawlerType == c.Finalized {
-		total, newTokens, oldTokens, err := updateDonationStats(dtx, ctxt)
+		var total, newTokens, oldTokens decimal.Decimal
+		total, newTokens, oldTokens, err = updateDonationStats(dtx, ctxt)
 		if err != nil {
 			return err
 		}
@@ -425,8 +427,7 @@ func GetOldUnconfirmed(dbh *sqlx.DB) ([]c.TXH, error) {
 	return hashes, nil
 }
 
-func FinalizeTx(ctxt c.Context, tx c.TxByHash) error {
-	var err error
+func FinalizeTx(ctxt c.Context, tx c.TxByHash) (err error) {
 	// start transaction
 	dtx, err := ctxt.DB.Beginx()
 	if err != nil {
@@ -438,8 +439,11 @@ func FinalizeTx(ctxt c.Context, tx c.TxByHash) error {
 	defer func() {
 		if err != nil {
 			dtx.Rollback() // nolint:errcheck
-		} else {
-			dtx.Commit() // nolint:errcheck
+			return
+		}
+		if cerr := dtx.Commit(); cerr != nil {
+			err = fmt.Errorf("failed to commit finalized tx '%s', %w", tx.Hash, cerr)
+			log.Error(err)
 		}
 	}()
 
@@ -491,8 +495,7 @@ func confirmSingleTx(dtx *sqlx.Tx, tx c.TxByHash) (decimal.Decimal, decimal.Deci
 	return amount, tokens, nil
 }
 
-func FailTx(ctxt c.Context, tx c.TxByHash) error {
-	var err error
+func FailTx(ctxt c.Context, tx c.TxByHash) (err error) {
 	// start transaction
 	dtx, err := ctxt.DB.Beginx()
 	if err != nil {
@@ -504,8 +507,11 @@ func FailTx(ctxt c.Context, tx c.TxByHash) error {
 	defer func() {
 		if err != nil {
 			dtx.Rollback() // nolint:errcheck
-		} else {
-			dtx.Commit() // nolint:errcheck
+			return
+		}
+		if cerr := dtx.Commit(); cerr != nil {
+			err = fmt.Errorf("failed to commit failed tx '%s', %w", tx.Hash, cerr)
+			log.Error(err)
 		}
 	}()
 
