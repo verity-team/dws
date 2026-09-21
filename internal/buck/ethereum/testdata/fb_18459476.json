@@ -1,0 +1,18 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "baseFeePerGas": "0x35e8aca94",
+    "gasLimit": "0x1c9c380",
+    "gasUsed": "0x1abc8cc",
+    "hash": "0x634f3802299d60d38418bad02789a8b36a3051bc62a293b45deeafe5ec51fa34",
+    "number": "0x119ab54",
+    "receiptsRoot": "0x6b72a4c5d07c9ba76a2e1d633d559c3db2fe352694be1bf1d2eaaa7ed72e1b3f",
+    "size": "0x30a80",
+    "stateRoot": "0x971d75a283461085518ee1ea6e4826c38561a5c755d13f558c5a4df48c5179eb",
+    "timestamp": "0x652a1dd4",
+    "transactions": [
+      "0xad246b9af8a4bfd4043d6b0a700c70f084c79aa22a8677007716fc70ccefc7e7"
+    ]
+  }
+}

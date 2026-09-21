@@ -11,7 +11,7 @@ The backend used by the donation web site frontend is called `delphi` and it wil
 The `dws` backend consists of a `postgres` database and 5 services
 - `buck`: ETH/latest crawler, checks the latest blocks for donation transactions and inserts these into the database (in state `unconfirmed`)
 - `buck`: ETH/finalized crawler, checks the finalized blocks for donation transactions and confrm them, also updates the donation campaign statistics and the token price (if/as needed)
-- `buck`: ETH/old-unconfirmed crawler, checks for donations that are older than 30 minutes but still unconfirmed, attempts to fetch the respective finalized blocks and confirm these donation transactions. Donations that cannot be confirmed are marked as `failed` and the donation campaign statistics are recalculated -- the donation records are retained, they are *not* deleted
+- `buck`: ETH/old-unconfirmed crawler, checks for donations that are older than 30 minutes but still unconfirmed, attempts to fetch the respective finalized blocks and confirm these donation transactions. A donation is marked as `failed` only if its finalized block was fetched and does *not* carry the transaction; the donation campaign statistics are then recalculated -- the donation records are retained, they are *not* deleted. Donations whose transaction is still in the mempool, whose block has not been finalized yet or whose finalized block could not be fetched are left untouched and re-examined on a later run
 - `pulitzer`: pulls the ETH price from 6 exchanges and inserts an average price into the database every minute
 - `delphi`: [REST API](https://app.swaggerhub.com/apis/MUHAREM_1/delphi/) server -- only serves data from the database
 
