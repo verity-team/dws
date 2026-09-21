@@ -92,15 +92,15 @@ func PersistTxs(ctxt c.Context, bn uint64, ethPrice decimal.Decimal, txs []c.Tra
 	// both crawlers issue tokens (the finalized one also recalculates the
 	// donation stats at the end of this transaction) -> serialize with the
 	// other donation stats writers before touching anything else. Holding the
-	// lock is what makes the campaign status read below transaction
-	// consistent: closeCampaign runs in a donation stats writer, so the
-	// campaign cannot be closed while this transaction issues tokens.
-	var status string
-	status, err = lockDonationStats(dtx)
+	// lock is what makes the campaign decision below transaction consistent:
+	// updateDonationStats runs in a donation stats writer, so the token total
+	// cannot move while this transaction issues tokens.
+	var soldTokens decimal.Decimal
+	soldTokens, err = lockDonationStats(dtx)
 	if err != nil {
 		return err
 	}
-	campaignClosed := status == campaignStatusClosed
+	campaignClosed := campaignIsClosed(soldTokens, ctxt)
 
 	// the token price has to be read *inside* the transaction: read on the
 	// pool it may be superseded by a tier change that commits before the
@@ -120,17 +120,26 @@ func PersistTxs(ctxt c.Context, bn uint64, ethPrice decimal.Decimal, txs []c.Tra
 			log.Warnf("skipping tx %s: %v", tx.Hash, calcErr)
 			continue
 		}
-		if campaignClosed {
+		if campaignClosed && ctxt.CrawlerType == c.Finalized {
 			// the campaign is over: the donation is recorded (the money
 			// arrived and is refundable) but no tokens are issued -- the sale
-			// cannot deliver them
+			// cannot deliver them.
+			//
+			// Only the finalized crawler inserts a row that is *already*
+			// 'confirmed', which is the state the rule is about. The latest
+			// crawler inserts 'unconfirmed' rows: updateDonationStats never
+			// sums those, so zeroing them buys nothing -- and it strands the
+			// donation at 0 tokens for good if the campaign re-opens before
+			// the donation is confirmed, since neither confirmation path
+			// restores tokens. Such a row is priced when it transitions to
+			// 'confirmed', by the campaign state that holds *then*.
 			log.Warnf(
 				"campaign is closed: issuing 0 tokens for donation '%s' from '%s' (%s %s / %s USD)",
 				tx.Hash, tx.From, tx.Value, tx.Asset, tx.USDAmount.StringFixed(2))
 			tx.Tokens = decimal.Zero
 		}
 		log.Infof("persisting tx: %5s -- a: %s, ausd: %s, t: %s, %s", tx.Asset, tx.Value, tx.USDAmount, tx.Tokens, tx.Hash)
-		err = persistTx(dtx, tx, ctxt.CrawlerType)
+		err = persistTx(dtx, tx, ctxt.CrawlerType, campaignClosed)
 		if err != nil {
 			return err
 		}
@@ -182,7 +191,30 @@ func updateLastBlock(dbt *sqlx.Tx, chain string, label string, lbn uint64) error
 	return nil
 }
 
-func persistTx(dtx *sqlx.Tx, tx c.Transaction, ct c.CrawlerType) error {
+// closedCampaignTokens is appended to the finalized crawler's upsert while
+// the campaign is closed.
+//
+// The latest crawler runs ~13 minutes ahead of the finalized one, so donations
+// mined after the token limit was crossed are inserted with tokens > 0: at
+// that point nothing has told the database that the cap is reached. The cap is
+// crossed in *finalization* order (updateDonationStats only ever sums
+// 'confirmed' donations), so the transition to 'confirmed' is the coherent
+// decision point: a donation that becomes confirmed after the campaign closed
+// is over the cap and issues no tokens.
+//
+// The guard on the *existing* row's status is what keeps re-crawling
+// idempotent: a donation that is already 'confirmed' was credited
+// legitimately and keeps its tokens no matter how often its block is crawled
+// again. Applying the closed rule is a state transition, not a re-pricing --
+// amount/usd_amount/price are still never overwritten.
+const closedCampaignTokens = `,
+			tokens = CASE
+				WHEN donation.status <> 'confirmed' AND EXCLUDED.status = 'confirmed'
+				THEN 0
+				ELSE donation.tokens
+			END`
+
+func persistTx(dtx *sqlx.Tx, tx c.Transaction, ct c.CrawlerType, campaignClosed bool) error {
 	var err error
 	if ct != c.Latest && ct != c.Finalized {
 		err = fmt.Errorf("invalid crawler type: %s", ct)
@@ -203,8 +235,10 @@ func persistTx(dtx *sqlx.Tx, tx c.Transaction, ct c.CrawlerType) error {
 			block_hash = EXCLUDED.block_hash,
 			block_number = EXCLUDED.block_number,
 			block_time = EXCLUDED.block_time,
-			status = EXCLUDED.status
-		`
+			status = EXCLUDED.status`
+		if campaignClosed {
+			q += closedCampaignTokens
+		}
 	} else {
 		// if the finalized crawler is running ahead of the latest
 		// we do NOT want to overwrite the `block_*` properties and
@@ -351,13 +385,18 @@ func GetOldestUnconfirmed(dbh *sqlx.DB) (uint64, error) {
 	return result, nil
 }
 
-// campaignStatusClosed is the donation_stats status of a token sale that has
-// reached its token limit: donations are still recorded but no tokens are
-// issued for them any more.
-const campaignStatusClosed = "closed"
+const (
+	// campaignStatusOpen is the donation_stats status of a token sale that
+	// still has tokens to issue.
+	campaignStatusOpen = "open"
+	// campaignStatusClosed is the donation_stats status of a token sale that
+	// has reached its token limit: donations are still recorded but no tokens
+	// are issued for them any more.
+	campaignStatusClosed = "closed"
+)
 
 // lockDonationStats takes an exclusive row lock on the donation stats and
-// returns the campaign status.
+// returns the confirmed token total.
 // It has to be the *first* statement of every database transaction that ends
 // up calling updateDonationStats or issuing tokens:
 //   - all donation stats writers acquire the lock in the same order which
@@ -366,31 +405,44 @@ const campaignStatusClosed = "closed"
 //     aggregate UPDATE takes a fresh READ COMMITTED snapshot i.e. it sees the
 //     donations committed by the writer we were waiting for. Locking within
 //     the aggregate statement itself would *not* have that effect.
-//   - the campaign status is read under the same lock and hence cannot change
-//     for the rest of the transaction: closeCampaign is a donation stats
+//   - the token total is read under the same lock and hence cannot change for
+//     the rest of the transaction: updateDonationStats is a donation stats
 //     writer and blocks until this transaction is done.
 //
 // Please note: donation_stats holds a single row (enforced by the
 // donation_stats_single_row index) so the lock covers every row in the table
 // -- which is exactly what is needed here.
-func lockDonationStats(dtx *sqlx.Tx) (string, error) {
+func lockDonationStats(dtx *sqlx.Tx) (decimal.Decimal, error) {
 	q1 := `
-		SELECT status
+		SELECT tokens
 		FROM donation_stats
 		FOR UPDATE
 		`
-	var status string
-	if err := dtx.Get(&status, q1); err != nil {
+	var tokens decimal.Decimal
+	if err := dtx.Get(&tokens, q1); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			// the campaign parameters are unknown -> refuse to issue tokens
 			err = errors.New("donation_stats holds no row, is the database initialized?")
 		}
 		err = fmt.Errorf("failed to lock donation stats, %w", err)
 		log.Error(err)
-		return "", err
+		return decimal.Zero, err
 	}
 
-	return status, nil
+	return tokens, nil
+}
+
+// campaignIsClosed decides whether the token sale can still deliver tokens.
+//
+// The decision is derived from the confirmed token total read under the
+// donation stats lock, *not* from donation_stats.status: the status column
+// records what the previous stats write concluded, while the limit itself
+// comes from DWS_SALE_PARAMS and can be raised between runs. Trusting the
+// stored status would have the first transaction after a raised limit issue 0
+// tokens and only then re-open the campaign -- the donors in that batch would
+// pay for tokens the sale had just put back on the shelf.
+func campaignIsClosed(tokens decimal.Decimal, ctxt c.Context) bool {
+	return tokens.GreaterThanOrEqual(ctxt.TokenSaleLimit())
 }
 
 func updateDonationStats(dtx *sqlx.Tx, ctxt c.Context) (decimal.Decimal, decimal.Decimal, decimal.Decimal, error) {
@@ -424,24 +476,57 @@ func updateDonationStats(dtx *sqlx.Tx, ctxt c.Context) (decimal.Decimal, decimal
 		return decimal.Zero, decimal.Zero, decimal.Zero, err
 	}
 
-	if newTokens.GreaterThanOrEqual(ctxt.TokenSaleLimit()) {
-		err = closeCampaign(dtx)
-		if err != nil {
-			return decimal.Zero, decimal.Zero, decimal.Zero, err
-		}
+	want := campaignStatusOpen
+	if campaignIsClosed(newTokens, ctxt) {
+		want = campaignStatusClosed
+	}
+	err = setCampaignStatus(dtx, want)
+	if err != nil {
+		return decimal.Zero, decimal.Zero, decimal.Zero, err
 	}
 	return newTotal, newTokens, oldTokens, nil
 }
 
-func closeCampaign(dtx *sqlx.Tx) error {
+// setCampaignStatus keeps the campaign status in sync with the token total
+// that was just recomputed. The status is derived state, not a decision taken
+// once: the sale closes when the confirmed tokens reach the limit and re-opens
+// when they no longer do.
+//
+// Two reachable events put tokens back on sale:
+//   - DWS_SALE_PARAMS' token limit is raised, so the same total is no longer
+//     at the cap;
+//   - a finalized re-crawl whose receipt reports an already *confirmed*
+//     donation as reverted. persistTx writes status = EXCLUDED.status, the
+//     donation becomes 'failed' and drops out of the aggregate below.
+//
+// Note it is *not* the old-unconfirmed crawler failing a phantom donation:
+// failTx only ever transitions rows that are 'unconfirmed', and the aggregate
+// above only ever sums rows that are 'confirmed', so such a donation was
+// never in the total and failing it cannot lower anything.
+//
+// Without the re-open the tokens freed by either event could never be sold and
+// every later donor would be issued 0 tokens although the limit is not
+// reached -- the same harm the closed-campaign rule exists to prevent, in the
+// other direction.
+//
+// Only the 'open' <-> 'closed' pair is managed here: 'paused' is the
+// operator's manual lever and has to survive a crawler run untouched.
+func setCampaignStatus(dtx *sqlx.Tx, want string) error {
 	q1 := `
 		UPDATE donation_stats
-		SET status='closed'
+		SET status=$1::donation_stats_status_enum
+		WHERE
+			status <> $1::donation_stats_status_enum
+			AND status IN ('open', 'closed')
 		`
-	if _, err := dtx.Exec(q1); err != nil {
-		err = fmt.Errorf("failed to set donation_stats.status to 'closed', %w", err)
+	res, err := dtx.Exec(q1, want)
+	if err != nil {
+		err = fmt.Errorf("failed to set donation_stats.status to '%s', %w", want, err)
 		log.Error(err)
 		return err
+	}
+	if ra, rerr := res.RowsAffected(); rerr == nil && ra > 0 {
+		log.Warnf("campaign status changed to '%s'", want)
 	}
 
 	return nil
@@ -535,13 +620,16 @@ func FinalizeTx(ctxt c.Context, tx c.TxByHash) (err error) {
 	}()
 
 	// this transaction recalculates the donation stats -> serialize with the
-	// other donation stats writers before touching anything else
-	_, err = lockDonationStats(dtx)
+	// other donation stats writers before touching anything else. The token
+	// total is read under the same lock and cannot change for the rest of
+	// this transaction.
+	var soldTokens decimal.Decimal
+	soldTokens, err = lockDonationStats(dtx)
 	if err != nil {
 		return err
 	}
 
-	amount, tokens, err := confirmSingleTx(dtx, tx)
+	amount, tokens, err := confirmSingleTx(dtx, tx, campaignIsClosed(soldTokens, ctxt))
 	if err != nil {
 		return err
 	}
@@ -565,17 +653,23 @@ func FinalizeTx(ctxt c.Context, tx c.TxByHash) (err error) {
 	return nil
 }
 
-func confirmSingleTx(dtx *sqlx.Tx, tx c.TxByHash) (decimal.Decimal, decimal.Decimal, error) {
+// confirmSingleTx moves a donation from 'unconfirmed' to 'confirmed'. The
+// WHERE clause restricts the update to rows that actually make that
+// transition, so zeroing the tokens of a donation that is confirmed while the
+// campaign is closed cannot touch a donation that was credited legitimately
+// earlier.
+func confirmSingleTx(dtx *sqlx.Tx, tx c.TxByHash, campaignClosed bool) (decimal.Decimal, decimal.Decimal, error) {
 	q := `
 		UPDATE donation SET
 			block_number=$1,
 			block_time=$2,
-			status='confirmed'
+			status='confirmed',
+			tokens=CASE WHEN $4 THEN 0 ELSE tokens END
 		WHERE status='unconfirmed' AND tx_hash=$3
 		RETURNING usd_amount, tokens
 	`
 	var amount, tokens decimal.Decimal
-	err := dtx.QueryRowx(q, tx.BlockNumber, tx.FBBlockTime, tx.Hash).Scan(&amount, &tokens)
+	err := dtx.QueryRowx(q, tx.BlockNumber, tx.FBBlockTime, tx.Hash, campaignClosed).Scan(&amount, &tokens)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			// tx was already confirmed or no longer unconfirmed
