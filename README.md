@@ -12,7 +12,7 @@ The `dws` backend consists of a `postgres` database and 5 services
 - `buck`: ETH/latest crawler, checks the latest blocks for donation transactions and inserts these into the database (in state `unconfirmed`)
 - `buck`: ETH/finalized crawler, checks the finalized blocks for donation transactions and confrm them, also updates the donation campaign statistics and the token price (if/as needed)
 - `buck`: ETH/old-unconfirmed crawler, checks for donations that are older than 30 minutes but still unconfirmed, attempts to fetch the respective finalized blocks and confirm these donation transactions. A donation is marked as `failed` only if its finalized block was fetched and does *not* carry the transaction; the donation campaign statistics are then recalculated -- the donation records are retained, they are *not* deleted. Donations whose transaction is still in the mempool, whose block has not been finalized yet or whose finalized block could not be fetched are left untouched and re-examined on a later run
-- `pulitzer`: pulls the ETH price from 6 exchanges and inserts an average price into the database every minute
+- `pulitzer`: pulls the ETH price from 6 exchanges and inserts an average price into the database every minute. It also serves the historical price requests filed by `buck`: a request that cannot be fulfilled is marked `failed` and retried a few minutes later, a request is only marked `succeeded` once its prices were actually written
 - `delphi`: [REST API](https://app.swaggerhub.com/apis/MUHAREM_1/delphi/) server -- only serves data from the database
 
 The backend services are written in `go` -- you will thus need `go` on your development system. For testing purposes the `postgres` database can be run in a docker container i.e. you will need docker as well.
@@ -54,10 +54,11 @@ These values used to be accepted as-is and only did damage once donations were p
 
 `go test ./...` runs the unit tests, no database required.
 
-The database integration tests for the `buck` donation statistics are hidden behind the `dbtest` build tag since they need a live database with the schema in `deployments/db/01-schema.sql` loaded. They truncate the donation tables, so *never* point them at a production database:
+The database integration tests for the `buck` donation statistics and for the `pulitzer` price request state machine are hidden behind the `dbtest` build tag since they need a live database with the schema in `deployments/db/01-schema.sql` loaded. They truncate the tables they use, so *never* point them at a production database:
 
 1. `make run_db`
 1. `go test -tags dbtest -count=1 ./internal/buck/db/...`
+1. `go test -tags dbtest -count=1 ./internal/pulitzer/db/...`
 
 The connection string defaults to the dockerized development database and can be overridden with `DWS_TEST_DB_DSN`.
 

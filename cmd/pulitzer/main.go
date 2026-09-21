@@ -244,17 +244,28 @@ func servePriceRequests(ctx context.Context) error {
 		if err != nil {
 			err = fmt.Errorf("failed to obtain historical prices for %s, %w", rq.Time, err)
 			log.Error(err)
+			failPriceRequest(dbh, rq.ID)
 			continue
 		}
 		err = db.CloseRequest(dbh, rq.ID, klines)
 		if err != nil {
 			err = fmt.Errorf("failed to persist historical prices for request #%d/%s, %w", rq.ID, rq.Time, err)
 			log.Error(err)
+			failPriceRequest(dbh, rq.ID)
 			continue
 		}
 		log.Infof("obtained %d historical price(s) for request #%d/%s", len(klines), rq.ID, rq.Time)
 	}
 	return nil
+}
+
+// failPriceRequest records a price request that could not be served so that the
+// failure is visible; the request is retried later instead of silently
+// remaining at 'new' and being picked up on every single cycle.
+func failPriceRequest(dbh *sqlx.DB, rid uint64) {
+	if err := db.FailRequest(dbh, rid); err != nil {
+		log.Errorf("failed to record the failure of price request #%d, %v", rid, err)
+	}
 }
 
 func getETHPrice(ctx context.Context) (decimal.Decimal, error) {
