@@ -96,6 +96,16 @@ func PersistTxs(ctxt c.Context, bn uint64, ethPrice decimal.Decimal, txs []c.Tra
 		}
 	}()
 
+	if ctxt.CrawlerType == c.Finalized {
+		// the finalized crawler recalculates the donation stats at the end of
+		// this transaction -> serialize with the other donation stats writers
+		// before touching anything else
+		err = lockDonationStats(dtx)
+		if err != nil {
+			return err
+		}
+	}
+
 	for _, tx := range txs {
 		tx.Price = tokenPrice.StringFixed(5)
 		var calcErr error
@@ -315,6 +325,34 @@ func GetOldestUnconfirmed(dbh *sqlx.DB) (uint64, error) {
 	return result, nil
 }
 
+// lockDonationStats takes an exclusive row lock on the donation stats.
+// It has to be the *first* statement of every database transaction that ends
+// up calling updateDonationStats:
+//   - all donation stats writers acquire the lock in the same order which
+//     rules out deadlocks between them
+//   - since the lock is taken in a separate, earlier statement the subsequent
+//     aggregate UPDATE takes a fresh READ COMMITTED snapshot i.e. it sees the
+//     donations committed by the writer we were waiting for. Locking within
+//     the aggregate statement itself would *not* have that effect.
+//
+// Please note: donation_stats holds a single row (this is not enforced by a
+// constraint) so the lock covers every row in the table -- which is exactly
+// what is needed here.
+func lockDonationStats(dtx *sqlx.Tx) error {
+	q1 := `
+		SELECT tokens
+		FROM donation_stats
+		FOR UPDATE
+		`
+	if _, err := dtx.Exec(q1); err != nil {
+		err = fmt.Errorf("failed to lock donation stats, %w", err)
+		log.Error(err)
+		return err
+	}
+
+	return nil
+}
+
 func updateDonationStats(dtx *sqlx.Tx, ctxt c.Context) (decimal.Decimal, decimal.Decimal, decimal.Decimal, error) {
 	q1 := `
 		WITH OldStats AS (
@@ -447,6 +485,13 @@ func FinalizeTx(ctxt c.Context, tx c.TxByHash) (err error) {
 		}
 	}()
 
+	// this transaction recalculates the donation stats -> serialize with the
+	// other donation stats writers before touching anything else
+	err = lockDonationStats(dtx)
+	if err != nil {
+		return err
+	}
+
 	amount, tokens, err := confirmSingleTx(dtx, tx)
 	if err != nil {
 		return err
@@ -515,16 +560,45 @@ func FailTx(ctxt c.Context, tx c.TxByHash) (err error) {
 		}
 	}()
 
-	err = failTx(dtx, tx)
+	// failing a donation removes it from the campaign totals -> serialize with
+	// the other donation stats writers before touching anything else
+	err = lockDonationStats(dtx)
 	if err != nil {
 		return err
 	}
+
+	var failed bool
+	failed, err = failTx(dtx, tx)
+	if err != nil {
+		return err
+	}
+	if !failed {
+		// the donation was confirmed (or failed) by another crawler while we
+		// were fetching the transaction data from the ethereum node -> leave
+		// the donation and the campaign totals alone
+		log.Warnf("tx '%s' is no longer unconfirmed, donation stats left untouched", tx.Hash)
+		return nil
+	}
 	log.Infof("failed tx '%s'", tx.Hash)
+
+	// the donation no longer counts towards the campaign totals
+	var total, tokens decimal.Decimal
+	total, tokens, _, err = updateDonationStats(dtx, ctxt)
+	if err != nil {
+		return err
+	}
+	log.Infof("updated donation stats: total %s, tokens %s", total.StringFixed(2), tokens)
 
 	return nil
 }
 
-func failTx(dtx *sqlx.Tx, tx c.TxByHash) error {
+// failTx records the transaction in the failed_tx table and marks the
+// corresponding donation as 'failed'. The donation row is retained (it is not
+// deleted) so that the aggregates -- which only ever count 'confirmed'
+// donations -- stay consistent and the donation history is preserved.
+// It returns true if the donation actually transitioned from 'unconfirmed' to
+// 'failed'.
+func failTx(dtx *sqlx.Tx, tx c.TxByHash) (bool, error) {
 	q1 := `
 		INSERT INTO failed_tx(
 			block_number, block_hash, block_time, tx_hash)
@@ -536,16 +610,25 @@ func failTx(dtx *sqlx.Tx, tx c.TxByHash) error {
 	if err != nil {
 		err = fmt.Errorf("failed to insert failed tx '%s', %w", tx.Hash, err)
 		log.Error(err)
-		return err
+		return false, err
 	}
 	q2 := `
-		DELETE FROM donation WHERE tx_hash=$1
-	`
-	_, err = dtx.Exec(q2, tx.Hash)
+		UPDATE donation
+		SET status='failed'
+		WHERE tx_hash=$1 AND status='unconfirmed'
+		`
+	res, err := dtx.Exec(q2, tx.Hash)
 	if err != nil {
-		err = fmt.Errorf("failed to delete transaction (%s), %w", tx.Hash, err)
+		err = fmt.Errorf("failed to mark transaction (%s) as failed, %w", tx.Hash, err)
 		log.Error(err)
-		return err
+		return false, err
 	}
-	return nil
+	ra, err := res.RowsAffected()
+	if err != nil {
+		err = fmt.Errorf("failed to get the number of donations failed for tx (%s), %w", tx.Hash, err)
+		log.Error(err)
+		return false, err
+	}
+
+	return ra > 0, nil
 }
