@@ -20,6 +20,7 @@ CREATE TABLE wallet_connection (
 
     created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())
 );
+CREATE INDEX ON wallet_connection (address);
 
 --- donation ----------------------------------------------------
 DROP TYPE IF EXISTS donation_status_enum CASCADE;
@@ -29,7 +30,9 @@ CREATE TABLE donation (
     id BIGSERIAL PRIMARY KEY,
     address VARCHAR(42) NOT NULL,
     amount NUMERIC(20,10) NOT NULL,
-    usd_amount NUMERIC(12,2),
+    -- the crawler always converts the donated amount to USD (stable coin
+    -- donations are denominated in USD to begin with) -> never NULL
+    usd_amount NUMERIC(12,2) NOT NULL,
     asset asset_enum NOT NULL,
     tokens BIGINT NOT NULL,
     price NUMERIC(15,5) NOT NULL,
@@ -102,6 +105,12 @@ BEFORE UPDATE ON donation_stats
 FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
 
+-- donation_stats holds the campaign totals and the campaign status: exactly
+-- one row. The writers (updateDonationStats, closeCampaign) UPDATE without a
+-- WHERE clause and the readers take the first row they find -- a second row
+-- would make the two disagree about which one is authoritative.
+CREATE UNIQUE INDEX donation_stats_single_row ON donation_stats ((true));
+
 INSERT INTO donation_stats(total, tokens) VALUES(0, 0);
 
 --- user_data ----------------------------------------------------
@@ -116,7 +125,9 @@ CREATE TABLE user_data (
     staked BIGINT NOT NULL DEFAULT 0,
     reward BIGINT NOT NULL DEFAULT 0,
     status user_data_status_enum NOT NULL DEFAULT 'none',
-    affiliate_code VARCHAR(16),
+    -- an affiliate code identifies exactly one user: wallet_connection rows
+    -- are created by looking the code up in this table
+    affiliate_code VARCHAR(16) UNIQUE,
 
     modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
     created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())
@@ -212,11 +223,13 @@ BEGIN
     ) THEN
         -- Get the sum of total and tokens from all confirmed donation records for the specified address
         SELECT
-            -- in case of an ethereum donation we should be summing up the
-            -- `usd_amount`; in case of a stable coin donation the `usd_amount`
-            -- will be NULL.
-            SUM(COALESCE(dtab.usd_amount, dtab.amount)),
-            SUM(dtab.tokens)
+            -- `usd_amount` is the donated amount in USD for every asset: the
+            -- crawler converts ethereum donations at the ETH price of the
+            -- block and stable coin donations are denominated in USD already.
+            -- Summing the same column as the campaign totals
+            -- (updateDonationStats) keeps the two aggregates consistent.
+            COALESCE(SUM(dtab.usd_amount), 0),
+            COALESCE(SUM(dtab.tokens), 0)
         INTO
             ds_total,
             ds_tokens

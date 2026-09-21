@@ -71,13 +71,6 @@ func PersistTxs(ctxt c.Context, bn uint64, ethPrice decimal.Decimal, txs []c.Tra
 		return err
 	}
 
-	// get token price
-	tokenPrice, err := getTokenPrice(ctxt)
-	if err != nil {
-		return err
-	}
-	log.Infof("token price: %s", tokenPrice)
-
 	// start transaction
 	dtx, err := ctxt.DB.Beginx()
 	if err != nil {
@@ -96,15 +89,28 @@ func PersistTxs(ctxt c.Context, bn uint64, ethPrice decimal.Decimal, txs []c.Tra
 		}
 	}()
 
-	if ctxt.CrawlerType == c.Finalized {
-		// the finalized crawler recalculates the donation stats at the end of
-		// this transaction -> serialize with the other donation stats writers
-		// before touching anything else
-		err = lockDonationStats(dtx)
-		if err != nil {
-			return err
-		}
+	// both crawlers issue tokens (the finalized one also recalculates the
+	// donation stats at the end of this transaction) -> serialize with the
+	// other donation stats writers before touching anything else. Holding the
+	// lock is what makes the campaign status read below transaction
+	// consistent: closeCampaign runs in a donation stats writer, so the
+	// campaign cannot be closed while this transaction issues tokens.
+	var status string
+	status, err = lockDonationStats(dtx)
+	if err != nil {
+		return err
 	}
+	campaignClosed := status == campaignStatusClosed
+
+	// the token price has to be read *inside* the transaction: read on the
+	// pool it may be superseded by a tier change that commits before the
+	// donations below are written, pricing them at the stale (cheaper) tier
+	var tokenPrice decimal.Decimal
+	tokenPrice, err = getTokenPrice(dtx, ctxt)
+	if err != nil {
+		return err
+	}
+	log.Infof("token price: %s", tokenPrice)
 
 	for _, tx := range txs {
 		tx.Price = tokenPrice.StringFixed(5)
@@ -113,6 +119,15 @@ func PersistTxs(ctxt c.Context, bn uint64, ethPrice decimal.Decimal, txs []c.Tra
 		if calcErr != nil {
 			log.Warnf("skipping tx %s: %v", tx.Hash, calcErr)
 			continue
+		}
+		if campaignClosed {
+			// the campaign is over: the donation is recorded (the money
+			// arrived and is refundable) but no tokens are issued -- the sale
+			// cannot deliver them
+			log.Warnf(
+				"campaign is closed: issuing 0 tokens for donation '%s' from '%s' (%s %s / %s USD)",
+				tx.Hash, tx.From, tx.Value, tx.Asset, tx.USDAmount.StringFixed(2))
+			tx.Tokens = decimal.Zero
 		}
 		log.Infof("persisting tx: %5s -- a: %s, ausd: %s, t: %s, %s", tx.Asset, tx.Value, tx.USDAmount, tx.Tokens, tx.Hash)
 		err = persistTx(dtx, tx, ctxt.CrawlerType)
@@ -234,11 +249,19 @@ func calcTokens(tx c.Transaction, tokenPrice, ethPrice decimal.Decimal) (decimal
 	return amount.Div(tokenPrice).Ceil(), amount, nil
 }
 
-func getTokenPrice(ctxt c.Context) (decimal.Decimal, error) {
+// getTokenPrice returns the token price the donations of this transaction are
+// to be priced at. It is read inside the caller's transaction so that a tier
+// change cannot slip in between the price lookup and the donation writes.
+func getTokenPrice(dtx *sqlx.Tx, ctxt c.Context) (decimal.Decimal, error) {
 	// select price as follows:
-	// - if there are multiple rows than return the most recent one
-	//   that is at least two minutes old
-	// - if there is a single row just return it regardless of age
+	// - if there are multiple token price rows then return the most recent
+	//   one that is at least two minutes old
+	// - if there is a single token price row just return it regardless of age
+	//
+	// the NOT EXISTS subquery has to be scoped to the token price rows:
+	// pulitzer writes an `eth` row every minute, so an unscoped subquery is
+	// dead from the first minute of operation and the single row case (fresh
+	// deployment) falls through to ErrNoRows and the cheapest sale tier.
 	q1 := `
 		SELECT price
 		FROM price
@@ -246,13 +269,16 @@ func getTokenPrice(ctxt c.Context) (decimal.Decimal, error) {
 			 asset='truth'
 			 AND (
 				  created_at <= NOW() - INTERVAL '2 minutes'
-				  OR NOT EXISTS (SELECT 1 FROM price p WHERE p.id <> price.id)
+				  OR NOT EXISTS (
+						SELECT 1 FROM price p
+						WHERE p.asset='truth' AND p.id <> price.id
+				  )
 			 )
 		ORDER BY created_at DESC
 		LIMIT 1
 		`
 	var result decimal.Decimal
-	err := ctxt.DB.Get(&result, q1)
+	err := dtx.Get(&result, q1)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			// no token price record in the database -> return cheapest price
@@ -325,32 +351,46 @@ func GetOldestUnconfirmed(dbh *sqlx.DB) (uint64, error) {
 	return result, nil
 }
 
-// lockDonationStats takes an exclusive row lock on the donation stats.
+// campaignStatusClosed is the donation_stats status of a token sale that has
+// reached its token limit: donations are still recorded but no tokens are
+// issued for them any more.
+const campaignStatusClosed = "closed"
+
+// lockDonationStats takes an exclusive row lock on the donation stats and
+// returns the campaign status.
 // It has to be the *first* statement of every database transaction that ends
-// up calling updateDonationStats:
+// up calling updateDonationStats or issuing tokens:
 //   - all donation stats writers acquire the lock in the same order which
 //     rules out deadlocks between them
 //   - since the lock is taken in a separate, earlier statement the subsequent
 //     aggregate UPDATE takes a fresh READ COMMITTED snapshot i.e. it sees the
 //     donations committed by the writer we were waiting for. Locking within
 //     the aggregate statement itself would *not* have that effect.
+//   - the campaign status is read under the same lock and hence cannot change
+//     for the rest of the transaction: closeCampaign is a donation stats
+//     writer and blocks until this transaction is done.
 //
-// Please note: donation_stats holds a single row (this is not enforced by a
-// constraint) so the lock covers every row in the table -- which is exactly
-// what is needed here.
-func lockDonationStats(dtx *sqlx.Tx) error {
+// Please note: donation_stats holds a single row (enforced by the
+// donation_stats_single_row index) so the lock covers every row in the table
+// -- which is exactly what is needed here.
+func lockDonationStats(dtx *sqlx.Tx) (string, error) {
 	q1 := `
-		SELECT tokens
+		SELECT status
 		FROM donation_stats
 		FOR UPDATE
 		`
-	if _, err := dtx.Exec(q1); err != nil {
+	var status string
+	if err := dtx.Get(&status, q1); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// the campaign parameters are unknown -> refuse to issue tokens
+			err = errors.New("donation_stats holds no row, is the database initialized?")
+		}
 		err = fmt.Errorf("failed to lock donation stats, %w", err)
 		log.Error(err)
-		return err
+		return "", err
 	}
 
-	return nil
+	return status, nil
 }
 
 func updateDonationStats(dtx *sqlx.Tx, ctxt c.Context) (decimal.Decimal, decimal.Decimal, decimal.Decimal, error) {
@@ -361,9 +401,13 @@ func updateDonationStats(dtx *sqlx.Tx, ctxt c.Context) (decimal.Decimal, decimal
 			 LIMIT 1
 		),
 		DonationSum AS (
+			 -- COALESCE: SUM() over zero confirmed donations is NULL and
+			 -- donation_stats.total/tokens are NOT NULL. This is reachable
+			 -- (fresh database, every donation of the first finalized block
+			 -- reverted) and would abort the crawler transaction.
 			 SELECT
-				  SUM(usd_amount) AS total_usd_amount,
-				  SUM(tokens) AS total_tokens
+				  COALESCE(SUM(usd_amount), 0) AS total_usd_amount,
+				  COALESCE(SUM(tokens), 0) AS total_tokens
 			 FROM donation
 			 WHERE status = 'confirmed'
 		)
@@ -487,7 +531,7 @@ func FinalizeTx(ctxt c.Context, tx c.TxByHash) (err error) {
 
 	// this transaction recalculates the donation stats -> serialize with the
 	// other donation stats writers before touching anything else
-	err = lockDonationStats(dtx)
+	_, err = lockDonationStats(dtx)
 	if err != nil {
 		return err
 	}
@@ -562,7 +606,7 @@ func FailTx(ctxt c.Context, tx c.TxByHash) (err error) {
 
 	// failing a donation removes it from the campaign totals -> serialize with
 	// the other donation stats writers before touching anything else
-	err = lockDonationStats(dtx)
+	_, err = lockDonationStats(dtx)
 	if err != nil {
 		return err
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"
+	"github.com/shopspring/decimal"
 	"github.com/verity-team/dws/api"
 	"github.com/verity-team/dws/internal/common"
 	"github.com/verity-team/dws/internal/delphi/db"
@@ -287,8 +288,31 @@ func (s *DelphiServer) DonationData(ctx echo.Context) error {
 	dd.ReceivingAddress = ra
 	// if we failed to fetch an ETH price and the campaign is not closed yet,
 	// the status should be set to "paused"
-	if len(dd.Prices) > 0 && (dd.Prices[0].Price == "" || dd.Prices[0].Price == "0.00") && dd.Status != api.Closed {
+	if dd.Status != api.Closed && !haveETHPrice(dd.Prices) {
 		dd.Status = api.Paused
 	}
 	return ctx.JSON(http.StatusOK, *dd)
+}
+
+// haveETHPrice reports whether the prices given carry a usable ETH price i.e.
+// one a frontend can price a donation with.
+//
+// The price is picked by asset (the order in which the prices are assembled is
+// not part of the API) and compared numerically: it is scanned from a
+// NUMERIC(15,5) column and rendered as e.g. "0.00000" by postgres, a string
+// comparison against "0.00" never matches.
+func haveETHPrice(prices []api.Price) bool {
+	for _, p := range prices {
+		if p.Asset != api.PriceAssetEth {
+			continue
+		}
+		price, err := decimal.NewFromString(p.Price)
+		if err != nil {
+			log.Errorf("invalid ETH price '%s', %v", p.Price, err)
+			return false
+		}
+		return price.IsPositive()
+	}
+	log.Warn("no ETH price available")
+	return false
 }

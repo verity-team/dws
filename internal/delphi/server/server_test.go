@@ -236,3 +236,75 @@ func TestConnectWalletInvalidAddress(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
+
+// the campaign pause guard: the ETH price is picked by asset and compared
+// numerically -- postgres renders a NUMERIC(15,5) zero as "0.00000"
+func TestHaveETHPrice(t *testing.T) {
+	tests := []struct {
+		name   string
+		prices []api.Price
+		want   bool
+	}{
+		{
+			name: "usable ETH price",
+			prices: []api.Price{
+				{Asset: api.PriceAssetEth, Price: "1798.12000"},
+				{Asset: api.PriceAssetTruth, Price: "0.00100"},
+			},
+			want: true,
+		},
+		{
+			name: "numeric zero as rendered by postgres",
+			prices: []api.Price{
+				{Asset: api.PriceAssetEth, Price: "0.00000"},
+				{Asset: api.PriceAssetTruth, Price: "0.00100"},
+			},
+			want: false,
+		},
+		{
+			name:   "zero without trailing digits",
+			prices: []api.Price{{Asset: api.PriceAssetEth, Price: "0.00"}},
+			want:   false,
+		},
+		{
+			name:   "empty price",
+			prices: []api.Price{{Asset: api.PriceAssetEth, Price: ""}},
+			want:   false,
+		},
+		{
+			name:   "garbage price",
+			prices: []api.Price{{Asset: api.PriceAssetEth, Price: "n/a"}},
+			want:   false,
+		},
+		{
+			name:   "negative price",
+			prices: []api.Price{{Asset: api.PriceAssetEth, Price: "-1.00000"}},
+			want:   false,
+		},
+		{
+			name:   "no ETH price at all",
+			prices: []api.Price{{Asset: api.PriceAssetTruth, Price: "0.00100"}},
+			want:   false,
+		},
+		{
+			name:   "no prices at all",
+			prices: nil,
+			want:   false,
+		},
+		{
+			// the ETH price is not first by contract, only by append order
+			name: "ETH price is not the first entry",
+			prices: []api.Price{
+				{Asset: api.PriceAssetTruth, Price: "0.00100"},
+				{Asset: api.PriceAssetEth, Price: "1798.12000"},
+			},
+			want: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, haveETHPrice(tc.prices))
+		})
+	}
+}

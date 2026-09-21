@@ -15,12 +15,12 @@ func IsValidETHAddress(address string) bool {
 	return ethAddressRe.MatchString(address)
 }
 
-// NormalizeHash returns the canonical form of a block/transaction hash used
-// for comparison. jsonrpc API providers return either casing (and the two
-// endpoints of a single provider need not agree with each other), so hashes
-// are compared lower case and free of surrounding whitespace -- the repo
-// convention. Only comparisons are normalized, stored values are left as
-// received.
+// NormalizeHash returns the canonical form of a block/transaction hash.
+// jsonrpc API providers return either casing (and the two endpoints of a
+// single provider need not agree with each other), so hashes are compared --
+// and stored -- lower case and free of surrounding whitespace, the repo
+// convention. Transactions are normalized at the point of acceptance
+// (filterTransactions), hence every hash in the database is in this form.
 func NormalizeHash(hash string) string {
 	return strings.ToLower(strings.TrimSpace(hash))
 }
