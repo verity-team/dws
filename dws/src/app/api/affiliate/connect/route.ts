@@ -2,7 +2,10 @@ import { WalletAffiliateRequest } from "@/api/dws/affiliate/affiliate.type";
 import { Nullable } from "@/utils";
 import { NextResponse } from "next/server";
 import { isAddress } from "web3-validator";
-import { baseNextServerRequest } from "@/utils/baseApiV2";
+import {
+  baseNextServerRequest,
+  getDefaultJsonHeaders,
+} from "@/utils/baseApiV2";
 import { FailedResponse } from "@/utils/baseAPI";
 
 export const runtime = "edge";
@@ -19,7 +22,7 @@ export async function POST(request: Request): Promise<Response> {
     return getDefaultErrResponse();
   }
 
-  const { code, address } = requestBody;
+  const { code, address, timestamp, signature } = requestBody;
   if (code == null) {
     return getBadRequestResponse("Affiliate code is required");
   }
@@ -29,6 +32,12 @@ export async function POST(request: Request): Promise<Response> {
   if (!isAddress(address)) {
     return getBadRequestResponse("Invalid user wallet address");
   }
+  if (timestamp == null) {
+    return getBadRequestResponse("Timestamp is required");
+  }
+  if (signature == null) {
+    return getBadRequestResponse("User signature is required");
+  }
 
   const serverResponse = await requestWalletConnection(requestBody);
   return serverResponse;
@@ -37,10 +46,16 @@ export async function POST(request: Request): Promise<Response> {
 async function requestWalletConnection(
   donationInfo: WalletAffiliateRequest
 ): Promise<NextResponse> {
+  const headers = getDefaultJsonHeaders();
+  headers.append("delphi-key", donationInfo.address);
+  headers.append("delphi-ts", donationInfo.timestamp.toString());
+  headers.append("delphi-signature", donationInfo.signature);
+
   const path = "/wallet/connection";
   const response = await baseNextServerRequest("POST", {
     path,
-    payload: donationInfo,
+    headers,
+    payload: { code: donationInfo.code, address: donationInfo.address },
     json: true,
   });
 

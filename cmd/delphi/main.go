@@ -72,6 +72,9 @@ func main() {
 
 	// This is how you set up a basic Echo router
 	e := echo.New()
+	// recover from panics in downstream middleware/handlers; must be first so
+	// that it also covers the middleware registered below
+	e.Use(echomiddleware.Recover())
 	e.Use(echomiddleware.Logger())
 
 	e.Use(echomiddleware.BodyLimitWithConfig(blv))

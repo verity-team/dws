@@ -12,6 +12,7 @@ import {
 import { connectWalletWithAffiliate } from "@/api/dws/affiliate/affiliate";
 import { Maybe } from "@/utils";
 import { LAST_PROVIDER_KEY, LAST_WALLET_KEY } from "@/utils/const";
+import { getRFC3339String } from "@/utils/utils";
 import { AvailableWallet } from "@/utils/wallet/token";
 import { CircularProgress } from "@mui/material";
 import { useSearchParams } from "next/navigation";
@@ -32,7 +33,11 @@ const LandingClientRoot = ({
   const [affiliateCodeConnected, setAffiliateCodeConnected] = useState(false);
 
   const handleWalletConnect = useCallback(
-    async (address: string, provider: AvailableWallet) => {
+    async (
+      address: string,
+      provider: AvailableWallet,
+      requestWalletSignature: (message: string) => Promise<string>
+    ) => {
       let afc = "none";
       if (affiliateCode != null && affiliateCode !== "") {
         afc = affiliateCode;
@@ -41,10 +46,35 @@ const LandingClientRoot = ({
       localStorage.setItem(LAST_WALLET_KEY, address);
       localStorage.setItem(LAST_PROVIDER_KEY, provider);
 
-      if (!affiliateCodeConnected) {
-        await connectWalletWithAffiliate({ address, code: afc });
-        setAffiliateCodeConnected(true);
+      if (affiliateCodeConnected) {
+        return;
       }
+
+      // the backend requires proof that the caller owns `address`; the message
+      // is derived from the endpoint path and must match it exactly
+      const now = new Date();
+      const timestamp = Math.floor(now.getTime() / 1000);
+      const message = `wallet connection, ${getRFC3339String(now)}`;
+
+      let signature = "";
+      try {
+        signature = await requestWalletSignature(message);
+      } catch {
+        // the user declined to sign; nothing to report here
+        return;
+      }
+
+      if (!signature) {
+        return;
+      }
+
+      await connectWalletWithAffiliate({
+        address,
+        code: afc,
+        timestamp,
+        signature,
+      });
+      setAffiliateCodeConnected(true);
     },
     [affiliateCode, affiliateCodeConnected]
   );

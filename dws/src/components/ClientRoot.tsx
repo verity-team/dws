@@ -28,7 +28,11 @@ import { requestAccounts } from "@/utils/wallet/wallet";
 
 interface ClientRootProps {
   children: ReactNode;
-  onWalletConnect?: (address: string, provider: AvailableWallet) => void;
+  onWalletConnect?: (
+    address: string,
+    provider: AvailableWallet,
+    requestWalletSignature: (message: string) => Promise<string>
+  ) => void;
 }
 
 interface IWalletUtils {
@@ -144,14 +148,6 @@ const ClientRoot = ({
     tryReconnect(lastWallet, lastProvider);
   }, []);
 
-  useEffect(() => {
-    if (account === "") {
-      return;
-    }
-
-    onWalletConnect?.(account, provider);
-  }, [account, provider]);
-
   const connectWallet = useCallback(() => {
     setConnectWalletFormOpen(true);
   }, []);
@@ -216,6 +212,14 @@ const ClientRoot = ({
     },
     [provider, account]
   );
+
+  useEffect(() => {
+    if (account === "") {
+      return;
+    }
+
+    onWalletConnect?.(account, provider, requestWalletSignature);
+  }, [account, provider, requestWalletSignature]);
 
   const handleCloseConnectWalletForm = (): void => {
     setConnectWalletFormOpen(false);
