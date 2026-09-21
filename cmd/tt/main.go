@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/goccy/go-json"
@@ -23,6 +24,7 @@ func main() {
 	delphiKey := flag.String("delphi-key", "0xb938F65DfE303EdF96A511F1e7E3190f69036860", "eth address")
 	timeoutSeconds := flag.Int("timeout", 5, "request timeout in seconds")
 	simulateStaleTS := flag.Bool("old-ts", false, "simulate stale auth timestamp")
+	simulateFutureTS := flag.Bool("future-ts", false, "simulate an auth timestamp in the future")
 	msg := flag.String("msg", "affiliate code", "message to sign")
 	flag.Parse()
 
@@ -52,9 +54,13 @@ func main() {
 		// -10 days
 		ts = ts.Add(-1 * time.Hour * 24 * 10)
 	}
+	if *simulateFutureTS {
+		// +10 days
+		ts = ts.Add(time.Hour * 24 * 10)
+	}
 	req.Header.Set("delphi-ts", fmt.Sprintf("%d", ts.Unix()))
 
-	signature, err := signMessage(*msg, pk, ts)
+	signature, err := signMessage(*msg, *delphiKey, pk, ts)
 	if err != nil {
 		log.Fatalf("error signing message: %v", err)
 		return
@@ -91,8 +97,10 @@ func main() {
 	log.Info(data)
 }
 
-func signMessage(msg string, pk *ecdsa.PrivateKey, ts time.Time) (string, error) {
-	tmsg := fmt.Sprintf("%s, %s", msg, ts.Format("2006-01-02 15:04:05-07:00"))
+// signMessage builds and signs the message delphi expects: the words of the
+// endpoint path, the lower cased address and the timestamp.
+func signMessage(msg, address string, pk *ecdsa.PrivateKey, ts time.Time) (string, error) {
+	tmsg := fmt.Sprintf("%s, %s, %s", msg, strings.ToLower(address), ts.Format("2006-01-02 15:04:05-07:00"))
 	log.Info(tmsg)
 	msgHash := accounts.TextHash([]byte(tmsg))
 	signature, err := crypto.Sign(msgHash, pk)

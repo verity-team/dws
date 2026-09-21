@@ -7,6 +7,11 @@ import { isAddress } from "web3-validator";
 export const runtime = "edge";
 export const revalidate = 60; // seconds
 
+// The backend caps a page of the donation history at 100 records; reject
+// anything outside the accepted range here as well instead of forwarding it.
+const MAX_LIMIT = 100;
+const DEFAULT_LIMIT = 50;
+
 export async function GET(
   request: Request,
   { params }: { params: { address: string } }
@@ -16,12 +21,40 @@ export async function GET(
     return getBadRequestResponse("Invalid wallet address");
   }
 
-  return getUserDonation(walletAddr);
+  const { searchParams } = new URL(request.url);
+
+  const limit = parsePositiveInt(searchParams.get("limit"), DEFAULT_LIMIT);
+  if (limit == null || limit < 1 || limit > MAX_LIMIT) {
+    return getBadRequestResponse(
+      `"limit" must be an integer between 1 and ${MAX_LIMIT}`
+    );
+  }
+
+  const offset = parsePositiveInt(searchParams.get("offset"), 0);
+  if (offset == null || offset < 0) {
+    return getBadRequestResponse('"offset" must be a non-negative integer');
+  }
+
+  return getUserDonation(walletAddr, limit, offset);
 }
 
-// TODO: Need more testing
-async function getUserDonation(walletAddress: string): Promise<NextResponse> {
-  const path = `/user/data/${walletAddress}`;
+function parsePositiveInt(raw: string | null, fallback: number): number | null {
+  if (raw == null || raw.trim() === "") {
+    return fallback;
+  }
+  if (!/^\d+$/.test(raw.trim())) {
+    return null;
+  }
+  const value = Number(raw);
+  return Number.isSafeInteger(value) ? value : null;
+}
+
+async function getUserDonation(
+  walletAddress: string,
+  limit: number,
+  offset: number
+): Promise<NextResponse> {
+  const path = `/user/data/${walletAddress}?limit=${limit}&offset=${offset}`;
   const response = await baseNextServerRequest("GET", { path });
   if (response == null) {
     return getDefaultErrResponse();

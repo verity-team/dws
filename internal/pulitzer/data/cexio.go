@@ -1,6 +1,10 @@
 package data
 
 import (
+	"fmt"
+	"strconv"
+	"time"
+
 	"github.com/goccy/go-json"
 
 	"github.com/shopspring/decimal"
@@ -31,9 +35,31 @@ func GetCexIOETHUSDLastPrice() (decimal.Decimal, error) {
 		return decimal.Zero, err
 	}
 
+	lastPrice, err := parseCexIOTicker(responseBody)
+	if err != nil {
+		log.Error(err)
+		return decimal.Zero, err
+	}
+
+	log.Info("cex.io: ", lastPrice)
+	return lastPrice, nil
+}
+
+// parseCexIOTicker extracts the last price from a cex.io ticker response. The
+// venue publishes the time the quote was taken; a quote that is no longer
+// current is rejected instead of being averaged in at full weight.
+func parseCexIOTicker(responseBody []byte) (decimal.Decimal, error) {
 	// Parse the JSON response
 	var data CexIOResponse
-	if err = json.Unmarshal(responseBody, &data); err != nil {
+	if err := json.Unmarshal(responseBody, &data); err != nil {
+		return decimal.Zero, err
+	}
+
+	seconds, err := strconv.ParseInt(data.Timestamp, 10, 64)
+	if err != nil {
+		return decimal.Zero, fmt.Errorf("cex.io: invalid quote timestamp ('%s'), %w", data.Timestamp, err)
+	}
+	if err = checkQuoteAge("cex.io", time.Unix(seconds, 0).UTC()); err != nil {
 		return decimal.Zero, err
 	}
 
@@ -43,6 +69,5 @@ func GetCexIOETHUSDLastPrice() (decimal.Decimal, error) {
 		return decimal.Zero, err
 	}
 
-	log.Info("cex.io: ", lastPrice)
 	return lastPrice, nil
 }

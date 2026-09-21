@@ -12,7 +12,7 @@ The `dws` backend consists of a `postgres` database and 5 services
 - `buck`: ETH/latest crawler, checks the latest blocks for donation transactions and inserts these into the database (in state `unconfirmed`)
 - `buck`: ETH/finalized crawler, checks the finalized blocks for donation transactions and confrm them, also updates the donation campaign statistics and the token price (if/as needed)
 - `buck`: ETH/old-unconfirmed crawler, checks for donations that are older than 30 minutes but still unconfirmed, attempts to fetch the respective finalized blocks and confirm these donation transactions. A donation is marked as `failed` if its finalized block was fetched and does *not* carry the transaction, or if the transaction is absent from both the chain and the mempool and the block it was originally seen in is more than 24 hours old (it was evicted by a re-org and never re-mined, so no money moved); the donation campaign statistics are then recalculated -- the donation records are retained, they are *not* deleted. Donations whose transaction is still in the mempool, whose block has not been finalized yet, whose finalized block could not be fetched or that are absent from the chain but younger than 24 hours are left untouched and re-examined on a later run
-- `pulitzer`: pulls the ETH price from 6 exchanges and inserts an average price into the database every minute. It also serves the historical price requests filed by `buck`: a request that cannot be fulfilled is marked `failed` and retried a few minutes later, a request is only marked `succeeded` once its prices were actually written
+- `pulitzer`: pulls the ETH price from 6 exchanges and inserts an average price into the database every minute, see [price aggregation](#price-aggregation). It also serves the historical price requests filed by `buck`: a request that cannot be fulfilled is marked `failed` and retried a few minutes later, a request is only marked `succeeded` once its prices were actually written
 - `delphi`: [REST API](https://app.swaggerhub.com/apis/MUHAREM_1/delphi/) server -- only serves data from the database
 
 The backend services are written in `go` -- you will thus need `go` on your development system. For testing purposes the `postgres` database can be run in a docker container i.e. you will need docker as well.
@@ -49,6 +49,111 @@ The services are configured via the environment, see `env.example` for the full 
 - `DWS_SALE_PARAMS` (`buck`) is empty or one of its entries has a token limit or a token price that is not greater than zero
 
 These values used to be accepted as-is and only did damage once donations were processed e.g. a scale of zero leaves a stable coin donation in its smallest unit and turns a 500 USDT donation into a 500,000,000 USD one.
+
+`DWS_MAX_TIMESTAMP_AGE` (`delphi`) sets how old the `delphi-ts` timestamp of a
+signed request may be. It defaults to 30 seconds and is capped at 300 seconds:
+the replay window must not be widened without bound by a stray environment
+variable. Independently of it, a timestamp more than 5 seconds in the *future*
+is rejected -- otherwise a signature harvested over a far future timestamp
+would stay valid, and replayable, until that timestamp had come and gone.
+
+## rate limiting
+
+`delphi` applies a per-IP rate limit (50 requests/second, bursts of 100) using
+an **in-process, in-memory** store. Two consequences:
+
+1. **The limit is per instance, not global.** Every replica keeps its own
+   counters, so `n` replicas admit up to `n` times the configured rate. A
+   global budget belongs at the proxy/CDN layer in front of the service; this
+   limiter is the last line of defence that travels with the binary.
+1. **The visitor is the direct peer address**, not `X-Forwarded-For`. That
+   header is attacker controlled, and an identifier taken from it can be
+   rotated at will, which would leave the limiter with nothing to limit.
+
+The numbers are deliberately generous because the donation web site talks to
+this API from its own (server side) Next.js route handlers: in the normal case
+every legitimate request arrives from the handful of frontend egress addresses
+rather than from the end users. One browser session costs roughly three
+requests a minute (the ETH price once a minute, the user data once a minute,
+the donation data on every refresh and whenever "donate" is pressed), so 50
+req/s leaves head room for a four digit number of concurrent sessions behind a
+single address while still capping what one client talking to an instance
+directly can extract. Per-*user* limits have to be applied where the user's own
+address is still visible, i.e. in front of the frontend.
+
+`/live`, `/ready` and `/version` are exempt: an orchestrator probe must not be
+able to exhaust the budget of the node it runs on, and a probe answered with
+429 would take the pod out of service.
+
+## API contract
+
+`GET /user/data/{address}` is unauthenticated, and two properties of it follow
+from that:
+
+- **the donation history is paginated.** The `limit` (1..100, default 50) and
+  `offset` (>= 0, default 0) query parameters select the page; the records are
+  ordered oldest first. The server caps `limit` at 100 no matter what is
+  passed, so a single request can no longer turn ~100 bytes of input into
+  megabytes of database read and egress.
+- **the response no longer carries `affiliate_code`.** Donation addresses are
+  public on chain, so anyone could previously walk the donor set into a
+  complete off-chain profile *including the referral graph*. The affiliate code
+  is now only served over `POST /affiliate/code`, which requires a signature
+  from the address it belongs to.
+
+Error responses carry the numeric error code and a fixed, generic message. The
+underlying error -- which names tables, functions and columns and gives away
+the SQL dialect and the driver version -- is logged server side only; quote the
+numeric code when reporting a problem.
+
+The signature in `delphi-signature` is taken over a message built from the
+words of the endpoint path, the lower cased address in `delphi-key` and the
+`delphi-ts` timestamp, e.g.
+
+```
+affiliate code, 0xded1fe6b3f61c8f1d874bb86f086d10ffc3f0154, 2023-10-23 18:45:19+00:00
+```
+
+The address is part of the signed message, so a signature is bound to the
+account it is used for. **This changed the message format**: the backend and
+the frontend have to be rolled out together, a new frontend talking to an old
+backend (or the other way round) will see every signed request rejected with a
+401.
+
+## price aggregation
+
+`pulitzer` fetches the ETH price from six venues every minute and combines them
+as follows:
+
+1. sources that failed, panicked or returned a non-positive price drop out;
+1. at least **4** sources have to remain (the quorum). A median needs enough
+   inputs to be more than "the middle one of three", and four also keeps the
+   two USDT quoted venues (binance, kucoin) from making up the majority of a
+   cycle and dragging a stable coin depeg into the written price;
+1. the remaining prices are sorted (by price, then by source name) and their
+   **median** is taken. Every source is then compared against that single
+   reference value, so the outcome is symmetric and does not depend on the
+   order the goroutines happened to finish in;
+1. a source deviating from the median by more than **10%** is dropped
+   *individually* and logged with its deviation. One stale quote no longer
+   discards five mutually consistent prices;
+1. at least **3** sources have to survive that step, otherwise the cycle
+   writes nothing;
+1. the price written to the database is the mean of the survivors.
+
+Quotes are also rejected when the venue says they are stale: cex.io and kucoin
+publish the time their quote was taken, and a quote older than 2 minutes (or
+more than 30 seconds in the future) is discarded -- a cached quote tens of
+minutes old is usually still well within 10% of spot and would otherwise be
+averaged in at full weight. The other four venues (binance, kraken, bitfinex,
+coinbase) do not expose a timestamp at all; there the only freshness bound
+available is the request itself, which is made afresh in every cycle under the
+HTTP client timeout.
+
+`pulitzer`'s `/ready` probe depends on the database and on nothing else. It
+deliberately does not call out to an exchange: a third party being slow, or
+answering the probe with a rate limit error, would take an otherwise healthy
+pod out of service and burn the very request budget the price fetch needs.
 
 ## tests
 

@@ -16,22 +16,62 @@ import DonationStat from "./DonationStat";
 interface UserStatProps {
   donations: Donation[];
   userStat: UserStats;
+  // index of the page of the donation history `donations` holds
+  page: number;
+  // number of records a full page holds
+  pageSize: number;
+  // whether there may be a page behind the current one
+  hasNextPage: boolean;
+  onPageChange: (page: number) => void;
 }
 
 const UserStat = (
-  { donations, userStat }: UserStatProps,
+  {
+    donations,
+    userStat,
+    page,
+    pageSize,
+    hasNextPage,
+    onPageChange,
+  }: UserStatProps,
   ref: ForwardedRef<HTMLDivElement>
 ): ReactElement<UserStatProps> => {
+  // index of the displayed donation *within the current page*
   const [activeDonation, setActiveDonation] = useState(0);
   const maxSteps = donations?.length ?? 0;
+  // a page that is still loading, or one that shrank, must not be indexed out
+  // of bounds
+  const activeIndex = Math.min(
+    Math.max(activeDonation, 0),
+    Math.max(maxSteps - 1, 0)
+  );
+  const hasNext = activeIndex < maxSteps - 1 || hasNextPage;
+  const hasPrev = activeIndex > 0 || page > 0;
 
   const handleNextDonation = useCallback(() => {
-    setActiveDonation((current) => current + 1);
-  }, []);
+    if (activeIndex < maxSteps - 1) {
+      setActiveDonation(activeIndex + 1);
+      return;
+    }
+    if (hasNextPage) {
+      // step over into the first record of the following page
+      setActiveDonation(0);
+      onPageChange(page + 1);
+    }
+  }, [activeIndex, maxSteps, hasNextPage, onPageChange, page]);
 
   const handlePrevDonation = useCallback(() => {
-    setActiveDonation((current) => current - 1);
-  }, []);
+    if (activeIndex > 0) {
+      setActiveDonation(activeIndex - 1);
+      return;
+    }
+    if (page > 0) {
+      // every page before the current one is full, so the last record of the
+      // previous page is at pageSize - 1
+      setActiveDonation(pageSize - 1);
+      onPageChange(page - 1);
+    }
+  }, [activeIndex, page, pageSize, onPageChange]);
 
   if (donations == null) {
     return <div></div>;
@@ -46,19 +86,21 @@ const UserStat = (
       <div className="mt-4">
         <h3 className="text-xl font-semibold">History</h3>
         <div className="bg-white rounded-t-lg mt-4">
-          <DonationStat donation={donations[activeDonation]} />
+          <DonationStat donation={donations[activeIndex]} />
         </div>
         <div className="mt-4">
           <MobileStepper
             variant="text"
             position="static"
-            steps={maxSteps}
-            activeStep={activeDonation}
+            // the total is only known up to the page that was fetched; a full
+            // page implies at least one more record behind it
+            steps={page * pageSize + maxSteps + (hasNextPage ? 1 : 0)}
+            activeStep={page * pageSize + activeIndex}
             nextButton={
               <Button
                 size="small"
                 onClick={handleNextDonation}
-                disabled={activeDonation === maxSteps - 1}
+                disabled={!hasNext}
                 className="text-black disabled:!text-gray-400 font-changa text-lg"
               >
                 Next
@@ -69,7 +111,7 @@ const UserStat = (
               <Button
                 size="small"
                 onClick={handlePrevDonation}
-                disabled={activeDonation === 0}
+                disabled={!hasPrev}
                 className="text-black disabled:!text-gray-400 font-changa text-lg"
               >
                 <KeyboardArrowLeft />

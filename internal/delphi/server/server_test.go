@@ -2,9 +2,12 @@ package server
 
 import (
 	"crypto/ecdsa"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -13,7 +16,9 @@ import (
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
+	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/verity-team/dws/api"
@@ -98,8 +103,21 @@ func TestVerifySigWrongSigner(t *testing.T) {
 
 func TestFormMsgWalletConnection(t *testing.T) {
 	ts := time.Date(2023, 10, 23, 18, 45, 19, 0, time.UTC)
-	assert.Equal(t, "wallet connection, 2023-10-23 18:45:19+00:00", formMsg("/wallet/connection", ts))
-	assert.Equal(t, "affiliate code, 2023-10-23 18:45:19+00:00", formMsg("/affiliate/code", ts))
+	const addr = "0xB938F65DfE303EdF96A511F1e7E3190f69036860"
+	assert.Equal(t,
+		"wallet connection, 0xb938f65dfe303edf96a511f1e7e3190f69036860, 2023-10-23 18:45:19+00:00",
+		formMsg("/wallet/connection", addr, ts))
+	assert.Equal(t,
+		"affiliate code, 0xb938f65dfe303edf96a511f1e7e3190f69036860, 2023-10-23 18:45:19+00:00",
+		formMsg("/affiliate/code", addr, ts))
+}
+
+// the signed message is bound to the address it is used for
+func TestFormMsgBindsAddress(t *testing.T) {
+	ts := time.Date(2023, 10, 23, 18, 45, 19, 0, time.UTC)
+	a := formMsg("/affiliate/code", "0xb938f65dfe303edf96a511f1e7e3190f69036860", ts)
+	b := formMsg("/affiliate/code", "0xded1fe6b3f61c8f1d874bb86f086d10ffc3f0154", ts)
+	assert.NotEqual(t, a, b)
 }
 
 // signTestMsg signs msg the way an ethereum wallet's personal_sign does.
@@ -148,7 +166,7 @@ func TestConnectWalletStaleTimestamp(t *testing.T) {
 	err = s.ConnectWallet(ctx, api.ConnectWalletParams{
 		DelphiKey:       addr,
 		DelphiTs:        strconv.FormatInt(authTS.Unix(), 10),
-		DelphiSignature: signTestMsg(t, key, formMsg("/wallet/connection", authTS.Truncate(time.Second))),
+		DelphiSignature: signTestMsg(t, key, formMsg("/wallet/connection", addr, authTS.Truncate(time.Second))),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -170,7 +188,7 @@ func TestConnectWalletBadSignature(t *testing.T) {
 	err = s.ConnectWallet(ctx, api.ConnectWalletParams{
 		DelphiKey:       addr,
 		DelphiTs:        strconv.FormatInt(authTS.Unix(), 10),
-		DelphiSignature: signTestMsg(t, other, formMsg("/wallet/connection", authTS.Truncate(time.Second))),
+		DelphiSignature: signTestMsg(t, other, formMsg("/wallet/connection", addr, authTS.Truncate(time.Second))),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
@@ -212,7 +230,7 @@ func TestConnectWalletAddressMismatch(t *testing.T) {
 	err = s.ConnectWallet(ctx, api.ConnectWalletParams{
 		DelphiKey:       attacker,
 		DelphiTs:        strconv.FormatInt(authTS.Unix(), 10),
-		DelphiSignature: signTestMsg(t, key, formMsg("/wallet/connection", authTS.Truncate(time.Second))),
+		DelphiSignature: signTestMsg(t, key, formMsg("/wallet/connection", attacker, authTS.Truncate(time.Second))),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
@@ -231,7 +249,7 @@ func TestConnectWalletInvalidAddress(t *testing.T) {
 	err = s.ConnectWallet(ctx, api.ConnectWalletParams{
 		DelphiKey:       addr,
 		DelphiTs:        strconv.FormatInt(authTS.Unix(), 10),
-		DelphiSignature: signTestMsg(t, key, formMsg("/wallet/connection", authTS.Truncate(time.Second))),
+		DelphiSignature: signTestMsg(t, key, formMsg("/wallet/connection", addr, authTS.Truncate(time.Second))),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -307,4 +325,173 @@ func TestHaveETHPrice(t *testing.T) {
 			assert.Equal(t, tc.want, haveETHPrice(tc.prices))
 		})
 	}
+}
+
+// a timestamp in the *future* used to yield a negative age and pass the check
+// unconditionally: a signature harvested over a far future timestamp stayed
+// valid -- and replayable -- until that timestamp had passed
+func TestAuthTSOutOfWindowFuture(t *testing.T) {
+	now := time.Now().UTC()
+
+	assert.False(t, authTSOutOfWindow(now), "a current timestamp must be accepted")
+	assert.False(t, authTSOutOfWindow(now.Add(-time.Duration(MaxTimestampAge-5)*time.Second)))
+	assert.True(t, authTSOutOfWindow(now.Add(-time.Duration(MaxTimestampAge+5)*time.Second)))
+
+	// small clock drift is tolerated, a timestamp that is genuinely in the
+	// future is not
+	assert.False(t, authTSOutOfWindow(now.Add(time.Duration(MaxTimestampSkew-2)*time.Second)))
+	assert.True(t, authTSOutOfWindow(now.Add(time.Duration(MaxTimestampSkew+5)*time.Second)))
+	assert.True(t, authTSOutOfWindow(now.Add(24*time.Hour)))
+	assert.True(t, authTSOutOfWindow(time.Date(2035, 1, 1, 0, 0, 0, 0, time.UTC)))
+}
+
+func TestMaxTSAge(t *testing.T) {
+	t.Setenv("DWS_MAX_TIMESTAMP_AGE", "")
+	require.NoError(t, os.Unsetenv("DWS_MAX_TIMESTAMP_AGE"))
+	assert.Equal(t, MaxTimestampAge, maxTSAge())
+
+	t.Setenv("DWS_MAX_TIMESTAMP_AGE", "60")
+	assert.Equal(t, 60, maxTSAge())
+
+	// garbage and non-positive values fall back to the default
+	t.Setenv("DWS_MAX_TIMESTAMP_AGE", "not-a-number")
+	assert.Equal(t, MaxTimestampAge, maxTSAge())
+	t.Setenv("DWS_MAX_TIMESTAMP_AGE", "0")
+	assert.Equal(t, MaxTimestampAge, maxTSAge())
+	t.Setenv("DWS_MAX_TIMESTAMP_AGE", "-1")
+	assert.Equal(t, MaxTimestampAge, maxTSAge())
+
+	// the replay window cannot be widened without bound
+	t.Setenv("DWS_MAX_TIMESTAMP_AGE", "86400")
+	assert.Equal(t, MaxTimestampAgeCeiling, maxTSAge())
+}
+
+func TestConnectWalletFutureTimestamp(t *testing.T) {
+	key, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	addr := crypto.PubkeyToAddress(key.PublicKey).Hex()
+
+	// the victim was tricked into signing a message carrying a timestamp
+	// years in the future
+	authTS := time.Date(2035, 1, 1, 0, 0, 0, 0, time.UTC)
+	ctx, rec := connectWalletCtx(t, fmt.Sprintf(`{"code":"none","address":%q}`, addr))
+	s := NewDelphiServer(nil)
+
+	err = s.ConnectWallet(ctx, api.ConnectWalletParams{
+		DelphiKey:       addr,
+		DelphiTs:        strconv.FormatInt(authTS.Unix(), 10),
+		DelphiSignature: signTestMsg(t, key, formMsg("/wallet/connection", addr, authTS)),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.NotContains(t, rec.Body.String(), "auth OK")
+}
+
+func TestGenerateCodeFutureTimestamp(t *testing.T) {
+	key, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	addr := crypto.PubkeyToAddress(key.PublicKey).Hex()
+
+	authTS := time.Now().UTC().Add(time.Hour)
+	req := httptest.NewRequest(http.MethodPost, "/affiliate/code", nil)
+	rec := httptest.NewRecorder()
+	ctx := echo.New().NewContext(req, rec)
+	ctx.SetPath("/affiliate/code")
+	s := NewDelphiServer(nil)
+
+	err = s.GenerateCode(ctx, api.GenerateCodeParams{
+		DelphiKey:       addr,
+		DelphiTs:        strconv.FormatInt(authTS.Unix(), 10),
+		DelphiSignature: signTestMsg(t, key, formMsg("/affiliate/code", addr, authTS.Truncate(time.Second))),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// the wrapped database error -- table, function and column names, the postgres
+// dialect and the driver version -- must never reach the caller
+func TestGetErrorDoesNotLeakInternals(t *testing.T) {
+	err := fmt.Errorf(
+		"failed to fetch user data for 0xded1fe6b3f61c8f1d874bb86f086d10ffc3f0154, %w",
+		errors.New("pq: function update_user_data(character varying) does not exist"))
+
+	cerr := getError(106, msgInternalError, "failed to fetch user data", err)
+	assert.Equal(t, 106, cerr.Code)
+	assert.Equal(t, msgInternalError, cerr.Message)
+	assert.NotContains(t, cerr.Message, "pq:")
+	assert.NotContains(t, cerr.Message, "update_user_data")
+	assert.NotContains(t, cerr.Message, "0xded1fe6b3f61c8f1d874bb86f086d10ffc3f0154")
+}
+
+// end to end through the handler: a database failure produces a 500 whose body
+// carries the numeric code and nothing else
+func TestUserDataErrorResponseIsSanitized(t *testing.T) {
+	// nothing is listening there, so the very first query fails
+	dbh, err := sqlx.Open("postgres", "postgres://dws:dws@127.0.0.1:1/dwsdb?sslmode=disable&connect_timeout=1")
+	require.NoError(t, err)
+	defer func() { _ = dbh.Close() }()
+
+	const addr = "0xDEd1Fe6B3f61c8F1d874bb86F086D10FFc3F0154"
+	req := httptest.NewRequest(http.MethodGet, "/user/data/"+addr, nil)
+	rec := httptest.NewRecorder()
+	ctx := echo.New().NewContext(req, rec)
+	ctx.SetPath("/user/data/:address")
+
+	s := NewDelphiServer(dbh)
+	require.NoError(t, s.UserData(ctx, addr, api.UserDataParams{}))
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	body := rec.Body.String()
+	var cerr api.Error
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &cerr))
+	assert.Equal(t, 106, cerr.Code)
+	assert.Equal(t, msgInternalError, cerr.Message)
+	for _, leak := range []string{"pq:", "dial tcp", "127.0.0.1", "dwsdb", "donation", "connection refused"} {
+		assert.NotContains(t, body, leak, "the response body must not carry internal detail")
+	}
+}
+
+func TestPageParams(t *testing.T) {
+	limit, offset := pageParams(api.UserDataParams{})
+	assert.Equal(t, DefaultUserDataLimit, limit)
+	assert.Equal(t, 0, offset)
+
+	l, o := 10, 20
+	limit, offset = pageParams(api.UserDataParams{Limit: &l, Offset: &o})
+	assert.Equal(t, 10, limit)
+	assert.Equal(t, 20, offset)
+
+	// the caller cannot ask for more than the server is willing to serve
+	huge := 1000000
+	limit, _ = pageParams(api.UserDataParams{Limit: &huge})
+	assert.Equal(t, MaxUserDataLimit, limit)
+
+	// nor for a degenerate page
+	for _, bad := range []int{0, -1, -1000} {
+		limit, _ = pageParams(api.UserDataParams{Limit: &bad})
+		assert.Equal(t, 1, limit, "limit %d", bad)
+	}
+	for _, bad := range []int{-1, -1000} {
+		_, offset = pageParams(api.UserDataParams{Offset: &bad})
+		assert.Equal(t, 0, offset, "offset %d", bad)
+	}
+}
+
+// the referral code is only handed out over the signature protected
+// /affiliate/code path, never in the unauthenticated user data response
+func TestUserDataResponseHasNoAffiliateCode(t *testing.T) {
+	res := api.UserDataResult{
+		Donations: []api.Donation{{
+			Amount: "1.23", Asset: api.DonationAssetEth, Tokens: "980000",
+			Price: "0.002", TxHash: "0xdeadbeef", Status: api.Confirmed,
+		}},
+		UserData: api.UserData{
+			Total: "31415", Tokens: "9880000", Staked: "0", Reward: "0",
+			Status: api.None,
+		},
+	}
+	body, err := json.Marshal(res)
+	require.NoError(t, err)
+	assert.NotContains(t, string(body), "affiliate_code")
+	assert.NotContains(t, string(body), "us_code")
 }

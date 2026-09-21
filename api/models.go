@@ -139,9 +139,6 @@ type PriceAsset string
 
 // UserData defines model for user_data.
 type UserData struct {
-	// AffiliateCode affiliate code generated for this wallet address
-	AffiliateCode *string `db:"us_code" json:"affiliate_code,omitempty"`
-
 	// Reward staking rewards the user is eligible to claim
 	Reward string `db:"us_reward" json:"reward"`
 
@@ -184,14 +181,29 @@ type GenerateCodeParams struct {
 	DelphiKey DelphiKey `json:"delphi-key"`
 
 	// DelphiTs caller timestamp (number of seconds since Unix epoch) -- included
-	// to prevent replay attacks; must not be older than 5 seconds
+	// to prevent replay attacks. It must not be older than 30 seconds (the
+	// default, configurable via `DWS_MAX_TIMESTAMP_AGE` up to a hard limit
+	// of 300 seconds) and must not be more than 5 seconds in the future.
 	DelphiTs DelphiTs `json:"delphi-ts"`
 
-	// DelphiSignature signature over a string like: `affiliate code, 2023-10-23
+	// DelphiSignature signature over a string like: `affiliate code,
+	// 0xded1fe6b3f61c8f1d874bb86f086d10ffc3f0154, 2023-10-23
 	// 18:45:19+00:00`.  The message is constructed from the words that make
-	// up the path of the REST API endpoint called. *Important*: please use
+	// up the path of the REST API endpoint called, the lower cased address
+	// in `delphi-key` and the `delphi-ts` timestamp. *Important*: please use
 	// UTC timestamps only.
 	DelphiSignature DelphiSignature `json:"delphi-signature"`
+}
+
+// UserDataParams defines parameters for UserData.
+type UserDataParams struct {
+	// Limit maximum number of donation records to return; the server caps
+	// this at 100
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset number of donation records to skip; the records are ordered
+	// oldest first
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
 // ConnectWalletParams defines parameters for ConnectWallet.
@@ -200,12 +212,16 @@ type ConnectWalletParams struct {
 	DelphiKey DelphiKey `json:"delphi-key"`
 
 	// DelphiTs caller timestamp (number of seconds since Unix epoch) -- included
-	// to prevent replay attacks; must not be older than 5 seconds
+	// to prevent replay attacks. It must not be older than 30 seconds (the
+	// default, configurable via `DWS_MAX_TIMESTAMP_AGE` up to a hard limit
+	// of 300 seconds) and must not be more than 5 seconds in the future.
 	DelphiTs DelphiTs `json:"delphi-ts"`
 
-	// DelphiSignature signature over a string like: `affiliate code, 2023-10-23
+	// DelphiSignature signature over a string like: `affiliate code,
+	// 0xded1fe6b3f61c8f1d874bb86f086d10ffc3f0154, 2023-10-23
 	// 18:45:19+00:00`.  The message is constructed from the words that make
-	// up the path of the REST API endpoint called. *Important*: please use
+	// up the path of the REST API endpoint called, the lower cased address
+	// in `delphi-key` and the `delphi-ts` timestamp. *Important*: please use
 	// UTC timestamps only.
 	DelphiSignature DelphiSignature `json:"delphi-signature"`
 }

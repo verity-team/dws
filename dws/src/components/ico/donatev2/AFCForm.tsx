@@ -1,7 +1,7 @@
 "use client";
 
 import { connectWallet } from "@/utils/wallet/wallet";
-import { getRFC3339String } from "@/utils/utils";
+import { getDelphiMessage } from "@/utils/utils";
 import {
   Dialog,
   DialogTitle,
@@ -10,19 +10,11 @@ import {
   IconButton,
 } from "@mui/material";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import {
-  ReactElement,
-  memo,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { ReactElement, memo, useContext, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { Wallet, WalletUtils } from "@/components/ClientRoot";
 import { requestNewAffiliateCode } from "@/api/dws/affiliate/affiliate";
 import { Maybe } from "@/utils";
-import { useUserDonationData, getUserDonationData } from "@/api/dws/user/user";
 import { XIcon } from "lucide-react";
 import QRCode from "react-qr-code";
 
@@ -35,16 +27,6 @@ const AFCForm = (): ReactElement => {
   const [isFormOpen, setFormOpen] = useState(false);
   const [isLoading, setLoading] = useState(false);
   const [userCode, setUserCode] = useState("");
-
-  const { data, error } = useUserDonationData(userWallet.wallet);
-
-  useEffect(() => {
-    if (data == null || error != null) {
-      return;
-    }
-
-    setUserCode(data.user_data.affiliate_code);
-  }, [data, error]);
 
   const sharableLink = useMemo(() => {
     if (typeof window === "undefined") {
@@ -81,24 +63,23 @@ const AFCForm = (): ReactElement => {
     if (!currentAccount) {
       const wallet = await connectWallet();
       if (wallet == null) {
+        setLoading(false);
         return;
       }
       currentAccount = wallet;
-
-      const userDonationData = await getUserDonationData(currentAccount);
-
-      if (userDonationData?.user_data.affiliate_code != null) {
-        setUserCode(userDonationData.user_data.affiliate_code);
-        return;
-      }
     }
 
     const currentDate = new Date();
 
     // Timestamp in seconds
     const timestamp = Math.floor(currentDate.getTime() / 1000);
-    const messageDate = getRFC3339String(currentDate);
-    const message = `affiliate code, ${messageDate}`;
+    // the affiliate code is only served over this signature protected
+    // endpoint; it is no longer part of the public user data response
+    const message = getDelphiMessage(
+      "affiliate code",
+      currentAccount,
+      currentDate
+    );
 
     let signature: Maybe<string> = null;
     try {
@@ -184,13 +165,13 @@ const AFCForm = (): ReactElement => {
                     className="w-full px-4 py-2 border-2 border-black bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed"
                     onClick={handleGenAffiliateCode}
                   >
-                    Generate affiliate code
+                    Show my affiliate code
                   </button>
                 )}
                 <div className="text-base italic mt-2">
                   {!!userWallet
                     ? "Note: You will need to sign a message for verification purposes"
-                    : "Note: You need to connect a wallet before you can generate affilate code"}
+                    : "Note: You need to connect a wallet before you can show or generate your affiliate code"}
                 </div>
               </>
             )}

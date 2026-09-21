@@ -17,6 +17,10 @@ export interface Donation {
 }
 
 // Interface for user stats
+//
+// The affiliate code is deliberately absent: /user/data/{address} is
+// unauthenticated, so the referral code is only served over the signature
+// protected /affiliate/code endpoint (see requestNewAffiliateCode).
 export interface UserStats {
   total: string;
   tokens: string;
@@ -24,7 +28,6 @@ export interface UserStats {
   reward: string;
   status: UserRewardStatus;
   ts: string;
-  affiliate_code: string | "none";
 }
 
 // Status of a transaction
