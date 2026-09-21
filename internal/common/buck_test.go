@@ -4,6 +4,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/goccy/go-json"
 	"github.com/shopspring/decimal"
@@ -179,6 +180,38 @@ func TestJudge(t *testing.T) {
 			name:     "zero value tx is never failed",
 			tx:       TxByHash{},
 			expected: TxNoFinalizedBlockData,
+		},
+		{
+			// gone from chain and mempool for longer than the grace period:
+			// the tx was evicted by a re-org and never re-mined
+			name:     "absent tx older than the grace period is dropped",
+			tx:       TxByHash{Absent: true, DBBlockTime: time.Now().UTC().Add(-DroppedTxGracePeriod - time.Minute)},
+			expected: TxDropped,
+		},
+		{
+			// a single `null` from a lagging replica must not cost a donor
+			// their donation
+			name:     "absent tx within the grace period is left alone",
+			tx:       TxByHash{Absent: true, DBBlockTime: time.Now().UTC().Add(-DroppedTxGracePeriod + time.Minute)},
+			expected: TxAbsent,
+		},
+		{
+			name:     "absent tx with an unknown donation block time is left alone",
+			tx:       TxByHash{Absent: true},
+			expected: TxAbsent,
+		},
+		{
+			// a block time in the future (clock skew) is not an age
+			name:     "absent tx with a future donation block time is left alone",
+			tx:       TxByHash{Absent: true, DBBlockTime: time.Now().UTC().Add(time.Hour)},
+			expected: TxAbsent,
+		},
+		{
+			// an absent tx carries no block data at all; none of it may be
+			// mistaken for evidence
+			name:     "absent tx is judged before the finalized block data",
+			tx:       TxByHash{Absent: true, BlockNumber: 18459476, BlockHash: bh, FBBlockHash: "0xdeadbeef", FBDataAvailable: true},
+			expected: TxAbsent,
 		},
 	}
 	for _, tc := range tests {
@@ -402,4 +435,16 @@ func TestGetContextWithoutSupportedAssets(t *testing.T) {
 	assert.Nil(t, ctxt)
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "the ABI map is empty")
+}
+
+// the grace period is a deliberate policy choice, not an accident: 24 hours
+// is far beyond post-merge finality and any plausible re-broadcast window
+func TestDroppedTxGracePeriod(t *testing.T) {
+	assert.Equal(t, 24*time.Hour, DroppedTxGracePeriod)
+}
+
+func TestTxVerdictString(t *testing.T) {
+	assert.Equal(t, "absent from chain and mempool for less than 24h0m0s", TxAbsent.String())
+	assert.Equal(t, "absent from chain and mempool for more than 24h0m0s", TxDropped.String())
+	assert.Equal(t, "invalid tx verdict", TxVerdict(-1).String())
 }

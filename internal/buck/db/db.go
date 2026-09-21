@@ -485,14 +485,19 @@ func RequestPrice(ctxt c.Context, asset string, ts time.Time) error {
 	return nil
 }
 
-func GetOldUnconfirmed(dbh *sqlx.DB) ([]c.TXH, error) {
+// GetOldUnconfirmed returns the transactions of the donations that are still
+// unconfirmed 30 minutes after the block they were seen in. The block time is
+// returned along with the hash: it is what decides whether a transaction that
+// has vanished from the chain has been gone long enough to be declared dead
+// (see c.DroppedTxGracePeriod).
+func GetOldUnconfirmed(dbh *sqlx.DB) ([]c.UnconfirmedTx, error) {
 	var (
 		err    error
 		q      string
-		hashes []c.TXH
+		hashes []c.UnconfirmedTx
 	)
 	q = `
-		SELECT DISTINCT tx_hash
+		SELECT DISTINCT tx_hash, timezone('utc', block_time) AS block_time
 		FROM donation
 		WHERE
 			status = 'unconfirmed'
@@ -650,7 +655,13 @@ func failTx(dtx *sqlx.Tx, tx c.TxByHash) (bool, error) {
 			$1, $2, $3, $4)
 		ON CONFLICT (tx_hash) DO NOTHING
 		`
-	_, err := dtx.Exec(q1, tx.BlockNumber, tx.FBBlockHash, tx.FBBlockTime.UTC(), tx.Hash)
+	// a transaction that vanished from the chain has no finalized block; the
+	// time of the block it was originally seen in is all we can record for it
+	blockTime := tx.FBBlockTime
+	if blockTime.IsZero() {
+		blockTime = tx.DBBlockTime
+	}
+	_, err := dtx.Exec(q1, tx.BlockNumber, tx.FBBlockHash, blockTime.UTC(), tx.Hash)
 	if err != nil {
 		err = fmt.Errorf("failed to insert failed tx '%s', %w", tx.Hash, err)
 		log.Error(err)

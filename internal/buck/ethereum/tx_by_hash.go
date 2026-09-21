@@ -30,8 +30,9 @@ func addFBData(ctxt c.Context, txs []c.TxByHash) {
 	fbHashes := make(map[uint64]map[string]bool)
 	fetched := make(map[uint64]bool)
 	for _, tx := range txs {
-		if tx.Pending {
-			// still in the mempool, there is no block to fetch
+		if tx.Pending || tx.Absent {
+			// still in the mempool or gone from the chain altogether; either
+			// way there is no block to fetch
 			continue
 		}
 		if fetched[tx.BlockNumber] {
@@ -49,7 +50,7 @@ func addFBData(ctxt c.Context, txs []c.TxByHash) {
 	}
 	// now set the block hash/time for the finalized transactions
 	for i := 0; i < len(txs); i++ {
-		if txs[i].Pending {
+		if txs[i].Pending || txs[i].Absent {
 			continue
 		}
 		fb, exists := fbs[txs[i].BlockNumber]
@@ -94,7 +95,7 @@ func (txbh TXBHFetcher) Fetch(ctxt c.Context, hs []c.Hashable) ([]c.TxByHash, er
 	if err != nil {
 		return nil, err
 	}
-	result, err := parseTxByHash(body)
+	result, err := parseTxByHash(body, hs)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +105,16 @@ func (txbh TXBHFetcher) Fetch(ctxt c.Context, hs []c.Hashable) ([]c.TxByHash, er
 	return result, nil
 }
 
-func parseTxByHash(body []byte) ([]c.TxByHash, error) {
+// parseTxByHash decodes an `eth_getTransactionByHash` batch response. hs is
+// the batch that was requested: a jsonrpc response carries the id of the
+// request it answers, not the transaction hash, so hs is what a `null` result
+// -- a transaction the provider knows nothing about -- is resolved against.
+//
+// Such a transaction is reported as an absent one rather than dropped on the
+// floor: it is the only evidence there is that a transaction we watched get
+// mined is gone from both the chain and the mempool. Whether that is enough
+// to fail the donation is c.TxByHash.Judge's decision, not ours.
+func parseTxByHash(body []byte, hs []c.Hashable) ([]c.TxByHash, error) {
 	var resp []TxByHashBody
 	err := json.Unmarshal(body, &resp)
 	if err != nil {
@@ -112,14 +122,19 @@ func parseTxByHash(body []byte) ([]c.TxByHash, error) {
 	}
 	var res []c.TxByHash
 	for _, d := range resp {
-		if d.Result == nil {
-			// the tx is neither in a block nor in the mempool; it was dropped
-			// or never seen by this jsonrpc API provider. Not enough to
-			// declare the donation dead -- skip it, it will be re-examined.
-			log.Warnf("tx not found on chain (id: %d), skipping", d.ID)
+		if d.Result != nil {
+			res = append(res, *d.Result)
 			continue
 		}
-		res = append(res, *d.Result)
+		// the ids handed to the provider are 1-based indexes into hs; a
+		// response we cannot attribute to a request is unusable
+		if d.ID < 1 || d.ID > len(hs) {
+			log.Warnf("tx not found on chain, unattributable jsonrpc id %d, skipping", d.ID)
+			continue
+		}
+		hash := hs[d.ID-1].GetHash()
+		log.Warnf("tx '%s' found neither on chain nor in the mempool", hash)
+		res = append(res, c.TxByHash{Hash: hash, Absent: true})
 	}
 	return res, nil
 }

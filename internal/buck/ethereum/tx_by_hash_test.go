@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/goccy/go-json"
 	"github.com/stretchr/testify/assert"
@@ -30,7 +31,7 @@ func (suite *TxByHashSuite) SetupTest() {
 }
 
 func (suite *TxByHashSuite) TestSuccess() {
-	txs, err := parseTxByHash(suite.body)
+	txs, err := parseTxByHash(suite.body, nil)
 	assert.Nil(suite.T(), err)
 	assert.Equal(suite.T(), 2, len(txs))
 	tx := txs[0]
@@ -57,7 +58,7 @@ func (suite *TxByHashSuite) TestPendingTxInBatch() {
 	body, err := os.ReadFile("testdata/txbyhash_pending.json")
 	assert.Nil(suite.T(), err)
 
-	txs, err := parseTxByHash(body)
+	txs, err := parseTxByHash(body, nil)
 	assert.Nil(suite.T(), err)
 	assert.Equal(suite.T(), 3, len(txs))
 
@@ -131,7 +132,7 @@ func (suite *TxByHashSuite) TestAddFBDataToleratesFailedLookup() {
 
 	body, err := os.ReadFile("testdata/txbyhash_pending.json")
 	assert.Nil(suite.T(), err)
-	txs, err := parseTxByHash(body)
+	txs, err := parseTxByHash(body, nil)
 	assert.Nil(suite.T(), err)
 	assert.Equal(suite.T(), 3, len(txs))
 
@@ -173,7 +174,7 @@ func (suite *TxByHashSuite) TestAddFBDataMissingTxIsFailed() {
 	}))
 	defer srv.Close()
 
-	txs, err := parseTxByHash(suite.body)
+	txs, err := parseTxByHash(suite.body, nil)
 	assert.Nil(suite.T(), err)
 	txs = txs[:1]
 
@@ -206,7 +207,7 @@ func (suite *TxByHashSuite) TestAddFBDataToleratesHashCasing() {
 	body = strings.ReplaceAll(body, txHash, strings.ToUpper(txHash))
 	body = strings.ReplaceAll(body, blockHash, strings.ToUpper(blockHash))
 
-	txs, err := parseTxByHash([]byte(body))
+	txs, err := parseTxByHash([]byte(body), nil)
 	assert.Nil(suite.T(), err)
 	txs = txs[:1]
 	// the value received is stored as is, only comparisons are normalized
@@ -217,4 +218,126 @@ func (suite *TxByHashSuite) TestAddFBDataToleratesHashCasing() {
 	// the upper case tx hash is still found in the finalized block's tx set
 	assert.True(suite.T(), txs[0].FBContainsTx)
 	assert.Equal(suite.T(), c.TxFinalize, txs[0].Judge(uint64(18459500)))
+}
+
+const (
+	minedTxHash   = "0xad246b9af8a4bfd4043d6b0a700c70f084c79aa22a8677007716fc70ccefc7e7"
+	droppedTxHash = "0xfeedfacecafebeef1122334455667788990011223344556677889900aabbccdd"
+	minedTxHash2  = "0x50ddd63a864794c2375281929e025b56ef9356cd188b3b1299daf15fb0e842ca"
+)
+
+// droppedBatch is the batch the `txbyhash_dropped.json` fixture answers: the
+// jsonrpc ids in the response are 1-based indexes into it
+func droppedBatch() []c.Hashable {
+	return c.ToHashable([]c.TXH{{Hash: minedTxHash}, {Hash: droppedTxHash}, {Hash: minedTxHash2}})
+}
+
+// a `"result": null` entry -- the provider knows nothing about the tx -- must
+// be surfaced (with the hash it was requested with) rather than dropped on
+// the floor
+func (suite *TxByHashSuite) TestDroppedTxInBatchIsSurfaced() {
+	body, err := os.ReadFile("testdata/txbyhash_dropped.json")
+	assert.Nil(suite.T(), err)
+
+	txs, err := parseTxByHash(body, droppedBatch())
+	assert.Nil(suite.T(), err)
+	assert.Equal(suite.T(), 3, len(txs))
+
+	// the mined transactions are unaffected
+	assert.False(suite.T(), txs[0].Absent)
+	assert.Equal(suite.T(), minedTxHash, txs[0].Hash)
+	assert.False(suite.T(), txs[2].Absent)
+	assert.Equal(suite.T(), minedTxHash2, txs[2].Hash)
+
+	// the absent transaction is flagged and carries the requested hash
+	assert.True(suite.T(), txs[1].Absent)
+	assert.False(suite.T(), txs[1].Pending)
+	assert.Equal(suite.T(), droppedTxHash, txs[1].Hash)
+}
+
+// an absent tx whose donation block is older than the grace period is failed
+func (suite *TxByHashSuite) TestDroppedTxOlderThanGracePeriodIsFailed() {
+	body, err := os.ReadFile("testdata/txbyhash_dropped.json")
+	assert.Nil(suite.T(), err)
+
+	txs, err := parseTxByHash(body, droppedBatch())
+	assert.Nil(suite.T(), err)
+
+	tx := txs[1]
+	tx.DBBlockTime = time.Now().UTC().Add(-c.DroppedTxGracePeriod - time.Hour)
+	assert.Equal(suite.T(), c.TxDropped, tx.Judge(uint64(18459500)))
+}
+
+// ... an absent tx that has not been gone that long is left alone
+func (suite *TxByHashSuite) TestDroppedTxWithinGracePeriodIsLeftAlone() {
+	body, err := os.ReadFile("testdata/txbyhash_dropped.json")
+	assert.Nil(suite.T(), err)
+
+	txs, err := parseTxByHash(body, droppedBatch())
+	assert.Nil(suite.T(), err)
+
+	tx := txs[1]
+	tx.DBBlockTime = time.Now().UTC().Add(-c.DroppedTxGracePeriod + time.Hour)
+	assert.Equal(suite.T(), c.TxAbsent, tx.Judge(uint64(18459500)))
+
+	// an unknown donation block time leaves the donation alone as well
+	tx.DBBlockTime = time.Time{}
+	assert.Equal(suite.T(), c.TxAbsent, tx.Judge(uint64(18459500)))
+}
+
+// a `null` result whose jsonrpc id cannot be attributed to a request is
+// unusable: it must be skipped, never guessed at
+func (suite *TxByHashSuite) TestDroppedTxWithUnattributableIDIsSkipped() {
+	body, err := os.ReadFile("testdata/txbyhash_dropped.json")
+	assert.Nil(suite.T(), err)
+
+	// the batch the ids are resolved against is unknown
+	txs, err := parseTxByHash(body, nil)
+	assert.Nil(suite.T(), err)
+	assert.Equal(suite.T(), 2, len(txs))
+	for _, tx := range txs {
+		assert.False(suite.T(), tx.Absent)
+	}
+
+	// ... same for an id that is out of range for the batch
+	body = []byte(`[{"jsonrpc":"2.0","id":0,"result":null},{"jsonrpc":"2.0","id":99,"result":null}]`)
+	txs, err = parseTxByHash(body, droppedBatch())
+	assert.Nil(suite.T(), err)
+	assert.Equal(suite.T(), 0, len(txs))
+}
+
+// no block is ever fetched for an absent transaction: it has none, and block
+// number zero is not it
+func (suite *TxByHashSuite) TestAddFBDataSkipsAbsentTx() {
+	var (
+		mu        sync.Mutex
+		requested []string
+	)
+	fb, err := os.ReadFile("testdata/fb_18459476.json")
+	assert.Nil(suite.T(), err)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rb, rerr := io.ReadAll(r.Body)
+		if rerr != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		mu.Lock()
+		requested = append(requested, blockNumberRequested(suite, rb))
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(fb)
+	}))
+	defer srv.Close()
+
+	body, err := os.ReadFile("testdata/txbyhash_dropped.json")
+	assert.Nil(suite.T(), err)
+	txs, err := parseTxByHash(body, droppedBatch())
+	assert.Nil(suite.T(), err)
+
+	addFBData(c.Context{ETHRPCURL: srv.URL, CrawlerType: c.OldUnconfirmed}, txs)
+
+	mu.Lock()
+	assert.Equal(suite.T(), []string{"0x119ab54", "0x119aa80"}, requested)
+	mu.Unlock()
+	assert.False(suite.T(), txs[1].FBDataAvailable)
 }
