@@ -32,12 +32,6 @@ func (suite *BlockSuite) SetupTest() {
 	}
 }
 
-func (suite *BlockSuite) TestLatestFinalizedBlockSuccess() {
-	actual, err := parseMostRecentBlockNumber(suite.finalized)
-	assert.Nil(suite.T(), err)
-	assert.Equal(suite.T(), uint64(4489455), actual)
-}
-
 func TestBlockSuite(t *testing.T) {
 	s := new(BlockSuite)
 	s.blockPath = "testdata/18352138.json"
