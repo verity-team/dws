@@ -5,13 +5,22 @@ import (
 
 	"github.com/goccy/go-json"
 
+	log "github.com/sirupsen/logrus"
 	c "github.com/verity-team/dws/internal/common"
 )
 
 type TxReceiptBody struct {
-	Jsonrpc string      `json:"jsonrpc"`
-	ID      int         `json:"id"`
-	Result  c.TxReceipt `json:"result"`
+	Jsonrpc string          `json:"jsonrpc"`
+	ID      int             `json:"id"`
+	Result  c.TxReceipt     `json:"result"`
+	Error   *TxReceiptError `json:"error"`
+}
+
+// TxReceiptError is the error object a JSON-RPC server may return for an
+// individual sub-request in a batch.
+type TxReceiptError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
 }
 
 const batchSize = 127
@@ -85,6 +94,13 @@ func parseTxReceipt(body []byte) ([]c.TxReceipt, error) {
 	}
 	var res = make([]c.TxReceipt, len(resp))
 	for i, d := range resp {
+		switch {
+		case d.Error != nil:
+			log.Warnf("tx receipt request #%d failed: %d, %s", d.ID, d.Error.Code, d.Error.Message)
+		case d.Result.TransactionHash == "":
+			// null result: the tx is not indexed (yet)
+			log.Warnf("empty tx receipt for request #%d", d.ID)
+		}
 		res[i] = d.Result
 	}
 	return res, nil

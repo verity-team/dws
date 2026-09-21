@@ -11,6 +11,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
+	"github.com/verity-team/dws/api"
 	c "github.com/verity-team/dws/internal/common"
 )
 
@@ -121,4 +122,113 @@ func TestTxsSuite(t *testing.T) {
 		t.Fatalf("failed to init ABI, %s", err)
 	}
 	suite.Run(t, s)
+}
+
+type ApplyTxReceiptsSuite struct {
+	suite.Suite
+	rcpts []c.TxReceipt
+}
+
+const (
+	testRcptHash1 = "0xf270a01e1ffa619b5262df30dc93d5ea1cf4bff773d6494460a1755abae43989"
+	testRcptHash2 = "0xa3f8edb39ec6e8d81c1859c53d5073f3ca22116f0cd23add11cf4b6c632b4633"
+)
+
+func (suite *ApplyTxReceiptsSuite) SetupTest() {
+	body, err := os.ReadFile("testdata/eth_getTransactionReceipt.json")
+	if err != nil {
+		suite.Failf("failed to read test input", "%v", err)
+	}
+	suite.rcpts, err = parseTxReceipt(body)
+	if err != nil {
+		suite.Failf("failed to parse test input", "%v", err)
+	}
+	suite.Require().Equal(2, len(suite.rcpts))
+}
+
+func testTxs(hashes ...string) []c.Transaction {
+	txs := make([]c.Transaction, 0, len(hashes))
+	for _, h := range hashes {
+		txs = append(txs, c.Transaction{
+			TXH:    c.TXH{Hash: h},
+			Status: string(api.Unconfirmed),
+		})
+	}
+	return txs
+}
+
+// a truncated batch response must yield an error instead of panicking
+func (suite *ApplyTxReceiptsSuite) TestTruncatedReceiptBatch() {
+	txs := testTxs(testRcptHash1, testRcptHash2)
+	var err error
+	assert.NotPanics(suite.T(), func() {
+		err = applyTxReceipts(4404251, txs, suite.rcpts[:1])
+	})
+	assert.Error(suite.T(), err)
+	assert.Contains(suite.T(), err.Error(), testRcptHash2)
+}
+
+// an empty batch response must yield an error instead of panicking
+func (suite *ApplyTxReceiptsSuite) TestNoReceipts() {
+	txs := testTxs(testRcptHash1)
+	var err error
+	assert.NotPanics(suite.T(), func() {
+		err = applyTxReceipts(4404251, txs, nil)
+	})
+	assert.Error(suite.T(), err)
+	assert.Equal(suite.T(), string(api.Unconfirmed), txs[0].Status)
+}
+
+// JSON-RPC 2.0 permits batch responses in any order
+func (suite *ApplyTxReceiptsSuite) TestOutOfOrderReceipts() {
+	txs := testTxs(testRcptHash1, testRcptHash2)
+	rcpts := []c.TxReceipt{suite.rcpts[1], suite.rcpts[0]}
+	// the receipt for the second tx reports failure
+	rcpts[0].Status = "0x0"
+	err := applyTxReceipts(4404251, txs, rcpts)
+	assert.Nil(suite.T(), err)
+	assert.Equal(suite.T(), string(api.Unconfirmed), txs[0].Status)
+	assert.Equal(suite.T(), string(api.Failed), txs[1].Status)
+}
+
+// providers may return hashes in either casing
+func (suite *ApplyTxReceiptsSuite) TestMixedCaseReceiptHash() {
+	txs := testTxs(testRcptHash1)
+	rcpts := []c.TxReceipt{suite.rcpts[0]}
+	rcpts[0].TransactionHash = strings.ToUpper(rcpts[0].TransactionHash)
+	err := applyTxReceipts(4404251, txs, rcpts)
+	assert.Nil(suite.T(), err)
+	assert.Equal(suite.T(), string(api.Unconfirmed), txs[0].Status)
+}
+
+// a 'null' result or an error object for a sub-request decodes into a
+// zero value receipt -- it must not be correlated with any tx
+func (suite *ApplyTxReceiptsSuite) TestNullAndErrorResults() {
+	body, err := os.ReadFile("testdata/eth_getTransactionReceipt_partial.json")
+	assert.Nil(suite.T(), err)
+	rcpts, err := parseTxReceipt(body)
+	assert.Nil(suite.T(), err)
+	assert.Equal(suite.T(), 3, len(rcpts))
+
+	txs := testTxs(testRcptHash1, testRcptHash2)
+	assert.NotPanics(suite.T(), func() {
+		err = applyTxReceipts(4404251, txs, rcpts)
+	})
+	assert.Error(suite.T(), err)
+	assert.Contains(suite.T(), err.Error(), testRcptHash2)
+
+	// the tx that does have a receipt is processed normally
+	txs = testTxs(testRcptHash1)
+	err = applyTxReceipts(4404251, txs, rcpts)
+	assert.Nil(suite.T(), err)
+	assert.Equal(suite.T(), string(api.Unconfirmed), txs[0].Status)
+}
+
+func (suite *ApplyTxReceiptsSuite) TestNoTransactions() {
+	err := applyTxReceipts(4404251, nil, nil)
+	assert.Nil(suite.T(), err)
+}
+
+func TestApplyTxReceiptsSuite(t *testing.T) {
+	suite.Run(t, new(ApplyTxReceiptsSuite))
 }

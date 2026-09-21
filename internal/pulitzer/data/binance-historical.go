@@ -27,8 +27,21 @@ func GetHistoricalPriceFromBinance(ts time.Time) ([]Kline, error) {
 		return nil, err
 	}
 
+	klines, err := parseKlines(responseBody)
+	if err != nil {
+		err = fmt.Errorf("failed to parse binance klines for %s, %w", ts.UTC().Format(time.RFC3339), err)
+		log.Error(err)
+		return nil, err
+	}
+	return klines, nil
+}
+
+// parseKlines converts a binance klines response into a non-empty slice of
+// Kline values; an empty result is an error -- the caller has no prices to
+// persist in that case.
+func parseKlines(responseBody []byte) ([]Kline, error) {
 	var klineData [][]interface{}
-	if err = json.Unmarshal(responseBody, &klineData); err != nil {
+	if err := json.Unmarshal(responseBody, &klineData); err != nil {
 		return nil, err
 	}
 
@@ -67,6 +80,9 @@ func GetHistoricalPriceFromBinance(ts time.Time) ([]Kline, error) {
 			Volume:     v,
 			CloseTime:  ct.UTC(),
 		})
+	}
+	if len(klines) == 0 {
+		return nil, fmt.Errorf("no valid klines in response (%d entries)", len(klineData))
 	}
 	return klines, nil
 }
