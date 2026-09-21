@@ -441,26 +441,25 @@ func monitorOldUnconfirmed(ctx context.Context) error {
 		default:
 			// keep going
 		}
-		if tx.BlockNumber <= mfbn {
-			// finalized block hash does not match the tx block hash or
-			// finalized block does not contain the tx in question
-			//		=> fail tx
-			failTx := tx.BlockHash != tx.FBBlockHash || !tx.FBContainsTx
-			if failTx {
-				log.Warnf("invalid old unconfirmed tx (%s)", tx.Hash)
-				err = db.FailTx(*ctxt, tx)
-				if err != nil {
-					return err
-				}
-			} else {
-				log.Infof("##### finalizing old tx %s", tx.Hash)
-				err = db.FinalizeTx(*ctxt, tx)
-				if err != nil {
-					return err
-				}
+		// a donation is only ever failed on positive evidence (see
+		// c.TxByHash.Judge): a pending tx or a tx we could not fetch the
+		// finalized block for is left untouched and re-examined on a later
+		// run
+		switch verdict := tx.Judge(mfbn); verdict {
+		case c.TxFail:
+			log.Warnf("invalid old unconfirmed tx (%s)", tx.Hash)
+			err = db.FailTx(*ctxt, tx)
+			if err != nil {
+				return err
 			}
-		} else {
-			log.Warnf("old unconfirmed tx (%s) not finalized yet", tx.Hash)
+		case c.TxFinalize:
+			log.Infof("##### finalizing old tx %s", tx.Hash)
+			err = db.FinalizeTx(*ctxt, tx)
+			if err != nil {
+				return err
+			}
+		default:
+			log.Warnf("old unconfirmed tx (%s) left untouched, %s", tx.Hash, verdict)
 		}
 	}
 	return nil

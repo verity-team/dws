@@ -2,6 +2,7 @@ package common
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -206,13 +207,30 @@ type FinalizedBlock struct {
 	Transactions  []string  `db:"transactions" json:"transactions"`
 }
 
+// TXMap returns the set of transaction hashes carried by the block, keyed by
+// normalized hash -- look up with NormalizeHash(hash).
 func (fb *FinalizedBlock) TXMap() map[string]bool {
-	txm := make(map[string]bool)
+	txm := make(map[string]bool, len(fb.Transactions))
 	for _, hash := range fb.Transactions {
-		txm[hash] = true
+		txm[NormalizeHash(hash)] = true
 	}
 	return txm
 }
+
+const (
+	// PendingBlockNumber is the block number of a transaction that is still
+	// in the mempool and hence has no block. math.MaxUint64 is used as the
+	// sentinel because it cannot be mistaken for a real ethereum block
+	// number: it is not reachable in practice and it is *greater* than every
+	// block number the chain will ever produce -- every "has this block been
+	// finalized?" comparison is false for it.
+	PendingBlockNumber uint64 = math.MaxUint64
+	// PendingTransactionIndex is the position of a transaction that is still
+	// in the mempool and hence has no position in a block. Same sentinel,
+	// same reasoning: block position 0 is a real position, math.MaxUint64 is
+	// not.
+	PendingTransactionIndex uint64 = math.MaxUint64
+)
 
 type TxByHash struct {
 	BlockHash        string `json:"blockHash"`
@@ -224,6 +242,77 @@ type TxByHash struct {
 	FBBlockTime      time.Time
 	FBBlockHash      string
 	FBContainsTx     bool
+	// FBDataAvailable indicates whether the data of the block that finalizes
+	// this transaction could be fetched. If it is false the FB* fields above
+	// are meaningless and no verdict may be derived from them.
+	FBDataAvailable bool
+	// Pending indicates that the transaction is still in the mempool: it has
+	// no block (yet) and may still be mined.
+	Pending bool
+}
+
+// TxVerdict is the outcome of judging an old unconfirmed transaction.
+type TxVerdict int
+
+const (
+	// TxPending -- the transaction is still in the mempool, leave it alone.
+	TxPending TxVerdict = iota
+	// TxNotFinalizedYet -- the block containing the transaction has not been
+	// finalized yet, leave it alone.
+	TxNotFinalizedYet
+	// TxNoFinalizedBlockData -- the block that finalizes the transaction
+	// could not be fetched, leave it alone.
+	TxNoFinalizedBlockData
+	// TxFinalize -- the finalized block carries the transaction, confirm it.
+	TxFinalize
+	// TxFail -- the finalized block for the transaction's block number does
+	// not carry it, fail it.
+	TxFail
+)
+
+func (v TxVerdict) String() string {
+	switch v {
+	case TxPending:
+		return "still in the mempool"
+	case TxNotFinalizedYet:
+		return "not finalized yet"
+	case TxNoFinalizedBlockData:
+		return "no finalized block data"
+	case TxFinalize:
+		return "finalize"
+	case TxFail:
+		return "fail"
+	}
+	return "invalid tx verdict"
+}
+
+// Judge decides what is to be done with an old unconfirmed transaction, given
+// the number of the most recent finalized block (mfbn).
+//
+// A transaction is failed on positive evidence only: the finalized block for
+// its block number exists and does *not* carry it (re-org, replacement).
+// A pending transaction has no block at all and may still be mined, and a
+// transaction whose finalized block could not be fetched was not looked at --
+// absence of evidence is not evidence of failure. Both are left alone and are
+// re-examined on the next run.
+func (t TxByHash) Judge(mfbn uint64) TxVerdict {
+	if t.Pending {
+		return TxPending
+	}
+	if t.BlockNumber > mfbn {
+		return TxNotFinalizedYet
+	}
+	if !t.FBDataAvailable {
+		return TxNoFinalizedBlockData
+	}
+	// the finalized block hash must match the tx block hash and the finalized
+	// block must actually contain the tx in question. Hashes are compared
+	// normalized: a provider that reports a differently cased hash must not
+	// cost a donor their donation.
+	if NormalizeHash(t.BlockHash) != NormalizeHash(t.FBBlockHash) || !t.FBContainsTx {
+		return TxFail
+	}
+	return TxFinalize
 }
 
 func (t *TxByHash) UnmarshalJSON(data []byte) error {
@@ -245,6 +334,22 @@ func (t *TxByHash) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
+	t.BlockHash = pd.BlockHash
+	t.From = pd.From
+	t.Hash = pd.Hash
+	t.To = pd.To
+
+	// a transaction that is still in the mempool has no block: the jsonrpc
+	// API provider reports `null` for its block number/hash and its position
+	// in the block. That is a valid state, not a malformed response -- fail
+	// the decode and a single pending transaction poisons the whole batch.
+	if pd.BlockNumber == "" || pd.TransactionIndex == "" {
+		t.Pending = true
+		t.BlockNumber = PendingBlockNumber
+		t.TransactionIndex = PendingTransactionIndex
+		return nil
+	}
+
 	bn, err := HexStringToDecimal(pd.BlockNumber)
 	if err != nil {
 		err = fmt.Errorf("failed to convert block number, %w", err)
@@ -258,11 +363,6 @@ func (t *TxByHash) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	t.TransactionIndex = uint64(tidx.IntPart())
-
-	t.BlockHash = pd.BlockHash
-	t.From = pd.From
-	t.Hash = pd.Hash
-	t.To = pd.To
 
 	return nil
 }

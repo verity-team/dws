@@ -11,6 +11,13 @@ func TestConvertValue(t *testing.T) {
 	_, err := HexStringToDecimal("not a number")
 	assert.NotNil(t, err, "Expected an error")
 
+	// an empty hex string is *not* zero; callers rely on this to detect the
+	// `null` block number/transaction index of a pending transaction
+	_, err = HexStringToDecimal("")
+	assert.NotNil(t, err, "Expected an error")
+	_, err = HexStringToDecimal("0x")
+	assert.NotNil(t, err, "Expected an error")
+
 	a, err := HexStringToDecimal("0xa")
 	assert.Nil(t, err)
 	assert.Equal(t, decimal.NewFromInt(10), a)

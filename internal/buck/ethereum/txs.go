@@ -133,7 +133,7 @@ func applyTxReceipts(bn uint64, txs []c.Transaction, rcpts []c.TxReceipt) error 
 	// providers may return either casing, the repo convention is lower case
 	byHash := make(map[string]c.TxReceipt, len(rcpts))
 	for _, rcpt := range rcpts {
-		hash := strings.ToLower(strings.TrimSpace(rcpt.TransactionHash))
+		hash := c.NormalizeHash(rcpt.TransactionHash)
 		if hash == "" {
 			// null result or error object in the batch response; the
 			// transaction(s) affected are reported below
@@ -142,7 +142,7 @@ func applyTxReceipts(bn uint64, txs []c.Transaction, rcpts []c.TxReceipt) error 
 		byHash[hash] = rcpt
 	}
 	for i := range txs {
-		rcpt, ok := byHash[strings.ToLower(strings.TrimSpace(txs[i].Hash))]
+		rcpt, ok := byHash[c.NormalizeHash(txs[i].Hash)]
 		if !ok {
 			err := fmt.Errorf("block: %d -- no tx receipt for tx '%s' (%d usable receipt(s) for %d tx(s))", bn, txs[i].Hash, len(byHash), len(txs))
 			log.Error(err)
