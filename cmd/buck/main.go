@@ -16,6 +16,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	_ "github.com/lib/pq"
+	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
 	"github.com/verity-team/dws/internal/buck/db"
 	eth "github.com/verity-team/dws/internal/buck/ethereum"
@@ -337,13 +338,57 @@ func runReadyProbe(ctxt c.Context) error {
 	return err
 }
 
+// buckDeps is the set of ethereum/database operations the crawler loops
+// perform. Production code uses liveDeps(), the tests substitute doubles: the
+// block-range arithmetic of monitorETH and the verdict dispatch of
+// monitorOldUnconfirmed decide whether a donation is recorded, confirmed or
+// failed and must be exercised without a chain and without a database.
+type buckDeps struct {
+	mostRecentBlockNumber func(ctxt c.Context) (uint64, error)
+	getLastBlock          func(dbh *sqlx.DB, chain, label string) (uint64, error)
+	setLastBlock          func(ctxt c.Context, chain string, lbn uint64) error
+	getTransactions       func(ctxt c.Context, bn uint64) ([]c.Transaction, error)
+	getETHPrice           func(dbh *sqlx.DB, ts time.Time) (decimal.Decimal, error)
+	requestPrice          func(ctxt c.Context, asset string, ts time.Time) error
+	persistTxs            func(ctxt c.Context, bn uint64, ethPrice decimal.Decimal, txs []c.Transaction) error
+	getOldUnconfirmed     func(dbh *sqlx.DB) ([]c.UnconfirmedTx, error)
+	getTxsByHash          func(ctxt c.Context, hs []c.Hashable) ([]c.TxByHash, error)
+	failTx                func(ctxt c.Context, tx c.TxByHash) error
+	finalizeTx            func(ctxt c.Context, tx c.TxByHash) error
+}
+
+// liveDeps is the production wiring. It is a variable so that the tests can
+// substitute it and verify that the wrappers below really hand *this* set of
+// dependencies to the loops; nothing in production ever assigns to it.
+var liveDeps = func() buckDeps {
+	return buckDeps{
+		mostRecentBlockNumber: eth.MostRecentBlockNumber,
+		getLastBlock:          db.GetLastBlock,
+		setLastBlock:          db.SetLastBlock,
+		getTransactions:       eth.GetTransactions,
+		getETHPrice:           c.GetETHPrice,
+		requestPrice:          db.RequestPrice,
+		persistTxs:            db.PersistTxs,
+		getOldUnconfirmed:     db.GetOldUnconfirmed,
+		getTxsByHash: func(ctxt c.Context, hs []c.Hashable) ([]c.TxByHash, error) {
+			return eth.GetData[c.TxByHash](ctxt, hs, eth.TXBHFetcher{})
+		},
+		failTx:     db.FailTx,
+		finalizeTx: db.FinalizeTx,
+	}
+}
+
 func monitorETH(ctx context.Context) error {
+	return monitorETHWith(ctx, liveDeps())
+}
+
+func monitorETHWith(ctx context.Context, deps buckDeps) error {
 	ctxt, ok := ctx.Value(c.BuckContext).(*c.Context)
 	if !ok {
 		return errors.New("invalid buck context")
 	}
 	// most recent ETH block published
-	mrbn, err := eth.MostRecentBlockNumber(*ctxt)
+	mrbn, err := deps.mostRecentBlockNumber(*ctxt)
 	if err != nil {
 		log.Error(err)
 		return err
@@ -351,7 +396,7 @@ func monitorETH(ctx context.Context) error {
 	log.Infof("===>> buck/%s tip of the ETH chain: %d", ctxt.CrawlerType, mrbn)
 
 	// number of last block that was processed
-	lpbn, err := db.GetLastBlock(ctxt.DB, "eth", ctxt.CrawlerType.String())
+	lpbn, err := deps.getLastBlock(ctxt.DB, "eth", ctxt.CrawlerType.String())
 	if err != nil {
 		return err
 	}
@@ -374,7 +419,7 @@ func monitorETH(ctx context.Context) error {
 		default:
 			// keep going
 		}
-		err = processETH(*ctxt, i)
+		err = processETHWith(*ctxt, i, deps)
 		if err != nil {
 			return err
 		}
@@ -383,14 +428,18 @@ func monitorETH(ctx context.Context) error {
 }
 
 func processETH(ctxt c.Context, bn uint64) error {
-	txs, err := eth.GetTransactions(ctxt, bn)
+	return processETHWith(ctxt, bn, liveDeps())
+}
+
+func processETHWith(ctxt c.Context, bn uint64, deps buckDeps) error {
+	txs, err := deps.getTransactions(ctxt, bn)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
 	log.Infof("block %d: %d filtered transactions", bn, len(txs))
 	if len(txs) == 0 {
-		err = db.SetLastBlock(ctxt, "eth", bn)
+		err = deps.setLastBlock(ctxt, "eth", bn)
 		if err != nil {
 			return err
 		}
@@ -400,19 +449,19 @@ func processETH(ctxt c.Context, bn uint64) error {
 	// we only get the ETH price if we need to persist transactions
 	// get ETH price at the time the block was published
 	blockTime := txs[0].BlockTime
-	ethPrice, err := c.GetETHPrice(ctxt.DB, blockTime)
+	ethPrice, err := deps.getETHPrice(ctxt.DB, blockTime)
 	if err != nil {
 		// request the missing price and let's hope it is avaiable next time we
 		// need it
 		log.Infof("requesting price for ETH/%s", blockTime.Format(time.RFC3339))
-		err2 := db.RequestPrice(ctxt, "eth", blockTime)
+		err2 := deps.requestPrice(ctxt, "eth", blockTime)
 		if err2 != nil {
 			log.Errorf("failed to request price for ETH/%s, %v", blockTime, err2)
 		}
 		return err
 	}
 	log.Infof("eth price: %s", ethPrice)
-	err = db.PersistTxs(ctxt, bn, ethPrice, txs)
+	err = deps.persistTxs(ctxt, bn, ethPrice, txs)
 	if err != nil {
 		log.Error(err)
 		return err
@@ -421,11 +470,15 @@ func processETH(ctxt c.Context, bn uint64) error {
 }
 
 func monitorOldUnconfirmed(ctx context.Context) error {
+	return monitorOldUnconfirmedWith(ctx, liveDeps())
+}
+
+func monitorOldUnconfirmedWith(ctx context.Context, deps buckDeps) error {
 	ctxt, ok := ctx.Value(c.BuckContext).(*c.Context)
 	if !ok {
 		return errors.New("buck/old-unconfirmed invalid buck context")
 	}
-	hashes, err := db.GetOldUnconfirmed(ctxt.DB)
+	hashes, err := deps.getOldUnconfirmed(ctxt.DB)
 	if err != nil {
 		return err
 	}
@@ -444,13 +497,13 @@ func monitorOldUnconfirmed(ctx context.Context) error {
 	}
 
 	// most recent *finalized* ETH block published
-	mfbn, err := eth.MostRecentBlockNumber(*ctxt)
+	mfbn, err := deps.mostRecentBlockNumber(*ctxt)
 	if err != nil {
 		return err
 	}
 	log.Infof("##### max finalized ETH block: %d", mfbn)
 
-	txs, err := eth.GetData[c.TxByHash](*ctxt, c.ToHashable(hashes), eth.TXBHFetcher{})
+	txs, err := deps.getTxsByHash(*ctxt, c.ToHashable(hashes))
 	if err != nil {
 		return err
 	}
@@ -472,13 +525,13 @@ func monitorOldUnconfirmed(ctx context.Context) error {
 		switch verdict := tx.Judge(mfbn); verdict {
 		case c.TxFail, c.TxDropped:
 			log.Warnf("failing old unconfirmed tx (%s), %s", tx.Hash, verdict)
-			err = db.FailTx(*ctxt, tx)
+			err = deps.failTx(*ctxt, tx)
 			if err != nil {
 				return err
 			}
 		case c.TxFinalize:
 			log.Infof("##### finalizing old tx %s", tx.Hash)
-			err = db.FinalizeTx(*ctxt, tx)
+			err = deps.finalizeTx(*ctxt, tx)
 			if err != nil {
 				return err
 			}
