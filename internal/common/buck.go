@@ -176,6 +176,15 @@ func (tx TXH) GetHash() string {
 	return tx.Hash
 }
 
+// UnconfirmedTx is the transaction hash of an unconfirmed donation together
+// with the block time recorded for it. The block time is what decides whether
+// a transaction that has vanished from the chain has been gone long enough to
+// be declared dead (see DroppedTxGracePeriod).
+type UnconfirmedTx struct {
+	TXH
+	BlockTime time.Time `db:"block_time"`
+}
+
 type Transaction struct {
 	TXH
 	From        string          `db:"address" json:"from"`
@@ -250,7 +259,30 @@ type TxByHash struct {
 	// Pending indicates that the transaction is still in the mempool: it has
 	// no block (yet) and may still be mined.
 	Pending bool
+	// Absent indicates that the jsonrpc API provider knows nothing about the
+	// transaction: it is in no block *and* in no mempool. The remaining
+	// fields of this struct carry no information in that case.
+	Absent bool
+	// DBBlockTime is the block time recorded for the donation in the
+	// database, i.e. the time of the block the transaction was originally
+	// seen in. It is only consulted for an absent transaction and is the zero
+	// time if it is not known -- which leaves the donation alone.
+	DBBlockTime time.Time
 }
+
+// DroppedTxGracePeriod is how long a transaction that is absent from both the
+// chain and the mempool is given to (re-)appear before the donation is
+// declared dead.
+//
+// A transaction we watched get mined and that is now in no block and in no
+// mempool was evicted by a re-org and never re-mined: it was replaced at the
+// same nonce, the nonce was consumed elsewhere or it was dropped as
+// underpriced. No money moved and the donation row is a phantom.
+//
+// 24 hours is far beyond post-merge finality (~12.8 minutes) and beyond any
+// plausible re-broadcast window, so a transaction still missing after it is
+// not coming back.
+const DroppedTxGracePeriod = 24 * time.Hour
 
 // TxVerdict is the outcome of judging an old unconfirmed transaction.
 type TxVerdict int
@@ -269,6 +301,12 @@ const (
 	// TxFail -- the finalized block for the transaction's block number does
 	// not carry it, fail it.
 	TxFail
+	// TxAbsent -- the transaction is in no block and in no mempool but has
+	// not been gone long enough to be declared dead, leave it alone.
+	TxAbsent
+	// TxDropped -- the transaction has been absent from both the chain and
+	// the mempool for longer than DroppedTxGracePeriod, fail it.
+	TxDropped
 )
 
 func (v TxVerdict) String() string {
@@ -283,6 +321,10 @@ func (v TxVerdict) String() string {
 		return "finalize"
 	case TxFail:
 		return "fail"
+	case TxAbsent:
+		return fmt.Sprintf("absent from chain and mempool for less than %s", DroppedTxGracePeriod)
+	case TxDropped:
+		return fmt.Sprintf("absent from chain and mempool for more than %s", DroppedTxGracePeriod)
 	}
 	return "invalid tx verdict"
 }
@@ -296,7 +338,21 @@ func (v TxVerdict) String() string {
 // transaction whose finalized block could not be fetched was not looked at --
 // absence of evidence is not evidence of failure. Both are left alone and are
 // re-examined on the next run.
+//
+// A transaction the provider knows nothing about at all is the one case where
+// the passage of time is the evidence: it is failed (TxDropped) once it has
+// been gone for longer than DroppedTxGracePeriod, and left alone (TxAbsent)
+// until then.
 func (t TxByHash) Judge(mfbn uint64) TxVerdict {
+	if t.Absent {
+		// no block, no mempool entry, nothing to compare -- the age of the
+		// donation is all we have to go on. An unknown block time (the zero
+		// time) leaves the donation alone.
+		if t.DBBlockTime.IsZero() || time.Since(t.DBBlockTime) < DroppedTxGracePeriod {
+			return TxAbsent
+		}
+		return TxDropped
+	}
 	if t.Pending {
 		return TxPending
 	}

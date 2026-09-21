@@ -435,6 +435,14 @@ func monitorOldUnconfirmed(ctx context.Context) error {
 	}
 	log.Infof("##### old unconfirmed txs: %v", hashes)
 
+	// a transaction that is absent from the chain carries no block data; the
+	// block time recorded for the donation is what decides whether it has
+	// been gone long enough to be declared dead
+	blockTimes := make(map[string]time.Time, len(hashes))
+	for _, h := range hashes {
+		blockTimes[c.NormalizeHash(h.Hash)] = h.BlockTime
+	}
+
 	// most recent *finalized* ETH block published
 	mfbn, err := eth.MostRecentBlockNumber(*ctxt)
 	if err != nil {
@@ -454,13 +462,16 @@ func monitorOldUnconfirmed(ctx context.Context) error {
 		default:
 			// keep going
 		}
+		if tx.Absent {
+			tx.DBBlockTime = blockTimes[c.NormalizeHash(tx.Hash)]
+		}
 		// a donation is only ever failed on positive evidence (see
 		// c.TxByHash.Judge): a pending tx or a tx we could not fetch the
 		// finalized block for is left untouched and re-examined on a later
 		// run
 		switch verdict := tx.Judge(mfbn); verdict {
-		case c.TxFail:
-			log.Warnf("invalid old unconfirmed tx (%s)", tx.Hash)
+		case c.TxFail, c.TxDropped:
+			log.Warnf("failing old unconfirmed tx (%s), %s", tx.Hash, verdict)
 			err = db.FailTx(*ctxt, tx)
 			if err != nil {
 				return err

@@ -528,3 +528,77 @@ func TestPersistTxsOpenCampaignIssuesTokens(t *testing.T) {
 	require.EqualValues(t, 200000, tokens)
 	require.Equal(t, "open", campaignStatus(t, dbh))
 }
+
+func insertDonationAt(t *testing.T, dbh *sqlx.DB, hash, status string, age time.Duration) time.Time {
+	t.Helper()
+
+	q := `
+		INSERT INTO donation(
+			address, amount, usd_amount, asset, tokens, price, tx_hash, status,
+			block_number, block_hash, block_time)
+		VALUES(
+			'0x00000000000000000000000000000000000000ff', 1.0, 10.00, 'usdt', 100,
+			0.001, $1, $2, 1, '0xblock', timezone('utc', now()) - $3::interval)
+		RETURNING timezone('utc', block_time)
+		`
+	var bt time.Time
+	require.NoError(t, dbh.Get(&bt, q, hash, status, fmt.Sprintf("%d seconds", int64(age.Seconds()))))
+
+	return bt
+}
+
+// #216: the old-unconfirmed crawler needs the donation's block time to decide
+// whether a transaction that vanished from the chain has been gone long
+// enough to be declared dead.
+func TestGetOldUnconfirmedReturnsBlockTime(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+
+	oldHash := "0x8888888888888888888888888888888888888888888888888888888888888888"
+	youngHash := "0x9999999999999999999999999999999999999999999999999999999999999999"
+	confirmedHash := "0xaaaa111111111111111111111111111111111111111111111111111111111111"
+	oldBT := insertDonationAt(t, dbh, oldHash, "unconfirmed", 25*time.Hour)
+	insertDonationAt(t, dbh, youngHash, "unconfirmed", 10*time.Minute)
+	insertDonationAt(t, dbh, confirmedHash, "confirmed", 25*time.Hour)
+
+	txs, err := GetOldUnconfirmed(dbh)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(txs))
+	require.Equal(t, oldHash, txs[0].Hash)
+	require.WithinDuration(t, oldBT, txs[0].BlockTime, time.Second)
+
+	// ... and the block time is old enough for the transaction to be
+	// declared dead once the provider reports it as absent
+	tx := c.TxByHash{Hash: txs[0].Hash, Absent: true, DBBlockTime: txs[0].BlockTime}
+	require.Equal(t, c.TxDropped, tx.Judge(uint64(1)))
+}
+
+// #216: a dropped transaction has no finalized block; the failed_tx record
+// must still carry the block time the donation was seen with.
+func TestFailTxForDroppedTxRecordsDonationBlockTime(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	ctxt := testContext(dbh)
+
+	hash := "0xbbbb111111111111111111111111111111111111111111111111111111111111"
+	goodHash := "0xcccc111111111111111111111111111111111111111111111111111111111111"
+	bt := insertDonationAt(t, dbh, hash, "unconfirmed", 25*time.Hour)
+	insertDonation(t, dbh, goodHash, "confirmed", "100.00", 1000)
+	// stale stats: the phantom donation was counted by mistake
+	_, err := dbh.Exec(`UPDATE donation_stats SET total=110.00, tokens=1100`)
+	require.NoError(t, err)
+
+	// no FB* data at all: the provider knows nothing about the transaction
+	require.NoError(t, FailTx(ctxt, c.TxByHash{Hash: hash, Absent: true, DBBlockTime: bt}))
+
+	require.Equal(t, "failed", donationStatus(t, dbh, hash))
+	require.Equal(t, 1, failedTxCount(t, dbh, hash))
+	var ftBT time.Time
+	require.NoError(t, dbh.Get(&ftBT, `SELECT block_time FROM failed_tx WHERE tx_hash=$1`, hash))
+	require.WithinDuration(t, bt, ftBT, time.Second)
+
+	// the phantom donation no longer counts towards the campaign totals
+	total, tokens := donationStats(t, dbh)
+	require.Equal(t, "100.00", total)
+	require.EqualValues(t, 1000, tokens)
+}
