@@ -8,6 +8,8 @@ export type AffiliateCode = string | "none";
 export interface WalletAffiliateRequest {
   code: AffiliateCode;
   address: string;
+  timestamp: number;
+  signature: string;
 }
 
 export interface WalletAffiliateResponse {

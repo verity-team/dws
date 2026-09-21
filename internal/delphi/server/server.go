@@ -53,9 +53,30 @@ func getError(code int, msg string, err error) (api.Error, error) {
 	return cerr, nerr
 }
 
-func (s *DelphiServer) ConnectWallet(ctx echo.Context) error {
+func (s *DelphiServer) ConnectWallet(ctx echo.Context, params api.ConnectWalletParams) error {
+	authTS, err := getTS(params.DelphiTs)
+	if err != nil {
+		cerr, _ := getError(113, "", err)
+		return ctx.JSON(http.StatusBadRequest, cerr)
+	}
+	if authTSTooOld(authTS) {
+		err = fmt.Errorf("/wallet/connection delphi-ts ('%s') is not recent enough for address '%s'", params.DelphiTs, params.DelphiKey)
+		log.Error(err)
+		cerr := api.Error{
+			Code:    114,
+			Message: "timestamp is not recent enough",
+		}
+		return ctx.JSON(http.StatusBadRequest, cerr)
+	}
+
+	authOK := verifySig(params.DelphiKey, formMsg(ctx.Path(), authTS), params.DelphiSignature)
+	if !authOK {
+		return ctx.NoContent(http.StatusUnauthorized)
+	}
+	log.Infof("auth OK for /wallet/connection request, address '%s'", params.DelphiKey)
+
 	var cr api.ConnectionRequest
-	err := ctx.Bind(&cr)
+	err = ctx.Bind(&cr)
 	if err != nil {
 		cerr, err := getError(101, "failed to bind POST param (ConnectionRequest)", err)
 		log.Error(err)
@@ -65,17 +86,20 @@ func (s *DelphiServer) ConnectWallet(ctx echo.Context) error {
 		cerr := api.Error{Code: 102, Message: "invalid ethereum address"}
 		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
+	// the caller may only connect the wallet it has proven ownership of
+	if !strings.EqualFold(cr.Address, params.DelphiKey) {
+		log.Errorf("/wallet/connection address mismatch, delphi-key '%s'", params.DelphiKey)
+		return ctx.NoContent(http.StatusUnauthorized)
+	}
+	// every read path lowercases the address; do the same before writing so
+	// the duplicate detection in db.ConnectWallet can match
+	cr.Address = strings.ToLower(cr.Address)
 	if err = db.ConnectWallet(s.db, cr); err != nil {
 		cerr, err := getError(104, "failed to log wallet connection", err)
 		log.Error(err)
 		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
-	udr, err := s.getUserData(strings.ToLower(cr.Address))
-	if err != nil {
-		cerr, _ := getError(105, "", err)
-		return ctx.JSON(http.StatusInternalServerError, cerr)
-	}
-	return ctx.JSON(http.StatusOK, *udr)
+	return ctx.JSON(http.StatusOK, struct{}{})
 }
 
 func (s *DelphiServer) getUserData(address string) (*api.UserDataResult, error) {
@@ -137,6 +161,12 @@ func verifySig(from, msg, sigHex string) bool {
 	sig, err := hexutil.Decode(sigHex)
 	if err != nil {
 		err = fmt.Errorf("invalid sig ('%s'), %w", sigHex, err)
+		log.Error(err)
+		return false
+	}
+
+	if len(sig) != crypto.SignatureLength {
+		err = fmt.Errorf("invalid sig length (%d), expected %d", len(sig), crypto.SignatureLength)
 		log.Error(err)
 		return false
 	}

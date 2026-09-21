@@ -26,7 +26,13 @@ export const connectWalletWithAffiliate = async (
         return false;
       }
 
-      if (response.ok || response.status === 400 || response.status === 404) {
+      if (
+        response.ok ||
+        response.status === 400 ||
+        response.status === 401 ||
+        response.status === 404
+      ) {
+        // a stale/invalid signature will not become valid on a retry
         return false;
       }
 
