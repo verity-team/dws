@@ -56,8 +56,7 @@ func GetOpenPriceRequests(dbh *sqlx.DB) ([]PriceReq, error) {
 	return result, nil
 }
 
-func CloseRequest(dbh *sqlx.DB, rid uint64, data []data.Kline) error {
-	var err error
+func CloseRequest(dbh *sqlx.DB, rid uint64, data []data.Kline) (err error) {
 	// start transaction
 	dtx, err := dbh.Beginx()
 	if err != nil {
@@ -69,8 +68,11 @@ func CloseRequest(dbh *sqlx.DB, rid uint64, data []data.Kline) error {
 	defer func() {
 		if err != nil {
 			dtx.Rollback() // nolint:errcheck
-		} else {
-			dtx.Commit() // nolint:errcheck
+			return
+		}
+		if cerr := dtx.Commit(); cerr != nil {
+			err = fmt.Errorf("failed to commit price request #%d, %w", rid, cerr)
+			log.Error(err)
 		}
 	}()
 

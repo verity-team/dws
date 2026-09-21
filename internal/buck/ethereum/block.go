@@ -34,57 +34,53 @@ func fetchBlock(ctxt c.Context, bn uint64) ([]byte, error) {
 
 	log.Infof("fetched block %d", bn)
 
-	err = writeBlockToFile(ctxt, bn, body)
-	if err != nil {
-		return nil, err
-	}
 	return body, nil
 }
 
 func GetBlock(ctxt c.Context, bn uint64) (*c.Block, error) {
-	var (
-		body      []byte
-		err       error
-		freshCopy bool
-	)
 	// try getting the finalized block from the cache
-	body, err = getFinalizedBlockFromCache(ctxt, bn)
+	body, err := getFinalizedBlockFromCache(ctxt, bn)
 	if err != nil {
 		log.Debugf("block %d not in cache", bn)
-	} else {
+	} else if body != nil {
 		log.Infof("****** block %d served from cache", bn)
+		block, perr := parseBlock(body, bn)
+		if perr == nil {
+			return block, nil
+		}
+		// hmm .. maybe the cached copy was corrupted .. fetch again and retry
+		perr = fmt.Errorf("failed to parse cached block #%d, %w", bn, perr)
+		log.Error(perr)
 	}
 
-	if body == nil {
-		// not found in cache -- get it from the ethereum jsonrpc API provider
-		body, err = fetchBlock(ctxt, bn)
-		if err != nil {
-			return nil, err
-		}
-		freshCopy = true
+	// not found in cache (or the cached copy is unusable) -- get it from the
+	// ethereum jsonrpc API provider
+	body, err = fetchBlock(ctxt, bn)
+	if err != nil {
+		return nil, err
 	}
-	block, err := parseBlock(body)
+	block, err := parseBlock(body, bn)
 	if err != nil {
 		err = fmt.Errorf("failed to parse block #%d, %w", bn, err)
 		log.Error(err)
-		if freshCopy {
-			return nil, err
-		}
-		// hmm .. maybe the cached copy was corrupted .. fetch again and retry
-		body, err = fetchBlock(ctxt, bn)
-		if err != nil {
-			return nil, err
-		}
-		block, err = parseBlock(body)
-		if err != nil {
-			err = fmt.Errorf("failed to parse block #%d on second try, %w", bn, err)
-			return nil, err
-		}
+		return nil, err
 	}
+
+	// only persist block data that parsed and validated successfully, a bogus
+	// body would poison the cache permanently
+	if err := writeBlockToFile(ctxt, bn, body); err != nil {
+		return nil, err
+	}
+
 	return block, nil
 }
 
-func parseBlock(body []byte) (*c.Block, error) {
+// parseBlock parses the response to an `eth_getBlockByNumber` request for
+// block `bn`. A `null` result (block not available (yet) for the jsonrpc API
+// provider) or a response carrying a different block unmarshals into a
+// zero-valued/mismatching block and is rejected -- silently treating it as an
+// empty block would cause the caller to skip the block for good.
+func parseBlock(body []byte, bn uint64) (*c.Block, error) {
 	type Response struct {
 		Block c.Block `json:"result"`
 	}
@@ -95,6 +91,16 @@ func parseBlock(body []byte) (*c.Block, error) {
 		return nil, err
 	}
 	b := resp.Block
+	if b.Hash == "" {
+		err = fmt.Errorf("no data for block #%d", bn)
+		log.Error(err)
+		return nil, err
+	}
+	if b.Number != bn {
+		err = fmt.Errorf("block number mismatch, wanted #%d, got #%d (%s)", bn, b.Number, b.Hash)
+		log.Error(err)
+		return nil, err
+	}
 	log.Infof("parsed block %d, %s -- %d transactions", b.Number, b.Hash, len(b.Transactions))
 	return &b, nil
 }
@@ -121,17 +127,19 @@ func GetFinalizedBlock(ctxt c.Context, blockNumber uint64) (*c.FinalizedBlock, e
 		return nil, err
 	}
 
-	err = writeBlockToFile(ctxt, blockNumber, body)
-	if err != nil {
-		return nil, err
-	}
-
 	fb, err := parseFinalizedBlock(body)
 	if err != nil {
 		err = fmt.Errorf("failed to parse finalized block #%d, %w", blockNumber, err)
 		log.Error(err)
 		return nil, err
 	}
+
+	// only persist block data that parsed successfully
+	err = writeBlockToFile(ctxt, blockNumber, body)
+	if err != nil {
+		return nil, err
+	}
+
 	return fb, nil
 }
 

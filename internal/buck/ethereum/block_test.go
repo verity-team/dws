@@ -10,6 +10,9 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+// block number of the block in `testdata/18352138.json`
+const testBlockNumber uint64 = 18352138
+
 type BlockSuite struct {
 	suite.Suite
 	body                     []byte
@@ -60,17 +63,17 @@ func (suite *BlockSuite) TestFinalizedBlockDetail() {
 }
 
 func (suite *BlockSuite) TestParseBlock() {
-	block, err := parseBlock(suite.body)
+	block, err := parseBlock(suite.body, testBlockNumber)
 	hash := "0xfd7724ea905f528af6466ff6229630ec1d7bd4d9df21cbd089f9d67337dfd367"
 	assert.Nil(suite.T(), err)
 	assert.Equal(suite.T(), 99, len(block.Transactions))
 	assert.Equal(suite.T(), hash, block.Hash)
-	assert.Equal(suite.T(), uint64(18352138), block.Number)
+	assert.Equal(suite.T(), testBlockNumber, block.Number)
 	assert.Equal(suite.T(), "2023-10-15T00:15:59Z", block.Timestamp.Format(time.RFC3339))
 }
 
 func (suite *BlockSuite) TestUSDTTxSuccess() {
-	block, err := parseBlock(suite.body)
+	block, err := parseBlock(suite.body, testBlockNumber)
 	assert.Nil(suite.T(), err)
 	input := "0xa9059cbb0000000000000000000000007c298d22e78ead0b20c6a32dec24c6d0b9f2074f000000000000000000000000000000000000000000000000000000007ac5f665"
 	from := "0x974caa59e49682cda0ad2bbe82983419a2ecc400"
@@ -82,4 +85,24 @@ func (suite *BlockSuite) TestUSDTTxSuccess() {
 	assert.Equal(suite.T(), strings.ToLower(from), strings.ToLower(tx.From))
 	assert.Equal(suite.T(), strings.ToLower(to), strings.ToLower(tx.To))
 	assert.Equal(suite.T(), strings.ToLower(txHash), strings.ToLower(tx.Hash))
+}
+
+// a `null` result (the jsonrpc API provider does not have the block yet) must
+// not be mistaken for an empty block -- that would cause the caller to skip
+// the block for good
+func (suite *BlockSuite) TestParseBlockNullResult() {
+	body, err := os.ReadFile("testdata/null_block.json")
+	if err != nil {
+		suite.Failf("failed to read test input '%s', %v", "testdata/null_block.json", err)
+	}
+	block, err := parseBlock(body, testBlockNumber)
+	assert.Nil(suite.T(), block)
+	assert.ErrorContains(suite.T(), err, "no data for block #18352138")
+}
+
+// a response carrying a block other than the one requested must be rejected
+func (suite *BlockSuite) TestParseBlockNumberMismatch() {
+	block, err := parseBlock(suite.body, testBlockNumber+1)
+	assert.Nil(suite.T(), block)
+	assert.ErrorContains(suite.T(), err, "block number mismatch, wanted #18352139, got #18352138")
 }

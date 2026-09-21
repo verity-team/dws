@@ -57,7 +57,7 @@ func (suite *TxsSuite) TestInputDataUSDCShort() {
 }
 
 func (suite *TxsSuite) TestERC20Tx() {
-	block, err := parseBlock(suite.body)
+	block, err := parseBlock(suite.body, testBlockNumber)
 	assert.Nil(suite.T(), err)
 	to := "0x4667A044543e7f1B7D3a4b88396e024BE0E34F36"
 	contract := strings.ToLower("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
@@ -85,7 +85,7 @@ func (suite *TxsSuite) TestERC20Tx() {
 }
 
 func (suite *TxsSuite) TestETHTx() {
-	block, err := parseBlock(suite.body)
+	block, err := parseBlock(suite.body, testBlockNumber)
 	assert.Nil(suite.T(), err)
 	to := "0x2051f9d1082008924f751eb396df1101d4b123e1"
 	hash := "0x0aec48263d9ef216779aac6210c665723519251fbcb2b2d73cbb364c1b10f56d"
