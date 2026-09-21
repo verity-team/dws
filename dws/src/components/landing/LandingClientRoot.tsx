@@ -12,7 +12,7 @@ import {
 import { connectWalletWithAffiliate } from "@/api/dws/affiliate/affiliate";
 import { Maybe } from "@/utils";
 import { LAST_PROVIDER_KEY, LAST_WALLET_KEY } from "@/utils/const";
-import { getRFC3339String } from "@/utils/utils";
+import { getDelphiMessage } from "@/utils/utils";
 import { AvailableWallet } from "@/utils/wallet/token";
 import { CircularProgress } from "@mui/material";
 import { useSearchParams } from "next/navigation";
@@ -51,10 +51,11 @@ const LandingClientRoot = ({
       }
 
       // the backend requires proof that the caller owns `address`; the message
-      // is derived from the endpoint path and must match it exactly
+      // is derived from the endpoint path, the address and the timestamp and
+      // must match what the backend rebuilds exactly
       const now = new Date();
       const timestamp = Math.floor(now.getTime() / 1000);
-      const message = `wallet connection, ${getRFC3339String(now)}`;
+      const message = getDelphiMessage("wallet connection", address, now);
 
       let signature = "";
       try {

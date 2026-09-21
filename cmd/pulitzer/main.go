@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"sync"
 	"syscall"
 	"time"
@@ -24,6 +25,21 @@ import (
 	"github.com/verity-team/dws/internal/pulitzer/db"
 	"golang.org/x/sync/errgroup"
 )
+
+const (
+	// minPriceSources is the quorum: a median has to be taken over enough
+	// inputs to be more than "the middle one of three". Four also keeps the
+	// two USDT quoted sources (binance, kucoin) from making up the majority of
+	// a cycle and dragging a stable coin depeg into the written price.
+	minPriceSources = 4
+	// minAcceptedPrices is how many mutually consistent sources have to
+	// survive the outlier rejection for the cycle to produce a price.
+	minAcceptedPrices = 3
+)
+
+// maxPriceDeviation is the relative deviation from the median a single source
+// may show before it is dropped from the cycle.
+var maxPriceDeviation = decimal.NewFromFloat(0.10)
 
 var (
 	bts, rev, version string
@@ -172,53 +188,99 @@ func main() {
 	}
 }
 
-func calculateAveragePrice(prices []decimal.Decimal) (decimal.Decimal, error) {
-	if len(prices) < 3 {
-		return decimal.Zero, errors.New("less than 3 prices provided")
-	}
-
-	err := checkPriceDeviation(prices)
-	if err != nil {
-		return decimal.Zero, err
-	}
-
-	// Calculate the sum of prices
-	sum := decimal.Zero
-	for _, price := range prices {
-		sum = sum.Add(price)
-	}
-
-	// Calculate the average by dividing the sum by the number of prices
-	average := sum.Div(decimal.NewFromInt(int64(len(prices))))
-
-	return average, nil
+// sourcePrice is an ethereum price together with the venue it came from. The
+// source name makes a rejected outlier identifiable in the log and gives the
+// sort below a stable tie breaker.
+type sourcePrice struct {
+	source string
+	price  decimal.Decimal
 }
 
-func checkPriceDeviation(prices []decimal.Decimal) error {
-	if len(prices) < 3 {
-		return errors.New("at least 3 prices are required for deviation check")
+// medianPrice returns the median of a slice that is sorted in ascending order.
+// For an even number of entries it is the mean of the two middle values.
+func medianPrice(prices []sourcePrice) decimal.Decimal {
+	n := len(prices)
+	mid := n / 2
+	if n%2 == 1 {
+		return prices[mid].price
 	}
+	return prices[mid-1].price.Add(prices[mid].price).Div(decimal.NewFromInt(2))
+}
 
-	// Check deviation between all pairs of prices
-	for i := 0; i < len(prices); i++ {
-		for j := i + 1; j < len(prices); j++ {
-			price1 := prices[i]
-			price2 := prices[j]
-
-			if price1.IsZero() || price2.IsZero() {
-				return fmt.Errorf("zero price encountered: %s and %s", price1.StringFixed(2), price2.StringFixed(2))
-			}
-
-			// Calculate the percentage deviation
-			deviation := price1.Sub(price2).Div(price1).Abs()
-
-			if deviation.GreaterThan(decimal.NewFromFloat(0.10)) {
-				return fmt.Errorf("price deviation between %s and %s is greater than 10%%", price1.StringFixed(2), price2.StringFixed(2))
-			}
+// sortPrices returns a copy of prices ordered by price and, for equal prices,
+// by source name. Both the median and the log output are then a function of
+// the prices alone and no longer of the (randomized) order in which the
+// goroutines happened to be collected.
+func sortPrices(prices []sourcePrice) []sourcePrice {
+	sorted := make([]sourcePrice, len(prices))
+	copy(sorted, prices)
+	sort.Slice(sorted, func(i, j int) bool {
+		if c := sorted[i].price.Cmp(sorted[j].price); c != 0 {
+			return c < 0
 		}
+		return sorted[i].source < sorted[j].source
+	})
+	return sorted
+}
+
+// rejectOutliers drops the sources that deviate from the median by more than
+// maxPriceDeviation and returns the ones that remain.
+//
+// Every source is compared against a single reference value -- the median --
+// rather than against every other source pairwise, which makes the outcome
+// symmetric and independent of the order the prices arrived in. A venue that
+// is off on its own is dropped; the remaining, mutually consistent sources
+// still produce a price for this cycle.
+func rejectOutliers(sorted []sourcePrice) []sourcePrice {
+	median := medianPrice(sorted)
+	if !median.IsPositive() {
+		return nil
+	}
+	accepted := make([]sourcePrice, 0, len(sorted))
+	for _, sp := range sorted {
+		deviation := sp.price.Sub(median).Div(median).Abs()
+		if deviation.GreaterThan(maxPriceDeviation) {
+			log.Warnf(
+				"rejecting the ethereum price from %s ($%s): %s%% off the median ($%s)",
+				sp.source, sp.price.StringFixed(2),
+				deviation.Mul(decimal.NewFromInt(100)).StringFixed(2), median.StringFixed(2))
+			continue
+		}
+		accepted = append(accepted, sp)
+	}
+	return accepted
+}
+
+// calculateAveragePrice turns the prices collected in one cycle into the
+// figure that gets written to the database: the mean of the sources that are
+// within maxPriceDeviation of the median.
+func calculateAveragePrice(prices []sourcePrice) (decimal.Decimal, error) {
+	usable := make([]sourcePrice, 0, len(prices))
+	for _, sp := range prices {
+		if !sp.price.IsPositive() {
+			log.Warnf("ignoring the non-positive ethereum price from %s ($%s)", sp.source, sp.price.StringFixed(2))
+			continue
+		}
+		usable = append(usable, sp)
+	}
+	if len(usable) < minPriceSources {
+		return decimal.Zero, fmt.Errorf("got %d usable price(s), need at least %d", len(usable), minPriceSources)
 	}
 
-	return nil
+	sorted := sortPrices(usable)
+	accepted := rejectOutliers(sorted)
+	if len(accepted) < minAcceptedPrices {
+		return decimal.Zero, fmt.Errorf(
+			"only %d of %d price(s) are within %s%% of the median, need at least %d",
+			len(accepted), len(sorted),
+			maxPriceDeviation.Mul(decimal.NewFromInt(100)).StringFixed(0), minAcceptedPrices)
+	}
+
+	sum := decimal.Zero
+	for _, sp := range accepted {
+		sum = sum.Add(sp.price)
+	}
+	return sum.Div(decimal.NewFromInt(int64(len(accepted)))), nil
 }
 
 func servePriceRequests(ctx context.Context) error {
@@ -311,27 +373,25 @@ func getETHPrice(ctx context.Context) (decimal.Decimal, error) {
 	// Wait for all goroutines to finish
 	wg.Wait()
 
-	// Receive and print the results from the channels
-	var prices []decimal.Decimal
-
-	log.Infof("==> %v", time.Now().UTC())
+	// Receive and print the results from the channels. The sources are walked
+	// in a fixed order so that the log of a cycle can be reproduced.
+	names := make([]string, 0, len(channels))
 	for k := range channels {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+
+	prices := make([]sourcePrice, 0, len(names))
+	log.Infof("==> %v", time.Now().UTC())
+	for _, k := range names {
 		price, ok := <-channels[k]
 		if ok {
 			log.Infof("ethereum price from %s: $%s", k, price.StringFixed(2))
-			if price.IsPositive() {
-				prices = append(prices, price)
-			}
+			prices = append(prices, sourcePrice{source: k, price: price})
 		} else {
 			err := fmt.Errorf("failed to get ethereum price from %s", k)
 			log.Error(err)
 		}
-	}
-
-	if len(prices) < 3 {
-		err := errors.New("got less than 3 prices, giving up")
-		log.Error(err)
-		return decimal.Zero, err
 	}
 
 	av, err := calculateAveragePrice(prices)
@@ -374,16 +434,16 @@ func fetchPrice(source string, f func() (decimal.Decimal, error), ch chan<- deci
 	ch <- price
 }
 
+// runReadyProbe reports whether this instance can do its work. That depends on
+// the database -- the only resource pulitzer cannot do without. It
+// deliberately does *not* call out to an exchange: a third party being slow,
+// or answering a probe with a rate limit error, would take an otherwise
+// healthy pod out of service (and burn the very request budget the price fetch
+// needs), while a single exchange being unreachable costs one of six sources.
 func runReadyProbe(dbh *sqlx.DB) error {
-	err := dbh.Ping()
-	if err != nil {
+	if err := dbh.Ping(); err != nil {
 		log.Error(err)
 		return err
 	}
-	_, err = data.PingBinance()
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-	return err
+	return nil
 }

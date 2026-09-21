@@ -17,7 +17,7 @@ import toast from "react-hot-toast";
 import { mutate } from "swr";
 import TextError from "@/components/common/TextError";
 import { Wallet, WalletUtils } from "@/components/ClientRoot";
-import { getUserDonationDataKey } from "@/api/dws/user/user";
+import { getUserDonationDataKeyFilter } from "@/api/dws/user/user";
 import { useToggle } from "@/hooks/utils/useToggle";
 import ThankDialog from "./ThankDialog";
 import { TokenPrice } from "@/api/dws/donation/donation.type";
@@ -114,8 +114,9 @@ const DonateForm = ({
       toast.success("Thank you for your support!");
       setThankOpen();
 
-      // Revalidate user donations
-      await mutate(getUserDonationDataKey(userWallet.wallet));
+      // Revalidate user donations -- every page that is currently cached, the
+      // new donation lands at the end of the history
+      await mutate(getUserDonationDataKeyFilter(userWallet.wallet));
 
       const thankYouSection = document.getElementById("thank-you");
       if (!thankYouSection) {

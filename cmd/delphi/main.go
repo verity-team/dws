@@ -39,6 +39,21 @@ const (
 	// bound for draining the in-flight requests on SIGTERM; comfortably below
 	// the usual 30s orchestrator grace period
 	shutdownTimeout = 10 * time.Second
+
+	// Per-IP rate limit. This is an *in-process, per-instance* budget, not a
+	// global one -- see the README. The numbers are deliberately generous: the
+	// donation web site talks to this API from its own (server side) Next.js
+	// route handlers, so in the normal case every legitimate request arrives
+	// from the handful of frontend egress addresses rather than from the end
+	// users. A single browser session costs roughly 3 requests a minute (the
+	// ETH price once a minute, the user data once a minute, the donation data
+	// on every refresh and on "donate"), so 50 req/s sustained leaves head
+	// room for a four digit number of concurrent sessions behind one address
+	// while still capping what a single client talking to this instance
+	// directly can extract.
+	rateLimit  = 50
+	rateBurst  = 100
+	rateExpiry = 3 * time.Minute
 )
 
 var (
@@ -115,6 +130,7 @@ func main() {
 
 	e.Use(echomiddleware.BodyLimitWithConfig(blv))
 	e.Use(echomiddleware.Secure())
+	e.Use(echomiddleware.RateLimiterWithConfig(rateLimiterConfig()))
 
 	e.Use(middleware.OapiRequestValidator(swagger))
 
@@ -176,6 +192,44 @@ func main() {
 	log.Info("delphi shutting down")
 	if failed {
 		os.Exit(1)
+	}
+}
+
+// rateLimiterConfig builds the per-IP rate limiter.
+//
+// The visitor is identified by the *direct* peer address and not by
+// echo.Context.RealIP(): the latter trusts the X-Forwarded-For and X-Real-IP
+// request headers, which any internet client can set to an arbitrary value, so
+// an attacker could rotate the header and never be limited at all.
+//
+// The health check endpoints are exempt -- an orchestrator probing this
+// instance must not be able to exhaust the budget of the node it runs on, and
+// a probe that is rejected with 429 would take the pod out of service.
+func rateLimiterConfig() echomiddleware.RateLimiterConfig {
+	store := echomiddleware.NewRateLimiterMemoryStoreWithConfig(
+		echomiddleware.RateLimiterMemoryStoreConfig{
+			Rate:      rateLimit,
+			Burst:     rateBurst,
+			ExpiresIn: rateExpiry,
+		})
+	return echomiddleware.RateLimiterConfig{
+		Store: store,
+		Skipper: func(c echo.Context) bool {
+			switch c.Request().URL.Path {
+			case "/live", "/ready", "/version":
+				return true
+			}
+			return false
+		},
+		IdentifierExtractor: func(c echo.Context) (string, error) {
+			addr := c.Request().RemoteAddr
+			host, _, err := net.SplitHostPort(addr)
+			if err != nil {
+				// no port in the address -- use it as it is
+				return addr, nil
+			}
+			return host, nil
+		},
 	}
 }
 

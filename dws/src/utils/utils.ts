@@ -23,6 +23,26 @@ export const getRFC3339String = (date: Date): string => {
   return result;
 };
 
+/**
+ * Build the message the delphi backend expects the caller to sign.
+ *
+ * It is made up of the words of the endpoint path, the lower cased address the
+ * caller claims to own and the UTC timestamp. The address is part of the
+ * message so that the signature is bound to the account it is used for, and
+ * the backend reconstructs the exact same string -- it has to match verbatim.
+ *
+ * @param path [string] endpoint words, e.g. "affiliate code"
+ * @param address [string] the wallet address of the signer
+ * @param date [Date] the timestamp also sent in the `delphi-ts` header
+ */
+export const getDelphiMessage = (
+  path: string,
+  address: string,
+  date: Date
+): string => {
+  return `${path}, ${address.toLowerCase()}, ${getRFC3339String(date)}`;
+};
+
 export const getTimeElapsedString = (date: string): string => {
   const inputDate = dayjs(date);
   const elapsedMs = Date.now() / 1000 - inputDate.unix();

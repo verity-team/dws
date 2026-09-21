@@ -21,7 +21,37 @@ import (
 	"github.com/verity-team/dws/internal/delphi/db"
 )
 
-const MaxTimestampAge = 30
+const (
+	// MaxTimestampAge is how far in the past a `delphi-ts` timestamp may lie.
+	// A wallet signature prompt is a human interaction, so the window has to
+	// leave room for the user to read the message and click "sign".
+	MaxTimestampAge = 30
+	// MaxTimestampAgeCeiling caps whatever DWS_MAX_TIMESTAMP_AGE asks for; the
+	// replay window must not be widened without bound by a stray environment
+	// variable.
+	MaxTimestampAgeCeiling = 300
+	// MaxTimestampSkew is how far in the future a `delphi-ts` timestamp may
+	// lie. Without an upper bound a signature over a far future timestamp
+	// stays valid -- and replayable -- for as long as that timestamp is in the
+	// future. The allowance only covers clock drift between the caller and us.
+	MaxTimestampSkew = 5
+	// MaxUserDataLimit caps the number of donation records a single
+	// /user/data/{address} call may return.
+	MaxUserDataLimit = 100
+	// DefaultUserDataLimit is the page size used when the caller does not ask
+	// for one.
+	DefaultUserDataLimit = 50
+)
+
+// The messages handed to the caller are deliberately generic: the wrapped
+// error carries table, function and column names as well as the postgres
+// dialect and the driver version, none of which an internet client gets to
+// see. The numeric code stays in the response so that a report can be
+// correlated with the server log.
+const (
+	msgInvalidRequest = "invalid request"
+	msgInternalError  = "internal error"
+)
 
 var (
 	bts, rev, version string
@@ -37,31 +67,29 @@ func NewDelphiServer(db *sqlx.DB) *DelphiServer {
 	}
 }
 
-func getError(code int, msg string, err error) (api.Error, error) {
-	var (
-		nerr error
-		cerr api.Error
-	)
-	if msg != "" {
-		nerr = fmt.Errorf(msg+", %v", err)
-	} else {
-		nerr = err
+// getError logs the internal error -- with the context the caller passes in --
+// and returns the payload the client gets: the numeric error code and a fixed,
+// generic message.
+func getError(code int, publicMsg, context string, err error) api.Error {
+	nerr := err
+	if context != "" {
+		nerr = fmt.Errorf("%s, %w", context, err)
 	}
-	cerr = api.Error{
+	log.Errorf("delphi error %d: %v", code, nerr)
+	return api.Error{
 		Code:    code,
-		Message: nerr.Error(),
+		Message: publicMsg,
 	}
-	return cerr, nerr
 }
 
 func (s *DelphiServer) ConnectWallet(ctx echo.Context, params api.ConnectWalletParams) error {
 	authTS, err := getTS(params.DelphiTs)
 	if err != nil {
-		cerr, _ := getError(113, "", err)
+		cerr := getError(113, msgInvalidRequest, "failed to parse the /wallet/connection delphi-ts header", err)
 		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
-	if authTSTooOld(authTS) {
-		err = fmt.Errorf("/wallet/connection delphi-ts ('%s') is not recent enough for address '%s'", params.DelphiTs, params.DelphiKey)
+	if authTSOutOfWindow(authTS) {
+		err = fmt.Errorf("/wallet/connection delphi-ts ('%s') is outside the accepted window for address '%s'", params.DelphiTs, params.DelphiKey)
 		log.Error(err)
 		cerr := api.Error{
 			Code:    114,
@@ -70,7 +98,7 @@ func (s *DelphiServer) ConnectWallet(ctx echo.Context, params api.ConnectWalletP
 		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
 
-	authOK := verifySig(params.DelphiKey, formMsg(ctx.Path(), authTS), params.DelphiSignature)
+	authOK := verifySig(params.DelphiKey, formMsg(ctx.Path(), params.DelphiKey, authTS), params.DelphiSignature)
 	if !authOK {
 		return ctx.NoContent(http.StatusUnauthorized)
 	}
@@ -79,8 +107,7 @@ func (s *DelphiServer) ConnectWallet(ctx echo.Context, params api.ConnectWalletP
 	var cr api.ConnectionRequest
 	err = ctx.Bind(&cr)
 	if err != nil {
-		cerr, err := getError(101, "failed to bind POST param (ConnectionRequest)", err)
-		log.Error(err)
+		cerr := getError(101, msgInvalidRequest, "failed to bind POST param (ConnectionRequest)", err)
 		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
 	if !common.IsValidETHAddress(cr.Address) {
@@ -96,17 +123,16 @@ func (s *DelphiServer) ConnectWallet(ctx echo.Context, params api.ConnectWalletP
 	// the duplicate detection in db.ConnectWallet can match
 	cr.Address = strings.ToLower(cr.Address)
 	if err = db.ConnectWallet(s.db, cr); err != nil {
-		cerr, err := getError(104, "failed to log wallet connection", err)
-		log.Error(err)
+		cerr := getError(104, msgInternalError, "failed to log wallet connection", err)
 		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
 	return ctx.JSON(http.StatusOK, struct{}{})
 }
 
-func (s *DelphiServer) getUserData(address string) (*api.UserDataResult, error) {
+func (s *DelphiServer) getUserData(address string, limit, offset int) (*api.UserDataResult, error) {
 	var result api.UserDataResult
 	address = strings.ToLower(address)
-	dd, err := db.GetUserDonationData(s.db, address)
+	dd, err := db.GetUserDonationData(s.db, address, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -127,14 +153,36 @@ func (s *DelphiServer) getUserData(address string) (*api.UserDataResult, error) 
 	return &result, nil
 }
 
-func (s *DelphiServer) UserData(ctx echo.Context, address string) error {
+// pageParams turns the optional limit/offset query parameters into a page the
+// server is willing to serve. The caller cannot ask for more than
+// MaxUserDataLimit records, so the size of the response -- and of the database
+// read behind it -- stays bounded no matter what is passed in.
+func pageParams(params api.UserDataParams) (limit, offset int) {
+	limit = DefaultUserDataLimit
+	if params.Limit != nil {
+		limit = *params.Limit
+	}
+	if limit < 1 {
+		limit = 1
+	}
+	if limit > MaxUserDataLimit {
+		limit = MaxUserDataLimit
+	}
+	if params.Offset != nil && *params.Offset > 0 {
+		offset = *params.Offset
+	}
+	return limit, offset
+}
+
+func (s *DelphiServer) UserData(ctx echo.Context, address string, params api.UserDataParams) error {
 	if !common.IsValidETHAddress(address) {
 		cerr := api.Error{Code: 103, Message: "invalid ethereum address"}
 		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
-	udr, err := s.getUserData(address)
+	limit, offset := pageParams(params)
+	udr, err := s.getUserData(address, limit, offset)
 	if err != nil {
-		cerr, _ := getError(106, "", err)
+		cerr := getError(106, msgInternalError, "failed to fetch user data", err)
 		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
 	return ctx.JSON(http.StatusOK, *udr)
@@ -200,25 +248,44 @@ func getTS(tss string) (time.Time, error) {
 	return ts.UTC(), nil
 }
 
-func authTSTooOld(authTS time.Time) bool {
-	var (
-		maxTSAge int
-		err      error
-	)
+// maxTSAge returns the accepted age of a `delphi-ts` timestamp. The value can
+// be lowered or raised via DWS_MAX_TIMESTAMP_AGE but never beyond
+// MaxTimestampAgeCeiling: an unbounded window is an unbounded replay window.
+func maxTSAge() int {
 	envVar, present := os.LookupEnv("DWS_MAX_TIMESTAMP_AGE")
-	if present {
-		maxTSAge, err = strconv.Atoi(envVar)
+	if !present {
+		return MaxTimestampAge
 	}
-	if !present || err != nil {
-		// env var not set or cannot be converted to int
-		maxTSAge = MaxTimestampAge
+	val, err := strconv.Atoi(envVar)
+	if err != nil || val <= 0 {
+		log.Errorf("invalid DWS_MAX_TIMESTAMP_AGE ('%s'), falling back to %d seconds", envVar, MaxTimestampAge)
+		return MaxTimestampAge
 	}
-	now := time.Now().UTC()
-	tdif := now.Sub(authTS.UTC())
-	return tdif.Seconds() > float64(maxTSAge)
+	if val > MaxTimestampAgeCeiling {
+		log.Warnf("DWS_MAX_TIMESTAMP_AGE (%d) exceeds the %d second ceiling, capping it", val, MaxTimestampAgeCeiling)
+		return MaxTimestampAgeCeiling
+	}
+	return val
 }
 
-func formMsg(urlPath string, authTS time.Time) string {
+// authTSOutOfWindow reports whether the caller supplied timestamp lies outside
+// the accepted window. The window is bounded on *both* sides: a timestamp in
+// the future yields a negative age and would otherwise pass forever, turning a
+// single harvested signature into a signature that stays replayable until that
+// timestamp has come and gone.
+func authTSOutOfWindow(authTS time.Time) bool {
+	age := time.Now().UTC().Sub(authTS.UTC()).Seconds()
+	if age > float64(maxTSAge()) {
+		return true
+	}
+	return age < -float64(MaxTimestampSkew)
+}
+
+// formMsg builds the message the caller has to sign: the words that make up
+// the endpoint path, the address the caller claims to own and the timestamp.
+// Binding the address in makes the signature specific to the account it is
+// used for instead of being a bare "path + time" token.
+func formMsg(urlPath, address string, authTS time.Time) string {
 	parts := strings.Split(urlPath, "/")[1:]
 	var nonEmpty []string
 	for _, p := range parts {
@@ -227,17 +294,17 @@ func formMsg(urlPath string, authTS time.Time) string {
 		}
 	}
 	path := strings.Join(nonEmpty, " ")
-	return fmt.Sprintf("%s, %s", path, authTS.Format("2006-01-02 15:04:05-07:00"))
+	return fmt.Sprintf("%s, %s, %s", path, strings.ToLower(address), authTS.Format("2006-01-02 15:04:05-07:00"))
 }
 
 func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodeParams) error {
 	authTS, err := getTS(params.DelphiTs)
 	if err != nil {
-		cerr, _ := getError(107, "", err)
+		cerr := getError(107, msgInvalidRequest, "failed to parse the /affiliate/code delphi-ts header", err)
 		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
-	if authTSTooOld(authTS) {
-		err = fmt.Errorf("/affiliate/code delphi-ts ('%s') is not recent enough for address '%s'", params.DelphiTs, params.DelphiKey)
+	if authTSOutOfWindow(authTS) {
+		err = fmt.Errorf("/affiliate/code delphi-ts ('%s') is outside the accepted window for address '%s'", params.DelphiTs, params.DelphiKey)
 		log.Error(err)
 		cerr := api.Error{
 			Code:    108,
@@ -246,14 +313,14 @@ func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodePar
 		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
 
-	authOK := verifySig(params.DelphiKey, formMsg(ctx.Path(), authTS), params.DelphiSignature)
+	authOK := verifySig(params.DelphiKey, formMsg(ctx.Path(), params.DelphiKey, authTS), params.DelphiSignature)
 	if !authOK {
 		return ctx.NoContent(http.StatusUnauthorized)
 	}
 	log.Infof("auth OK for /affiliate/code request, address '%s'", params.DelphiKey)
 	afc, err := db.GetAffiliateCode(s.db, strings.ToLower(params.DelphiKey))
 	if err != nil {
-		cerr, _ := getError(109, "", err)
+		cerr := getError(109, msgInternalError, "failed to fetch the affiliate code", err)
 		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
 	if afc != nil && afc.Code != "" {
@@ -262,7 +329,7 @@ func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodePar
 	}
 	afc, err = db.GenerateAffiliateCode(s.db, strings.ToLower(params.DelphiKey))
 	if err != nil {
-		cerr, _ := getError(110, "", err)
+		cerr := getError(110, msgInternalError, "failed to generate an affiliate code", err)
 		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
 	if afc != nil {
@@ -275,14 +342,13 @@ func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodePar
 func (s *DelphiServer) DonationData(ctx echo.Context) error {
 	dd, err := db.GetDonationData(s.db)
 	if err != nil {
-		cerr, _ := getError(111, "", err)
+		cerr := getError(111, msgInternalError, "failed to fetch donation data", err)
 		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
 	ra, present := os.LookupEnv("DWS_DONATION_ADDRESS")
 	if !present {
 		err = errors.New("DWS_DONATION_ADDRESS environment variable not set")
-		log.Error(err)
-		cerr, _ := getError(112, "", err)
+		cerr := getError(112, msgInternalError, "", err)
 		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
 	dd.ReceivingAddress = ra

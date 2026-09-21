@@ -167,17 +167,45 @@ func GetDonationData(db *sqlx.DB) (*api.DonationData, error) {
 	return &result, nil
 }
 
-func GetUserDonationData(db *sqlx.DB, address string) ([]api.Donation, error) {
-	// fetch donations made by this user/address
-	q1 := `
+// userDonationQuery reads one page of the donation history of an address. The
+// LIMIT is what keeps a single request from materializing an unbounded number
+// of rows; the ORDER BY makes the paging stable.
+const userDonationQuery = `
 		SELECT
 			amount, usd_amount, asset, tokens, price, tx_hash, status, block_time
 		FROM donation
 		WHERE address=$1
 		ORDER BY id
+		LIMIT $2 OFFSET $3
 		`
+
+// userDataQuery reads the donation summary of an address. us_code (the
+// affiliate code) is deliberately *not* selected: this endpoint is
+// unauthenticated and the referral code must only be handed out over the
+// signature protected /affiliate/code path.
+const userDataQuery = `
+		SELECT
+			 us_total,
+			 us_tokens,
+			 us_staked,
+			 us_reward,
+			 us_status,
+			 us_modified_at
+		FROM update_user_data($1)
+		`
+
+// GetUserDonationData returns one page of the donation history of the given
+// address, oldest first. The page is bounded by the caller supplied limit so
+// that a single request cannot materialize an unbounded number of rows.
+func GetUserDonationData(db *sqlx.DB, address string, limit, offset int) ([]api.Donation, error) {
+	if limit <= 0 {
+		return nil, fmt.Errorf("invalid donation page size (%d) for address '%s'", limit, address)
+	}
+	if offset < 0 {
+		return nil, fmt.Errorf("invalid donation page offset (%d) for address '%s'", offset, address)
+	}
 	var result []api.Donation
-	err := db.Select(&result, q1, address)
+	err := db.Select(&result, userDonationQuery, address, limit, offset)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		err = fmt.Errorf("failed to fetch donation records for %s, %w", address, err)
 		log.Error(err)
@@ -189,19 +217,8 @@ func GetUserDonationData(db *sqlx.DB, address string) ([]api.Donation, error) {
 
 func GetUserData(db *sqlx.DB, address string) (*api.UserData, error) {
 	// fetch donations made by this user/address
-	q1 := `
-		SELECT
-			 us_total,
-			 us_tokens,
-			 us_staked,
-			 us_reward,
-			 us_status,
-			 us_code,
-			 us_modified_at
-		FROM update_user_data($1)
-		`
 	var result api.UserData
-	err := db.Get(&result, q1, address)
+	err := db.Get(&result, userDataQuery, address)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			// not found

@@ -101,8 +101,32 @@ paths:
           description: |
             The wallet address for which to obtain data
           example: "0xDEd1Fe6B3f61c8F1d874bb86F086D10FFc3F0154"
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+          description: |
+            maximum number of donation records to return; the server caps
+            this at 100
+          example: 50
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: |
+            number of donation records to skip; the records are ordered
+            oldest first
+          example: 0
       description: |
-         get the donation data for the wallet address in question
+         get the donation data for the wallet address in question. The
+         donation history is paginated, see the `limit`/`offset` parameters.
       operationId: userData
       responses:
         "200":
@@ -409,14 +433,6 @@ components:
           maxLength: 32
           x-oapi-codegen-extra-tags:
             db: us_modified_at
-        affiliate_code:
-          type: string
-          maxLength: 16
-          description: |
-            affiliate code generated for this wallet address
-          example: "GezIkgeubrOkiOv4"
-          x-oapi-codegen-extra-tags:
-            db: us_code
     connection_request:
       required:
       - code
@@ -482,9 +498,11 @@ components:
         pattern: '^0x[0-9a-fA-F]{130}$'
       required: true
       description: |
-        signature over a string like: `affiliate code, 2023-10-23
+        signature over a string like: `affiliate code,
+        0xded1fe6b3f61c8f1d874bb86f086d10ffc3f0154, 2023-10-23
         18:45:19+00:00`.  The message is constructed from the words that make
-        up the path of the REST API endpoint called. *Important*: please use
+        up the path of the REST API endpoint called, the lower cased address
+        in `delphi-key` and the `delphi-ts` timestamp. *Important*: please use
         UTC timestamps only.
     delphi_ts:
       in: header
@@ -494,5 +512,7 @@ components:
       required: true
       description: |
         caller timestamp (number of seconds since Unix epoch) -- included
-        to prevent replay attacks; must not be older than 5 seconds
+        to prevent replay attacks. It must not be older than 30 seconds (the
+        default, configurable via `DWS_MAX_TIMESTAMP_AGE` up to a hard limit
+        of 300 seconds) and must not be more than 5 seconds in the future.
       example: 1697955918

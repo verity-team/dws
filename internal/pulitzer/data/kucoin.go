@@ -1,6 +1,9 @@
 package data
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/goccy/go-json"
 
 	"github.com/shopspring/decimal"
@@ -33,9 +36,30 @@ func GetKuCoinETHUSDTPrice() (decimal.Decimal, error) {
 		return decimal.Zero, err
 	}
 
+	price, err := parseKuCoinTicker(responseBody)
+	if err != nil {
+		log.Error(err)
+		return decimal.Zero, err
+	}
+
+	log.Info("kucoin: ", price)
+	return price, nil
+}
+
+// parseKuCoinTicker extracts the price from a kucoin level 1 order book
+// response. The venue publishes the time the quote was taken; a quote that is
+// no longer current is rejected instead of being averaged in at full weight.
+func parseKuCoinTicker(responseBody []byte) (decimal.Decimal, error) {
 	// Parse the JSON response
 	var kuCoinResponse KuCoinResponse
 	if err := json.Unmarshal(responseBody, &kuCoinResponse); err != nil {
+		return decimal.Zero, err
+	}
+
+	if kuCoinResponse.Data.Time <= 0 {
+		return decimal.Zero, fmt.Errorf("kucoin: invalid quote timestamp (%d)", kuCoinResponse.Data.Time)
+	}
+	if err := checkQuoteAge("kucoin", time.UnixMilli(kuCoinResponse.Data.Time).UTC()); err != nil {
 		return decimal.Zero, err
 	}
 
@@ -45,6 +69,5 @@ func GetKuCoinETHUSDTPrice() (decimal.Decimal, error) {
 		return decimal.Zero, err
 	}
 
-	log.Info("kucoin: ", price)
 	return price, nil
 }
