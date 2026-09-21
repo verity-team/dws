@@ -11,7 +11,7 @@ The backend used by the donation web site frontend is called `delphi` and it wil
 The `dws` backend consists of a `postgres` database and 5 services
 - `buck`: ETH/latest crawler, checks the latest blocks for donation transactions and inserts these into the database (in state `unconfirmed`)
 - `buck`: ETH/finalized crawler, checks the finalized blocks for donation transactions and confrm them, also updates the donation campaign statistics and the token price (if/as needed)
-- `buck`: ETH/old-unconfirmed crawler, checks for donations that are older than 30 minutes but still unconfirmed, attempts to fetch the respective finalized blocks and confirm these donation transactions
+- `buck`: ETH/old-unconfirmed crawler, checks for donations that are older than 30 minutes but still unconfirmed, attempts to fetch the respective finalized blocks and confirm these donation transactions. Donations that cannot be confirmed are marked as `failed` and the donation campaign statistics are recalculated -- the donation records are retained, they are *not* deleted
 - `pulitzer`: pulls the ETH price from 6 exchanges and inserts an average price into the database every minute
 - `delphi`: [REST API](https://app.swaggerhub.com/apis/MUHAREM_1/delphi/) server -- only serves data from the database
 
@@ -37,6 +37,17 @@ All services support the `-p` command-line flag allowing you to set the port the
 |buck/latest      | 8082  | /live and /ready healtcheck endpoints |
 |buck/final      | 8083  | /live and /ready healtcheck endpoints |
 |buck/old-unconfirmed      | 8084  | /live and /ready healtcheck endpoints |
+
+## tests
+
+`go test ./...` runs the unit tests, no database required.
+
+The database integration tests for the `buck` donation statistics are hidden behind the `dbtest` build tag since they need a live database with the schema in `deployments/db/01-schema.sql` loaded. They truncate the donation tables, so *never* point them at a production database:
+
+1. `make run_db`
+1. `go test -tags dbtest -count=1 ./internal/buck/db/...`
+
+The connection string defaults to the dockerized development database and can be overridden with `DWS_TEST_DB_DSN`.
 
 ## requirements & rules
 1. all amounts are passed as strings and should be decoded to a `decimal` type to preserve precision
