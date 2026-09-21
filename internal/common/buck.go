@@ -1,6 +1,7 @@
 package common
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -367,7 +368,16 @@ func (t *TxByHash) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func GetContext(erc20Json, saleParamJSON string) (*Context, error) {
+// GetContext parses *and* validates the buck configuration. validAssets is the
+// set of assets buck is able to process (the erc-20 ABI map); the keys double
+// as the list of asset names accepted in the erc-20 configuration.
+//
+// Configuration errors are rejected here, at startup, rather than on the first
+// donation processed: an erc-20 scale of zero inflates a 500 USDT donation into
+// 500,000,000 USD worth of tokens (closing the campaign), an unknown asset
+// silently fails every donation made in it and an empty/zero-priced sale param
+// list takes the crawler down with a runtime panic.
+func GetContext(erc20Json, saleParamJSON string, validAssets map[string]abi.ABI) (*Context, error) {
 	var (
 		err    error
 		result Context
@@ -382,7 +392,76 @@ func GetContext(erc20Json, saleParamJSON string) (*Context, error) {
 		return nil, err
 	}
 
+	if err = validateStableCoins(result.StableCoins, validAssets); err != nil {
+		err = fmt.Errorf("invalid erc-20 stable coin configuration, %w", err)
+		log.Error(err)
+		return nil, err
+	}
+	if err = validateSaleParams(result.SaleParams); err != nil {
+		err = fmt.Errorf("invalid token sale parameters, %w", err)
+		log.Error(err)
+		return nil, err
+	}
+	result.ABI = validAssets
+
 	return &result, nil
+}
+
+// validateStableCoins makes sure every configured erc-20 stable coin can
+// actually be processed: a known asset, a well-formed contract address and a
+// scale that does not distort the donated amount.
+func validateStableCoins(scs map[string]ERC20, validAssets map[string]abi.ABI) error {
+	if len(scs) == 0 {
+		return errors.New("no erc-20 stable coins configured")
+	}
+	if len(validAssets) == 0 {
+		return errors.New("no erc-20 assets supported, the ABI map is empty")
+	}
+	// iterate in a deterministic order so that a broken configuration always
+	// yields the same error message
+	for _, addr := range sortedKeys(scs) {
+		sc := scs[addr]
+		if !IsValidETHAddress(addr) {
+			return fmt.Errorf("erc-20 entry '%s': invalid contract address '%s'", sc.Asset, addr)
+		}
+		if _, ok := validAssets[sc.Asset]; !ok {
+			return fmt.Errorf(
+				"erc-20 entry with address '%s': unknown asset '%s', expected one of %v",
+				addr, sc.Asset, sortedKeys(validAssets))
+		}
+		if sc.Scale <= 0 {
+			return fmt.Errorf("erc-20 entry '%s' (%s): scale must be greater than zero, got %d", sc.Asset, addr, sc.Scale)
+		}
+	}
+	return nil
+}
+
+// validateSaleParams makes sure the token sale parameters describe a usable
+// price ladder; the crawler indexes into this slice and divides by the price.
+func validateSaleParams(sps []SaleParam) error {
+	if len(sps) == 0 {
+		return errors.New("no token sale parameters configured")
+	}
+	for i, sp := range sps {
+		if sp.Limit <= 0 {
+			return fmt.Errorf("sale parameter #%d: token limit must be greater than zero, got %d", i+1, sp.Limit)
+		}
+		if !sp.Price.IsPositive() {
+			return fmt.Errorf(
+				"sale parameter #%d (limit %d): token price must be greater than zero, got %s",
+				i+1, sp.Limit, sp.Price.String())
+		}
+	}
+	return nil
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	result := make([]string, 0, len(m))
+	for k := range m {
+		result = append(result, k)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func getStableCoins(erc20Json string) (map[string]ERC20, error) {

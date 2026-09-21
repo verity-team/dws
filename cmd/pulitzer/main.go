@@ -86,14 +86,17 @@ func main() {
 
 	_, err = s.Every("1m").Do(getETHPrice, ctx)
 	if err != nil {
-		log.Error(err)
-		return
+		log.Fatal(err)
 	}
 	_, err = s.Every("10s").Do(servePriceRequests, ctx)
 	if err != nil {
-		log.Error(err)
-		return
+		log.Fatal(err)
 	}
+
+	// gocron discards the error a scheduled job returns unless an error event
+	// listener is registered; it only covers the jobs scheduled so far, hence
+	// this call comes after all of the s.Every(..).Do(..) calls above
+	common.RegisterJobErrorListener(s, "pulitzer")
 
 	// healthcheck endpoints
 	e := echo.New()
@@ -149,14 +152,24 @@ func main() {
 		<-ctx.Done()
 		// The context is canceled
 		log.Info("pulitzer/cron - context canceled, stopping..")
-		s.StopBlockingChan()
+		// StopBlockingChan() is a no-op for a scheduler started with
+		// StartAsync(); Stop() waits for the jobs that are still running so
+		// that the database handle is not closed underneath them
+		s.Stop()
 		return ctx.Err()
 	})
 
-	if err := g.Wait(); err != nil {
+	// a context cancelation is how an orderly shutdown ends, anything else is
+	// a failure the orchestrator needs to see (crash loop backoff, alerting)
+	failed := false
+	if err := g.Wait(); err != nil && !errors.Is(err, context.Canceled) {
 		log.Errorf("errgroup.Wait(): %v", err)
+		failed = true
 	}
 	log.Info("pulitzer shutting down")
+	if failed {
+		os.Exit(1)
+	}
 }
 
 func calculateAveragePrice(prices []decimal.Decimal) (decimal.Decimal, error) {
@@ -306,6 +319,7 @@ func getETHPrice(ctx context.Context) (decimal.Decimal, error) {
 
 	if len(prices) < 3 {
 		err := errors.New("got less than 3 prices, giving up")
+		log.Error(err)
 		return decimal.Zero, err
 	}
 

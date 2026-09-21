@@ -38,6 +38,18 @@ All services support the `-p` command-line flag allowing you to set the port the
 |buck/final      | 8083  | /live and /ready healtcheck endpoints |
 |buck/old-unconfirmed      | 8084  | /live and /ready healtcheck endpoints |
 
+All services shut down gracefully on `SIGINT`/`SIGTERM` i.e. they stop accepting new work, wait for the requests and the scheduled jobs that are still in flight and only then close the database handle. A service that fails to start or dies on an error terminates with a non-zero exit status.
+
+## configuration
+
+The services are configured via the environment, see `env.example` for the full set of variables. The donation related configuration is validated at startup: the service logs the offending entry and refuses to start when
+
+- `DWS_DONATION_ADDRESS` (`buck`, `delphi`) is not a well-formed ethereum address
+- `DWS_STABLE_COINS` (`buck`) is empty or one of its entries has an unknown asset (lower case, one of the assets `buck` holds an erc-20 ABI for), an invalid contract address or a scale that is not greater than zero
+- `DWS_SALE_PARAMS` (`buck`) is empty or one of its entries has a token limit or a token price that is not greater than zero
+
+These values used to be accepted as-is and only did damage once donations were processed e.g. a scale of zero leaves a stable coin donation in its smallest unit and turns a 500 USDT donation into a 500,000,000 USD one.
+
 ## tests
 
 `go test ./...` runs the unit tests, no database required.

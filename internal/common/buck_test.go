@@ -1,6 +1,7 @@
 package common
 
 import (
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"strings"
 	"testing"
 
@@ -204,4 +205,201 @@ func TestNormalizeHash(t *testing.T) {
 	assert.Equal(t, hash, NormalizeHash(strings.ToUpper(hash)))
 	assert.Equal(t, hash, NormalizeHash("\t "+hash+" \n"))
 	assert.Equal(t, "", NormalizeHash("   "))
+}
+
+const scJSON = `
+[{"asset": "usdc", "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "scale": 6}, {"asset": "usdt", "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "scale": 6}]
+`
+
+// the erc-20 ABI map buck is initialized with; only its keys matter here
+func testAssets() map[string]abi.ABI {
+	return map[string]abi.ABI{"usdc": {}, "usdt": {}}
+}
+
+func TestGetContextValidConfig(t *testing.T) {
+	tests := []struct {
+		name  string
+		erc20 string
+		sp    string
+	}{
+		{
+			name:  "reference configuration",
+			erc20: scJSON,
+			sp:    spJSON,
+		},
+		{
+			name:  "single stable coin, single sale param",
+			erc20: `[{"asset": "usdt", "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "scale": 18}]`,
+			sp:    `[{"limit": 1, "price": "0.00001"}]`,
+		},
+		{
+			name:  "lower case contract address",
+			erc20: `[{"asset": "usdc", "address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "scale": 6}]`,
+			sp:    spJSON,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctxt, err := GetContext(tt.erc20, tt.sp, testAssets())
+			assert.Nil(t, err)
+			assert.NotNil(t, ctxt)
+			assert.NotEmpty(t, ctxt.StableCoins)
+			assert.NotEmpty(t, ctxt.SaleParams)
+			assert.Equal(t, testAssets(), ctxt.ABI)
+		})
+	}
+}
+
+func TestGetContextInvalidConfig(t *testing.T) {
+	tests := []struct {
+		name  string
+		erc20 string
+		sp    string
+		want  string
+	}{
+		{
+			name:  "erc-20 json is not valid json",
+			erc20: `{`,
+			sp:    spJSON,
+			want:  "error decoding erc-20 JSON data",
+		},
+		{
+			name:  "sale param json is not valid json",
+			erc20: scJSON,
+			sp:    `{`,
+			want:  "error decoding sale param JSON data",
+		},
+		{
+			name:  "no stable coins",
+			erc20: `[]`,
+			sp:    spJSON,
+			want:  "no erc-20 stable coins configured",
+		},
+		{
+			name:  "scale missing",
+			erc20: `[{"asset": "usdt", "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7"}]`,
+			sp:    spJSON,
+			want:  "scale must be greater than zero, got 0",
+		},
+		{
+			name:  "scale is zero",
+			erc20: `[{"asset": "usdt", "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "scale": 0}]`,
+			sp:    spJSON,
+			want:  "scale must be greater than zero, got 0",
+		},
+		{
+			name:  "scale is negative",
+			erc20: `[{"asset": "usdt", "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "scale": -6}]`,
+			sp:    spJSON,
+			want:  "scale must be greater than zero, got -6",
+		},
+		{
+			name:  "one of several stable coins has a zero scale",
+			erc20: `[{"asset": "usdc", "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "scale": 6}, {"asset": "usdt", "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "scale": 0}]`,
+			sp:    spJSON,
+			want:  "erc-20 entry 'usdt' (0xdac17f958d2ee523a2206206994597c13d831ec7): scale must be greater than zero",
+		},
+		{
+			name:  "contract address is invalid",
+			erc20: `[{"asset": "usdt", "address": "0xdAC17F958D2ee523a2206206994597C13D831ecZ", "scale": 6}]`,
+			sp:    spJSON,
+			want:  "invalid contract address",
+		},
+		{
+			name:  "contract address is too short",
+			erc20: `[{"asset": "usdt", "address": "0xdAC17F958D2ee523a2206206994597C13D831ec", "scale": 6}]`,
+			sp:    spJSON,
+			want:  "invalid contract address",
+		},
+		{
+			name:  "contract address is empty",
+			erc20: `[{"asset": "usdt", "address": "", "scale": 6}]`,
+			sp:    spJSON,
+			want:  "invalid contract address",
+		},
+		{
+			name:  "contract address is missing",
+			erc20: `[{"asset": "usdt", "scale": 6}]`,
+			sp:    spJSON,
+			want:  "invalid contract address",
+		},
+		{
+			name:  "asset is unknown",
+			erc20: `[{"asset": "dai", "address": "0x6B175474E89094C44Da98b954EedeAC495271d0F", "scale": 18}]`,
+			sp:    spJSON,
+			want:  "unknown asset 'dai', expected one of [usdc usdt]",
+		},
+		{
+			name:  "asset has the wrong case",
+			erc20: `[{"asset": "USDT", "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "scale": 6}]`,
+			sp:    spJSON,
+			want:  "unknown asset 'USDT', expected one of [usdc usdt]",
+		},
+		{
+			name:  "asset is missing",
+			erc20: `[{"address": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "scale": 6}]`,
+			sp:    spJSON,
+			want:  "unknown asset ''",
+		},
+		{
+			name:  "no sale params",
+			erc20: scJSON,
+			sp:    `[]`,
+			want:  "no token sale parameters configured",
+		},
+		{
+			name:  "sale param price is zero",
+			erc20: scJSON,
+			sp:    `[{"limit": 1050000000, "price": "0"}]`,
+			want:  "token price must be greater than zero, got 0",
+		},
+		{
+			name:  "sale param price is missing",
+			erc20: scJSON,
+			sp:    `[{"limit": 1050000000}]`,
+			want:  "token price must be greater than zero, got 0",
+		},
+		{
+			name:  "sale param price is negative",
+			erc20: scJSON,
+			sp:    `[{"limit": 1050000000, "price": "-0.001"}]`,
+			want:  "token price must be greater than zero, got -0.001",
+		},
+		{
+			name:  "one of several sale params has a zero price",
+			erc20: scJSON,
+			sp:    `[{"limit": 1050000000, "price": "0.001"}, {"limit": 2625000000, "price": "0"}]`,
+			want:  "sale parameter #2 (limit 2625000000): token price must be greater than zero",
+		},
+		{
+			name:  "sale param limit is zero",
+			erc20: scJSON,
+			sp:    `[{"limit": 0, "price": "0.001"}]`,
+			want:  "token limit must be greater than zero, got 0",
+		},
+		{
+			name:  "sale param limit is negative",
+			erc20: scJSON,
+			sp:    `[{"limit": -1, "price": "0.001"}]`,
+			want:  "token limit must be greater than zero, got -1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctxt, err := GetContext(tt.erc20, tt.sp, testAssets())
+			assert.Nil(t, ctxt)
+			assert.NotNil(t, err)
+			assert.Contains(t, err.Error(), tt.want)
+		})
+	}
+}
+
+// buck cannot process a single donation without an erc-20 ABI
+func TestGetContextWithoutSupportedAssets(t *testing.T) {
+	ctxt, err := GetContext(scJSON, spJSON, map[string]abi.ABI{})
+	assert.Nil(t, ctxt)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "the ABI map is empty")
 }
