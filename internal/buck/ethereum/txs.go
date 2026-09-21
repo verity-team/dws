@@ -118,10 +118,34 @@ func markFailedTxs(ctxt c.Context, bn uint64, txs []c.Transaction) error {
 		log.Error(err)
 		return err
 	}
+	return applyTxReceipts(bn, txs, rcpts)
+}
+
+// applyTxReceipts marks the transactions whose receipt does not report success
+// as failed.
+//
+// Receipts are correlated with transactions by hash: JSON-RPC 2.0 allows the
+// responses in a batch to come back in any order and individual sub-requests
+// may yield a null result (tx not indexed yet) or an error object. Relying on
+// the position of a receipt in the response would thus be incorrect (and could
+// panic for a truncated response).
+func applyTxReceipts(bn uint64, txs []c.Transaction, rcpts []c.TxReceipt) error {
+	// providers may return either casing, the repo convention is lower case
+	byHash := make(map[string]c.TxReceipt, len(rcpts))
+	for _, rcpt := range rcpts {
+		hash := strings.ToLower(strings.TrimSpace(rcpt.TransactionHash))
+		if hash == "" {
+			// null result or error object in the batch response; the
+			// transaction(s) affected are reported below
+			continue
+		}
+		byHash[hash] = rcpt
+	}
 	for i := range txs {
-		rcpt := rcpts[i]
-		if txs[i].Hash != rcpt.TransactionHash {
-			err = fmt.Errorf("block: %d -- receipt hash ('%s') does not match tx hash ('%s')", bn, rcpt.TransactionHash, txs[i].Hash)
+		rcpt, ok := byHash[strings.ToLower(strings.TrimSpace(txs[i].Hash))]
+		if !ok {
+			err := fmt.Errorf("block: %d -- no tx receipt for tx '%s' (%d usable receipt(s) for %d tx(s))", bn, txs[i].Hash, len(byHash), len(txs))
+			log.Error(err)
 			return err
 		}
 		if strings.ToLower(rcpt.Status) != "0x1" {

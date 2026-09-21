@@ -205,6 +205,12 @@ func main() {
 		}
 		return nil
 	})
+	// without a global panic handler gocron does not recover from panics in
+	// scheduled jobs i.e. a single panic would terminate the process
+	gocron.SetPanicHandler(func(jobName string, recoverData interface{}) {
+		log.Errorf("buck/%v: job '%s' panicked: %v", ctype, jobName, recoverData)
+	})
+
 	s := gocron.NewScheduler(time.UTC)
 	s.SingletonModeAll()
 

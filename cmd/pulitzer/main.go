@@ -75,6 +75,12 @@ func main() {
 
 	ctx = context.WithValue(ctx, common.DBHandle, dbh)
 
+	// without a global panic handler gocron does not recover from panics in
+	// scheduled jobs i.e. a single panic would terminate the process
+	gocron.SetPanicHandler(func(jobName string, recoverData interface{}) {
+		log.Errorf("pulitzer: job '%s' panicked: %v", jobName, recoverData)
+	})
+
 	s := gocron.NewScheduler(time.UTC)
 	s.SingletonModeAll()
 
@@ -219,19 +225,21 @@ func servePriceRequests(ctx context.Context) error {
 		return err
 	}
 	for _, rq := range rqs {
+		// a single request that cannot be fulfilled must not block the
+		// remaining (older or newer) requests in the queue
 		klines, err := data.GetHistoricalPriceFromBinance(rq.Time)
 		if err != nil {
 			err = fmt.Errorf("failed to obtain historical prices for %s, %w", rq.Time, err)
 			log.Error(err)
-			return err
+			continue
 		}
 		err = db.CloseRequest(dbh, rq.ID, klines)
 		if err != nil {
 			err = fmt.Errorf("failed to persist historical prices for request #%d/%s, %w", rq.ID, rq.Time, err)
 			log.Error(err)
-			return err
+			continue
 		}
-		log.Infof("obtained historical prices (%s) for request #%d/%s", klines[0].ClosePrice.StringFixed(2), rq.ID, rq.Time)
+		log.Infof("obtained %d historical price(s) for request #%d/%s", len(klines), rq.ID, rq.Time)
 	}
 	return nil
 }
@@ -272,14 +280,7 @@ func getETHPrice(ctx context.Context) (decimal.Decimal, error) {
 		wg.Add(1)
 		go func(source string, f func() (decimal.Decimal, error), ch chan decimal.Decimal) {
 			defer wg.Done()
-			defer close(ch)
-
-			price, err := f()
-			if err != nil {
-				log.Errorf("error fetching ethereum price from %s, %v", source, err)
-				return
-			}
-			ch <- price
+			fetchPrice(source, f, ch)
 		}(k, sources[k], channels[k])
 	}
 
@@ -322,6 +323,30 @@ func getETHPrice(ctx context.Context) (decimal.Decimal, error) {
 	}
 
 	return av, nil
+}
+
+// fetchPrice fetches the ethereum price from a single source and sends it to
+// ch.
+//
+// A panic in a price source has to be recovered here: it happens in the fan-out
+// go routine and gocron's panic handler only covers the goroutine the scheduled
+// job itself runs in. A source that panics -- just like one that returns an
+// error -- drops out of this cycle: ch is closed without a value and the
+// receiving side treats it as a failed source.
+func fetchPrice(source string, f func() (decimal.Decimal, error), ch chan<- decimal.Decimal) {
+	defer close(ch)
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("panic while fetching ethereum price from %s, %v", source, r)
+		}
+	}()
+
+	price, err := f()
+	if err != nil {
+		log.Errorf("error fetching ethereum price from %s, %v", source, err)
+		return
+	}
+	ch <- price
 }
 
 func runReadyProbe(dbh *sqlx.DB) error {
