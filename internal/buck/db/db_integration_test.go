@@ -71,13 +71,20 @@ func resetDB(t *testing.T, dbh *sqlx.DB) {
 	require.NoError(t, err)
 }
 
+// saleLimit is the token sale limit the tests run with, soldOutHash the
+// donation used to drive the campaign totals up to it.
+const (
+	saleLimit   = 1_000_000_000
+	soldOutHash = "0xdddd111111111111111111111111111111111111111111111111111111111111"
+)
+
 func testContext(dbh *sqlx.DB) c.Context {
 	return c.Context{
 		CrawlerType: c.OldUnconfirmed,
 		DB:          dbh,
 		// a single, huge price bucket: neither the token price nor the
 		// campaign status are supposed to change during these tests
-		SaleParams: []c.SaleParam{{Limit: 1_000_000_000, Price: decimal.NewFromFloat(0.001)}},
+		SaleParams: []c.SaleParam{{Limit: saleLimit, Price: decimal.NewFromFloat(0.001)}},
 	}
 }
 
@@ -473,36 +480,44 @@ func TestGetTokenPriceHonoursGracePeriod(t *testing.T) {
 	require.Equal(t, "0.00250", price.StringFixed(5), "a token price younger than 2 minutes was used")
 }
 
-// M5: a closed campaign records the donation but issues no tokens -- the sale
-// cannot deliver them.
+// M5: a closed campaign records the donation -- the money arrived and is
+// refundable -- but the sale cannot deliver tokens for it.
+//
+// Only the row the finalized crawler inserts is zeroed, because that row is
+// inserted *as* 'confirmed'. The latest crawler inserts an 'unconfirmed' row,
+// which updateDonationStats never sums; the closed rule is applied to it when
+// it transitions to 'confirmed' (see TestClosedCampaignZeroesTokensOnConfirmation),
+// not at insert time -- zeroing it here would strand the donation at 0 tokens
+// if the campaign re-opened before it was confirmed.
 func TestPersistTxsClosedCampaignIssuesNoTokens(t *testing.T) {
-	for _, ct := range []c.CrawlerType{c.Latest, c.Finalized} {
-		t.Run(ct.String(), func(t *testing.T) {
+	for _, tc := range []struct {
+		ct     c.CrawlerType
+		status string
+		tokens int64
+	}{
+		{c.Finalized, "confirmed", 0},
+		{c.Latest, "unconfirmed", 200000},
+	} {
+		t.Run(tc.ct.String(), func(t *testing.T) {
 			dbh := testDB(t)
 			resetDB(t, dbh)
 			resetPrices(t, dbh)
 			insertPrice(t, dbh, "truth", "0.00100", 5*time.Minute)
-			ctxt := testContext(dbh)
-			ctxt.CrawlerType = ct
 
-			_, err := dbh.Exec(`UPDATE donation_stats SET status='closed'`)
-			require.NoError(t, err)
+			// a closed campaign the crawler could actually have produced
+			ctxt := sellOutCampaign(t, dbh)
+			ctxt.CrawlerType = tc.ct
 
 			hash := "0x9999999999999999999999999999999999999999999999999999999999999999"
 			tx := donationTx(hash, "200")
-			if ct == c.Finalized {
-				tx.Status = "confirmed"
-			} else {
-				tx.Status = "unconfirmed"
-			}
+			tx.Status = tc.status
 
 			require.NoError(t, PersistTxs(ctxt, 42, decimal.NewFromInt(1), []c.Transaction{tx}))
 
-			// the donation is on record (the money arrived and is refundable)
-			// but it does not credit the donor with a single token
 			usdAmount, tokens := donationTokens(t, dbh, hash)
 			require.Equal(t, "200.00", usdAmount)
-			require.EqualValues(t, 0, tokens, "tokens were issued for a closed campaign")
+			require.EqualValues(t, tc.tokens, tokens)
+			require.Equal(t, tc.status, donationStatus(t, dbh, hash))
 			require.Equal(t, "closed", campaignStatus(t, dbh))
 		})
 	}
@@ -601,4 +616,362 @@ func TestFailTxForDroppedTxRecordsDonationBlockTime(t *testing.T) {
 	total, tokens := donationStats(t, dbh)
 	require.Equal(t, "100.00", total)
 	require.EqualValues(t, 1000, tokens)
+}
+
+// #220 regression: the latest crawler runs ~13 minutes ahead of the finalized
+// one, so a donation mined just after the cap was crossed is inserted while
+// the campaign is still 'open' and is credited tokens. When the finalized
+// crawler reaches that block the campaign is closed -- and its upsert
+// deliberately does not touch `tokens`, so the non-zero count used to stand.
+// The closed rule has to be applied on the transition to 'confirmed'.
+func TestClosedCampaignZeroesTokensOnConfirmation(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	resetPrices(t, dbh)
+	insertPrice(t, dbh, "truth", "0.00100", 5*time.Minute)
+
+	hash := "0xeeee111111111111111111111111111111111111111111111111111111111111"
+	tx := donationTx(hash, "50")
+
+	// 1. the latest crawler sees the donation while the campaign is open
+	latest := testContext(dbh)
+	latest.CrawlerType = c.Latest
+	latest.SaleParams = []c.SaleParam{{Limit: soldOutTokens, Price: decimal.NewFromFloat(0.001)}}
+	tx.Status = "unconfirmed"
+	require.NoError(t, PersistTxs(latest, 42, decimal.NewFromInt(1), []c.Transaction{tx}))
+	require.Equal(t, "open", campaignStatus(t, dbh))
+	_, tokens := donationTokens(t, dbh, hash)
+	require.EqualValues(t, 50000, tokens, "the latest crawler credits tokens while the campaign is open")
+
+	// 2. the cap is crossed on chain, the campaign closes
+	finalized := sellOutCampaign(t, dbh)
+
+	// 3. the finalized crawler reaches the block and confirms the donation
+	tx.Status = "confirmed"
+	require.NoError(t, PersistTxs(finalized, 42, decimal.NewFromInt(1), []c.Transaction{tx}))
+
+	// the donation is on record but it issues no tokens: it became confirmed
+	// after the campaign closed, hence it is over the cap
+	require.Equal(t, "confirmed", donationStatus(t, dbh, hash))
+	usdAmount, tokens := donationTokens(t, dbh, hash)
+	require.Equal(t, "50.00", usdAmount, "the donation must not be re-priced")
+	require.EqualValues(t, 0, tokens, "a donation confirmed after the campaign closed issues no tokens")
+
+	// ... and the campaign totals do not overshoot the token sale limit
+	_, statsTokens := donationStats(t, dbh)
+	require.EqualValues(t, soldOutTokens, statsTokens)
+	require.Equal(t, "closed", campaignStatus(t, dbh))
+}
+
+// ... the idempotency guard: a donation that was already confirmed (and
+// legitimately credited) must keep its tokens when its block is re-crawled
+// after the campaign closed. The closed rule is a state transition, not a
+// re-pricing.
+func TestClosedCampaignKeepsTokensOfConfirmedDonation(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	resetPrices(t, dbh)
+	insertPrice(t, dbh, "truth", "0.00100", 5*time.Minute)
+
+	hash := "0xeeee222222222222222222222222222222222222222222222222222222222222"
+	tx := donationTx(hash, "50")
+	tx.Status = "confirmed"
+
+	// the finalized crawler confirms the donation while the campaign is open
+	ctxt := testContext(dbh)
+	ctxt.CrawlerType = c.Finalized
+	ctxt.SaleParams = []c.SaleParam{{Limit: soldOutTokens, Price: decimal.NewFromFloat(0.001)}}
+	require.NoError(t, PersistTxs(ctxt, 42, decimal.NewFromInt(1), []c.Transaction{tx}))
+	_, tokens := donationTokens(t, dbh, hash)
+	require.EqualValues(t, 50000, tokens)
+
+	// the campaign closes and the very same block is crawled again
+	sellOutCampaign(t, dbh)
+	require.NoError(t, PersistTxs(ctxt, 42, decimal.NewFromInt(1), []c.Transaction{tx}))
+
+	usdAmount, tokens := donationTokens(t, dbh, hash)
+	require.Equal(t, "50.00", usdAmount)
+	require.EqualValues(t, 50000, tokens, "an already confirmed donation must keep its tokens")
+	require.Equal(t, "closed", campaignStatus(t, dbh))
+}
+
+// ... the same transition, taken by the old-unconfirmed crawler: FinalizeTx
+// confirms a donation the finalized crawler never got to, and it has to
+// respect the closed campaign as well.
+func TestFinalizeTxIssuesNoTokensWhenCampaignClosed(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+
+	resetPrices(t, dbh)
+	insertPrice(t, dbh, "truth", "0.00100", 5*time.Minute)
+
+	hash := "0xeeee333333333333333333333333333333333333333333333333333333333333"
+	insertDonation(t, dbh, hash, "unconfirmed", "50.00", 50000)
+	ctxt := sellOutCampaign(t, dbh)
+	ctxt.CrawlerType = c.OldUnconfirmed
+
+	ftx := txByHash(hash)
+	ftx.FBContainsTx = true
+	require.NoError(t, FinalizeTx(ctxt, ftx))
+
+	require.Equal(t, "confirmed", donationStatus(t, dbh, hash))
+	usdAmount, tokens := donationTokens(t, dbh, hash)
+	require.Equal(t, "50.00", usdAmount)
+	require.EqualValues(t, 0, tokens, "a donation confirmed after the campaign closed issues no tokens")
+
+	_, statsTokens := donationStats(t, dbh)
+	require.EqualValues(t, soldOutTokens, statsTokens)
+	require.Equal(t, "closed", campaignStatus(t, dbh))
+}
+
+// ... and FinalizeTx keeps crediting tokens while the campaign is open.
+func TestFinalizeTxIssuesTokensWhenCampaignOpen(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+
+	hash := "0xeeee444444444444444444444444444444444444444444444444444444444444"
+	insertDonation(t, dbh, hash, "unconfirmed", "200.00", 200000)
+
+	ftx := txByHash(hash)
+	ftx.FBBlockHash = "0xblock"
+	ftx.FBContainsTx = true
+	require.NoError(t, FinalizeTx(testContext(dbh), ftx))
+
+	_, tokens := donationTokens(t, dbh, hash)
+	require.EqualValues(t, 200000, tokens)
+	require.Equal(t, "open", campaignStatus(t, dbh))
+}
+
+// the campaign status is derived state: it is recomputed from the confirmed
+// donations on every donation stats write, so the sale re-opens when the
+// total no longer reaches the limit.
+//
+// The reachable way for the total to *fall* is a finalized re-crawl whose
+// receipt reports an already confirmed donation as reverted: persistTx writes
+// status = EXCLUDED.status, the donation becomes 'failed' and drops out of the
+// aggregate. (It is not the old-unconfirmed crawler failing a phantom
+// donation -- failTx only transitions 'unconfirmed' rows and the aggregate
+// only sums 'confirmed' ones, so such a donation was never in the total.)
+func TestCampaignReopensWhenTotalFallsBackUnderTheLimit(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	resetPrices(t, dbh)
+	insertPrice(t, dbh, "truth", "0.00100", 5*time.Minute)
+
+	ctxt := sellOutCampaign(t, dbh)
+
+	// the block is re-crawled and the receipt now reports a revert
+	revertSoldOut(t, ctxt, dbh)
+
+	_, statsTokens := donationStats(t, dbh)
+	require.EqualValues(t, 0, statsTokens)
+	require.Equal(t, "open", campaignStatus(t, dbh), "the sale has tokens left and must re-open")
+}
+
+// ... and a raised token sale limit re-opens it as well.
+func TestCampaignReopensWhenTheLimitIsRaised(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	resetPrices(t, dbh)
+	insertPrice(t, dbh, "truth", "0.00100", 5*time.Minute)
+
+	ctxt := sellOutCampaign(t, dbh)
+
+	// the operator puts more tokens on sale; the next stats write notices
+	raised := ctxt
+	raised.SaleParams = []c.SaleParam{{Limit: 400_000, Price: decimal.NewFromFloat(0.001)}}
+	hash := "0xeeee555555555555555555555555555555555555555555555555555555555555"
+	tx := donationTx(hash, "50")
+	tx.Status = "confirmed"
+	require.NoError(t, PersistTxs(raised, 42, decimal.NewFromInt(1), []c.Transaction{tx}))
+
+	require.Equal(t, "open", campaignStatus(t, dbh))
+	_, statsTokens := donationStats(t, dbh)
+	require.EqualValues(t, soldOutTokens+50000, statsTokens)
+}
+
+// ... but 'paused' is the operator's manual lever and a crawler run must
+// never touch it.
+func TestCampaignStatusPausedIsLeftAlone(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	resetPrices(t, dbh)
+	insertPrice(t, dbh, "truth", "0.00100", 5*time.Minute)
+
+	_, err := dbh.Exec(`UPDATE donation_stats SET status='paused'`)
+	require.NoError(t, err)
+
+	ctxt := testContext(dbh)
+	ctxt.CrawlerType = c.Finalized
+	hash := "0xeeee666666666666666666666666666666666666666666666666666666666666"
+	tx := donationTx(hash, "200")
+	tx.Status = "confirmed"
+	require.NoError(t, PersistTxs(ctxt, 42, decimal.NewFromInt(1), []c.Transaction{tx}))
+
+	require.Equal(t, "paused", campaignStatus(t, dbh))
+}
+
+// soldOutTokens is the token sale limit sellOutCampaign drives the campaign
+// into: a single 50 USD donation at 0.001/token is a quarter of it.
+const soldOutTokens = 200_000
+
+// sellOutCampaign drives the campaign into 'closed' the way the crawler
+// actually does -- a confirmed donation that reaches the token sale limit,
+// with donation_stats recomputed from it -- rather than by seeding a state no
+// crawler can produce. The returned context is the finalized crawler's, with
+// the sale limit that donation exactly fills.
+func sellOutCampaign(t *testing.T, dbh *sqlx.DB) c.Context {
+	t.Helper()
+
+	ctxt := testContext(dbh)
+	ctxt.CrawlerType = c.Finalized
+	ctxt.SaleParams = []c.SaleParam{{Limit: soldOutTokens, Price: decimal.NewFromFloat(0.001)}}
+
+	tx := donationTx(soldOutHash, "200")
+	tx.Status = "confirmed"
+	require.NoError(t, PersistTxs(ctxt, 41, decimal.NewFromInt(1), []c.Transaction{tx}))
+
+	_, statsTokens := donationStats(t, dbh)
+	require.GreaterOrEqual(t, statsTokens, int64(soldOutTokens))
+	require.Equal(t, "closed", campaignStatus(t, dbh))
+
+	return ctxt
+}
+
+// revertSoldOut re-crawls the block that sold the campaign out; the receipt
+// now reports the transaction as reverted, so the finalized upsert flips the
+// donation from 'confirmed' to 'failed' (status = EXCLUDED.status) and it
+// stops counting towards the campaign.
+func revertSoldOut(t *testing.T, ctxt c.Context, dbh *sqlx.DB) {
+	t.Helper()
+
+	tx := donationTx(soldOutHash, "200")
+	tx.Status = "failed"
+	require.NoError(t, PersistTxs(ctxt, 41, decimal.NewFromInt(1), []c.Transaction{tx}))
+	require.Equal(t, "failed", donationStatus(t, dbh, soldOutHash))
+}
+
+// #223 review: the latest crawler must not zero the tokens of the
+// 'unconfirmed' row it inserts. updateDonationStats never sums unconfirmed
+// donations, so the zero buys nothing -- and if the campaign re-opens before
+// the donation is confirmed, neither confirmation path ever restores the
+// tokens (the finalized upsert only touches `tokens` while closed, and
+// confirmSingleTx keeps them when open). The donor is left confirmed at 0
+// tokens with the campaign open.
+func TestReopenedCampaignCreditsDonationInsertedWhileClosed(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	resetPrices(t, dbh)
+	insertPrice(t, dbh, "truth", "0.00100", 5*time.Minute)
+	ctxt := sellOutCampaign(t, dbh)
+
+	// 1. the latest crawler picks the donation up while the campaign is closed
+	hash := "0xf111111111111111111111111111111111111111111111111111111111111111"
+	latest := ctxt
+	latest.CrawlerType = c.Latest
+	tx := donationTx(hash, "50")
+	tx.Status = "unconfirmed"
+	require.NoError(t, PersistTxs(latest, 42, decimal.NewFromInt(1), []c.Transaction{tx}))
+
+	// 2. the campaign re-opens: the donation that sold it out had reverted
+	revertSoldOut(t, ctxt, dbh)
+	require.Equal(t, "open", campaignStatus(t, dbh))
+
+	// 3. the finalized crawler confirms the donation, campaign open
+	tx.Status = "confirmed"
+	require.NoError(t, PersistTxs(ctxt, 42, decimal.NewFromInt(1), []c.Transaction{tx}))
+
+	require.Equal(t, "confirmed", donationStatus(t, dbh, hash))
+	usdAmount, tokens := donationTokens(t, dbh, hash)
+	require.Equal(t, "50.00", usdAmount)
+	require.EqualValues(t, 50000, tokens,
+		"a donation confirmed while the campaign is open must be credited")
+
+	_, statsTokens := donationStats(t, dbh)
+	require.EqualValues(t, 50000, statsTokens)
+}
+
+// ... the same sequence, with the old-unconfirmed crawler doing the
+// confirming.
+func TestReopenedCampaignCreditsDonationConfirmedByFinalizeTx(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	resetPrices(t, dbh)
+	insertPrice(t, dbh, "truth", "0.00100", 5*time.Minute)
+	ctxt := sellOutCampaign(t, dbh)
+
+	hash := "0xf222222222222222222222222222222222222222222222222222222222222222"
+	latest := ctxt
+	latest.CrawlerType = c.Latest
+	tx := donationTx(hash, "50")
+	tx.Status = "unconfirmed"
+	require.NoError(t, PersistTxs(latest, 42, decimal.NewFromInt(1), []c.Transaction{tx}))
+
+	revertSoldOut(t, ctxt, dbh)
+	require.Equal(t, "open", campaignStatus(t, dbh))
+
+	oldUnconfirmed := ctxt
+	oldUnconfirmed.CrawlerType = c.OldUnconfirmed
+	ftx := txByHash(hash)
+	ftx.FBContainsTx = true
+	require.NoError(t, FinalizeTx(oldUnconfirmed, ftx))
+
+	require.Equal(t, "confirmed", donationStatus(t, dbh, hash))
+	_, tokens := donationTokens(t, dbh, hash)
+	require.EqualValues(t, 50000, tokens,
+		"a donation confirmed while the campaign is open must be credited")
+}
+
+// #223 review: donation_stats.status reflects the *previous* stats write, not
+// the configured token sale limit. After the operator raises
+// DWS_SALE_PARAMS' limit the stored status still says 'closed', so the first
+// finalized block would confirm its donations with 0 tokens and only then
+// re-open the campaign. The decision has to be re-derived from the token
+// total read under the same lock.
+func TestRaisedTokenSaleLimitIssuesTokensImmediately(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	resetPrices(t, dbh)
+	insertPrice(t, dbh, "truth", "0.00100", 5*time.Minute)
+	ctxt := sellOutCampaign(t, dbh)
+
+	// the operator puts more tokens on sale; nothing has told the database
+	raised := ctxt
+	raised.SaleParams = []c.SaleParam{{Limit: 400_000, Price: decimal.NewFromFloat(0.001)}}
+	require.Equal(t, "closed", campaignStatus(t, dbh))
+
+	hash := "0xf333333333333333333333333333333333333333333333333333333333333333"
+	tx := donationTx(hash, "50")
+	tx.Status = "confirmed"
+	require.NoError(t, PersistTxs(raised, 42, decimal.NewFromInt(1), []c.Transaction{tx}))
+
+	_, tokens := donationTokens(t, dbh, hash)
+	require.EqualValues(t, 50000, tokens, "the raised token sale limit takes effect immediately")
+	require.Equal(t, "open", campaignStatus(t, dbh))
+}
+
+// ... and the old-unconfirmed crawler must not issue 0 tokens on a stale
+// 'closed' either.
+func TestRaisedTokenSaleLimitIssuesTokensOnFinalizeTx(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	resetPrices(t, dbh)
+	insertPrice(t, dbh, "truth", "0.00100", 5*time.Minute)
+	ctxt := sellOutCampaign(t, dbh)
+
+	hash := "0xf444444444444444444444444444444444444444444444444444444444444444"
+	insertDonation(t, dbh, hash, "unconfirmed", "50.00", 50000)
+
+	raised := ctxt
+	raised.CrawlerType = c.OldUnconfirmed
+	raised.SaleParams = []c.SaleParam{{Limit: 400_000, Price: decimal.NewFromFloat(0.001)}}
+	require.Equal(t, "closed", campaignStatus(t, dbh))
+
+	ftx := txByHash(hash)
+	ftx.FBContainsTx = true
+	require.NoError(t, FinalizeTx(raised, ftx))
+
+	_, tokens := donationTokens(t, dbh, hash)
+	require.EqualValues(t, 50000, tokens, "the raised token sale limit takes effect immediately")
+	require.Equal(t, "open", campaignStatus(t, dbh))
 }

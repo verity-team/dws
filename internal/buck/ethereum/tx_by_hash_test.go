@@ -341,3 +341,55 @@ func (suite *TxByHashSuite) TestAddFBDataSkipsAbsentTx() {
 	mu.Unlock()
 	assert.False(suite.T(), txs[1].FBDataAvailable)
 }
+
+// #221/#215: a batch element carrying a jsonrpc *error* object is the absence
+// of evidence, not evidence of absence. It must yield no element at all --
+// emitting an absent transaction for it would have Judge return TxDropped for
+// every unconfirmed donation older than the grace period, and a rate limited
+// provider would fail them all in a single pass.
+func (suite *TxByHashSuite) TestErrorElementYieldsNoVerdict() {
+	body, err := os.ReadFile("testdata/txbyhash_error.json")
+	assert.Nil(suite.T(), err)
+
+	txs, err := parseTxByHash(body, droppedBatch())
+	assert.Nil(suite.T(), err)
+	assert.Equal(suite.T(), 2, len(txs))
+
+	// the transactions the provider *did* look up are unaffected
+	assert.Equal(suite.T(), minedTxHash, txs[0].Hash)
+	assert.Equal(suite.T(), minedTxHash2, txs[1].Hash)
+	for _, tx := range txs {
+		assert.False(suite.T(), tx.Absent)
+		assert.NotEqual(suite.T(), droppedTxHash, tx.Hash)
+	}
+}
+
+// ... and an element carrying an error is never judged, no matter how old the
+// donation is: a whole batch answered with errors produces no verdict at all
+// and hence no failed donation.
+func (suite *TxByHashSuite) TestErroredBatchFailsNoDonation() {
+	body := []byte(`[
+		{"jsonrpc":"2.0","id":1,"error":{"code":-32005,"message":"rate exceeded"}},
+		{"jsonrpc":"2.0","id":2,"error":{"code":-32005,"message":"rate exceeded"}},
+		{"jsonrpc":"2.0","id":3,"error":{"code":-32603,"message":"internal error"}}
+	]`)
+
+	txs, err := parseTxByHash(body, droppedBatch())
+	assert.Nil(suite.T(), err)
+	assert.Equal(suite.T(), 0, len(txs), "an errored batch must produce no verdict")
+}
+
+// ... while a genuine `result: null` with no error object keeps behaving as
+// before: the transaction is absent and old enough to be declared dead.
+func (suite *TxByHashSuite) TestGenuineNullResultStillAbsent() {
+	body := []byte(`[{"jsonrpc":"2.0","id":2,"result":null}]`)
+
+	txs, err := parseTxByHash(body, droppedBatch())
+	assert.Nil(suite.T(), err)
+	assert.Equal(suite.T(), 1, len(txs))
+	assert.True(suite.T(), txs[0].Absent)
+	assert.Equal(suite.T(), droppedTxHash, txs[0].Hash)
+
+	txs[0].DBBlockTime = time.Now().UTC().Add(-c.DroppedTxGracePeriod - time.Hour)
+	assert.Equal(suite.T(), c.TxDropped, txs[0].Judge(uint64(18459500)))
+}

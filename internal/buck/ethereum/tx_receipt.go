@@ -10,15 +10,17 @@ import (
 )
 
 type TxReceiptBody struct {
-	Jsonrpc string          `json:"jsonrpc"`
-	ID      int             `json:"id"`
-	Result  c.TxReceipt     `json:"result"`
-	Error   *TxReceiptError `json:"error"`
+	Jsonrpc string        `json:"jsonrpc"`
+	ID      int           `json:"id"`
+	Result  c.TxReceipt   `json:"result"`
+	Error   *JSONRPCError `json:"error"`
 }
 
-// TxReceiptError is the error object a JSON-RPC server may return for an
-// individual sub-request in a batch.
-type TxReceiptError struct {
+// JSONRPCError is the error object a JSON-RPC server may return for an
+// individual sub-request in a batch. It is mutually exclusive with that
+// element's result: an element carrying one was never looked up, so it is the
+// absence of evidence and must never be read as a fact about the chain.
+type JSONRPCError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 }

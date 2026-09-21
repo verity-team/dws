@@ -309,7 +309,7 @@ func servePriceRequests(ctx context.Context) error {
 			failPriceRequest(dbh, rq.ID)
 			continue
 		}
-		err = db.CloseRequest(dbh, rq.ID, klines)
+		err = db.CloseRequest(dbh, rq.ID, rq.Time, klines)
 		if err != nil {
 			err = fmt.Errorf("failed to persist historical prices for request #%d/%s, %w", rq.ID, rq.Time, err)
 			log.Error(err)

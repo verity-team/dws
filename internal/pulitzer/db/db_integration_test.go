@@ -24,6 +24,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
+	c "github.com/verity-team/dws/internal/common"
 	"github.com/verity-team/dws/internal/pulitzer/data"
 )
 
@@ -112,7 +113,7 @@ func TestCloseRequestRejectsEmptyKlines(t *testing.T) {
 	ts := time.Now().UTC().Truncate(time.Minute)
 	rid := insertPriceReq(t, dbh, ts, "new", time.Now().UTC())
 
-	err := CloseRequest(dbh, rid, nil)
+	err := CloseRequest(dbh, rid, ts, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no prices to persist")
 
@@ -120,7 +121,7 @@ func TestCloseRequestRejectsEmptyKlines(t *testing.T) {
 	require.Equal(t, 0, priceCount(t, dbh))
 
 	// the empty slice must be rejected just like the nil slice
-	err = CloseRequest(dbh, rid, []data.Kline{})
+	err = CloseRequest(dbh, rid, ts, []data.Kline{})
 	require.Error(t, err)
 	require.Equal(t, "new", requestStatus(t, dbh, rid))
 	require.Equal(t, 0, priceCount(t, dbh))
@@ -135,7 +136,7 @@ func TestCloseRequestRejectsInvalidKlines(t *testing.T) {
 	ts := time.Now().UTC().Truncate(time.Minute)
 	rid := insertPriceReq(t, dbh, ts, "new", time.Now().UTC())
 
-	err := CloseRequest(dbh, rid, []data.Kline{
+	err := CloseRequest(dbh, rid, ts, []data.Kline{
 		{ClosePrice: decimal.NewFromFloat(2000.5), CloseTime: ts},
 		{ClosePrice: decimal.Zero, CloseTime: ts.Add(time.Minute)},
 	})
@@ -144,7 +145,7 @@ func TestCloseRequestRejectsInvalidKlines(t *testing.T) {
 	require.Equal(t, "new", requestStatus(t, dbh, rid))
 	require.Equal(t, 0, priceCount(t, dbh))
 
-	err = CloseRequest(dbh, rid, []data.Kline{{ClosePrice: decimal.NewFromFloat(2000.5)}})
+	err = CloseRequest(dbh, rid, ts, []data.Kline{{ClosePrice: decimal.NewFromFloat(2000.5)}})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "zero close time")
 	require.Equal(t, "new", requestStatus(t, dbh, rid))
@@ -164,7 +165,7 @@ func TestCloseRequestPersistsKlines(t *testing.T) {
 		{ClosePrice: decimal.NewFromFloat(2000.5), CloseTime: ts},
 		{ClosePrice: decimal.NewFromFloat(2001.25), CloseTime: ts.Add(time.Minute)},
 	}
-	require.NoError(t, CloseRequest(dbh, rid, klines))
+	require.NoError(t, CloseRequest(dbh, rid, ts, klines))
 
 	require.Equal(t, "succeeded", requestStatus(t, dbh, rid))
 	require.Equal(t, 2, priceCount(t, dbh))
@@ -184,11 +185,11 @@ func TestCloseRequestUnknownRequest(t *testing.T) {
 	resetDB(t, dbh)
 
 	ts := time.Now().UTC().Truncate(time.Minute)
-	err := CloseRequest(dbh, 4711, []data.Kline{{ClosePrice: decimal.NewFromFloat(2000.5), CloseTime: ts}})
+	err := CloseRequest(dbh, 4711, ts, []data.Kline{{ClosePrice: decimal.NewFromFloat(2000.5), CloseTime: ts}})
 	require.Error(t, err)
 	require.Equal(t, 0, priceCount(t, dbh))
 
-	require.Error(t, CloseRequest(dbh, 0, []data.Kline{{ClosePrice: decimal.NewFromFloat(2000.5), CloseTime: ts}}))
+	require.Error(t, CloseRequest(dbh, 0, ts, []data.Kline{{ClosePrice: decimal.NewFromFloat(2000.5), CloseTime: ts}}))
 	require.Equal(t, 0, priceCount(t, dbh))
 }
 
@@ -281,7 +282,7 @@ func TestFailedRequestRetrySucceeds(t *testing.T) {
 	rid := insertPriceReq(t, dbh, ts, "new", time.Now().UTC())
 
 	// attempt #1: binance returned nothing
-	require.Error(t, CloseRequest(dbh, rid, nil))
+	require.Error(t, CloseRequest(dbh, rid, ts, nil))
 	require.NoError(t, FailRequest(dbh, rid))
 	require.Equal(t, "failed", requestStatus(t, dbh, rid))
 	require.Equal(t, 0, priceCount(t, dbh))
@@ -306,7 +307,7 @@ func TestFailedRequestRetrySucceeds(t *testing.T) {
 	require.Contains(t, requestIDs(rqs), rid)
 
 	// attempt #2 succeeds
-	require.NoError(t, CloseRequest(dbh, rid, []data.Kline{
+	require.NoError(t, CloseRequest(dbh, rid, ts, []data.Kline{
 		{ClosePrice: decimal.NewFromFloat(1999.75), CloseTime: ts},
 	}))
 	require.Equal(t, "succeeded", requestStatus(t, dbh, rid))
@@ -315,4 +316,114 @@ func TestFailedRequestRetrySucceeds(t *testing.T) {
 	rqs, err = GetOpenPriceRequests(dbh)
 	require.NoError(t, err)
 	require.NotContains(t, requestIDs(rqs), rid)
+}
+
+// TestCloseRequestRejectsKlinesOutsideTheLookupWindow: #219 regression.
+// GetHistoricalPriceFromBinance asks for the 10 klines starting at the
+// requested minute; across a binance data gap the first one returned opens
+// minutes later. Recording the request as 'succeeded' with those prices is
+// terminal -- RequestPrice cannot re-create the request and only 'failed'
+// requests are retried -- while c.GetETHPrice still finds nothing for the
+// block, so the finalized crawler loops on it forever. The request has to fail
+// instead, so the existing retry path applies.
+func TestCloseRequestRejectsKlinesOutsideTheLookupWindow(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+
+	ts := time.Now().UTC().Truncate(time.Minute)
+	rid := insertPriceReq(t, dbh, ts, "new", time.Now().UTC())
+
+	// the data gap: the first kline binance returns opens five minutes later
+	var klines []data.Kline
+	for i := 5; i < 10; i++ {
+		klines = append(klines, data.Kline{
+			ClosePrice: decimal.NewFromFloat(2000.5),
+			CloseTime:  ts.Add(time.Duration(i)*time.Minute + 59*time.Second),
+		})
+	}
+	err := CloseRequest(dbh, rid, ts, klines)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "within")
+
+	require.Equal(t, "new", requestStatus(t, dbh, rid))
+	require.Equal(t, 0, priceCount(t, dbh), "no price may be written for a request that is not served")
+
+	// ... and the request is retried rather than being wedged forever
+	require.NoError(t, FailRequest(dbh, rid))
+	require.Equal(t, "failed", requestStatus(t, dbh, rid))
+
+	// c.GetETHPrice agrees: there is no price for the requested minute
+	_, err = c.GetETHPrice(dbh, ts)
+	require.Error(t, err)
+}
+
+// ... a kline that does fall inside the window serves the request, and the
+// price it wrote is the one c.GetETHPrice returns.
+func TestCloseRequestAcceptsKlinesInsideTheLookupWindow(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+
+	ts := time.Now().UTC().Truncate(time.Minute)
+	rid := insertPriceReq(t, dbh, ts, "new", time.Now().UTC())
+
+	// the kline covering the requested minute closes at :59 -- inside the
+	// window -- the later ones are outside it
+	klines := []data.Kline{
+		{ClosePrice: decimal.NewFromFloat(2000.5), CloseTime: ts.Add(59 * time.Second)},
+		{ClosePrice: decimal.NewFromFloat(2001.5), CloseTime: ts.Add(time.Minute + 59*time.Second)},
+	}
+	require.NoError(t, CloseRequest(dbh, rid, ts, klines))
+	require.Equal(t, "succeeded", requestStatus(t, dbh, rid))
+
+	price, err := c.GetETHPrice(dbh, ts)
+	require.NoError(t, err)
+	require.True(t, price.Equal(klines[0].ClosePrice), "got %s", price)
+}
+
+// the window the coverage check uses is the one c.GetETHPrice searches: a
+// kline exactly at the edge is accepted, one just past it is not.
+func TestCloseRequestCoverageMatchesTheLookupWindow(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+
+	ts := time.Now().UTC().Truncate(time.Minute)
+	kline := func(offset time.Duration) []data.Kline {
+		return []data.Kline{{ClosePrice: decimal.NewFromFloat(2000.5), CloseTime: ts.Add(offset)}}
+	}
+
+	rid := insertPriceReq(t, dbh, ts, "new", time.Now().UTC())
+	require.NoError(t, CloseRequest(dbh, rid, ts, kline(c.PriceLookupWindow)))
+	require.Equal(t, "succeeded", requestStatus(t, dbh, rid))
+	_, err := c.GetETHPrice(dbh, ts)
+	require.NoError(t, err, "a kline at the edge of the window must be findable")
+
+	resetDB(t, dbh)
+	rid = insertPriceReq(t, dbh, ts, "new", time.Now().UTC())
+	require.Error(t, CloseRequest(dbh, rid, ts, kline(c.PriceLookupWindow+time.Second)))
+	require.Equal(t, "new", requestStatus(t, dbh, rid))
+	require.Equal(t, 0, priceCount(t, dbh))
+
+	// ... and the same on the other side of the requested minute
+	resetDB(t, dbh)
+	rid = insertPriceReq(t, dbh, ts, "new", time.Now().UTC())
+	require.Error(t, CloseRequest(dbh, rid, ts, kline(-c.PriceLookupWindow-time.Second)))
+	require.Equal(t, "new", requestStatus(t, dbh, rid))
+	require.Equal(t, 0, priceCount(t, dbh))
+}
+
+// a request without a time is refused: the coverage check has nothing to
+// measure against and must not be skipped.
+func TestCloseRequestRejectsZeroRequestTime(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+
+	ts := time.Now().UTC().Truncate(time.Minute)
+	rid := insertPriceReq(t, dbh, ts, "new", time.Now().UTC())
+
+	err := CloseRequest(dbh, rid, time.Time{},
+		[]data.Kline{{ClosePrice: decimal.NewFromFloat(2000.5), CloseTime: ts}})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "zero request time")
+	require.Equal(t, "new", requestStatus(t, dbh, rid))
+	require.Equal(t, 0, priceCount(t, dbh))
 }

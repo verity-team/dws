@@ -9,6 +9,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
+	c "github.com/verity-team/dws/internal/common"
 	"github.com/verity-team/dws/internal/pulitzer/data"
 )
 
@@ -83,13 +84,14 @@ func retryInterval() string {
 }
 
 // CloseRequest persists the prices obtained for a price request and marks the
-// request as succeeded.
+// request as succeeded. ts is the minute the request asks a price for.
 //
-// A request is only ever marked succeeded if prices were actually written:
-// an empty kline set is rejected outright, so the function cannot record
-// success for work it did not do.
-func CloseRequest(dbh *sqlx.DB, rid uint64, data []data.Kline) (err error) {
-	if err = validateKlines(rid, data); err != nil {
+// A request is only ever marked succeeded if prices that actually serve it
+// were written: an empty kline set and a kline set that misses the requested
+// minute are both rejected outright, so the function cannot record success for
+// work it did not do.
+func CloseRequest(dbh *sqlx.DB, rid uint64, ts time.Time, data []data.Kline) (err error) {
+	if err = validateKlines(rid, ts, data); err != nil {
 		return err
 	}
 
@@ -158,9 +160,23 @@ func FailRequest(dbh *sqlx.DB, rid uint64) error {
 // validateKlines rejects kline sets that must not be persisted. An empty set
 // is the important case: it would otherwise close the request with zero prices
 // written.
-func validateKlines(rid uint64, kls []data.Kline) error {
+//
+// A set that does not cover the requested minute is rejected for the same
+// reason. GetHistoricalPriceFromBinance asks for the 10 klines starting at the
+// requested minute; across a binance data gap the first one returned can open
+// minutes later, and persisting those prices would mark the request
+// 'succeeded' -- a terminal state, since RequestPrice cannot re-create it and
+// only 'failed' requests are retried -- while c.GetETHPrice still finds
+// nothing for the block in question. The caller fails the request instead, so
+// the existing retry path applies.
+func validateKlines(rid uint64, ts time.Time, kls []data.Kline) error {
 	if rid == 0 {
 		err := errors.New("refusing to close price request: invalid request id 0")
+		log.Error(err)
+		return err
+	}
+	if ts.IsZero() {
+		err := fmt.Errorf("refusing to close price request #%d: zero request time", rid)
 		log.Error(err)
 		return err
 	}
@@ -169,6 +185,7 @@ func validateKlines(rid uint64, kls []data.Kline) error {
 		log.Error(err)
 		return err
 	}
+	var covered bool
 	for _, kl := range kls {
 		if !kl.ClosePrice.IsPositive() {
 			err := fmt.Errorf(
@@ -182,6 +199,18 @@ func validateKlines(rid uint64, kls []data.Kline) error {
 			log.Error(err)
 			return err
 		}
+		// the same window c.GetETHPrice searches: a price outside it is of no
+		// use to the block that triggered the request
+		if delta := kl.CloseTime.Sub(ts); delta.Abs() <= c.PriceLookupWindow {
+			covered = true
+		}
+	}
+	if !covered {
+		err := fmt.Errorf(
+			"refusing to close price request #%d: none of the %d price(s) is within %v of %s",
+			rid, len(kls), c.PriceLookupWindow, ts.UTC().Format(time.RFC3339))
+		log.Error(err)
+		return err
 	}
 	return nil
 }

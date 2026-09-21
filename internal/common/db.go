@@ -30,20 +30,36 @@ func GetLatestETHPrice(db *sqlx.DB) (decimal.Decimal, error) {
 	return ethp, nil
 }
 
+// PriceLookupWindow is how far GetETHPrice looks on either side of the
+// timestamp it is asked for.
+//
+// It is exported because it defines what "a price for this minute" means:
+// pulitzer must not record a price request as served unless the prices it
+// persisted actually fall inside this window, otherwise the request is
+// terminal ('succeeded' requests are never served again) while buck still
+// cannot price the block -- and the finalized crawler loops on it forever.
+const PriceLookupWindow = 90 * time.Second
+
+// PriceLookupInterval renders PriceLookupWindow as a postgres interval
+// literal.
+func PriceLookupInterval() string {
+	return fmt.Sprintf("%d seconds", int64(PriceLookupWindow.Seconds()))
+}
+
 func GetETHPrice(db *sqlx.DB, ts time.Time) (decimal.Decimal, error) {
-	// find a price that is in a 3 minute interval of the timestamp and closest
-	// to the timestamp
+	// find a price that is within PriceLookupWindow of the timestamp and
+	// closest to it
 	q := `
 		SELECT price
 		FROM price
 			WHERE asset = 'eth'
-			  AND created_at >= $1::timestamp AT TIME ZONE 'UTC' - INTERVAL '1.5 minutes'
-			  AND created_at <= $1::timestamp AT TIME ZONE 'UTC' + INTERVAL '1.5 minutes'
+			  AND created_at >= $1::timestamp AT TIME ZONE 'UTC' - $2::interval
+			  AND created_at <= $1::timestamp AT TIME ZONE 'UTC' + $2::interval
 			ORDER BY ABS(EXTRACT(EPOCH FROM (created_at - $1::timestamp AT TIME ZONE 'UTC'))) ASC
 			LIMIT 1
 		`
 	var ethp decimal.Decimal
-	if err := db.Get(&ethp, q, ts); err != nil {
+	if err := db.Get(&ethp, q, ts, PriceLookupInterval()); err != nil {
 		err = fmt.Errorf("failed to fetch ETH price for time %v, %w", ts, err)
 		log.Error(err)
 		return decimal.Zero, err

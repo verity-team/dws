@@ -14,6 +14,12 @@ type TxByHashBody struct {
 	Jsonrpc string      `json:"jsonrpc"`
 	ID      int         `json:"id"`
 	Result  *c.TxByHash `json:"result"`
+	// Error is the per-element error object a jsonrpc provider may return
+	// for an individual sub-request of a batch (rate limit, internal error,
+	// ...). It is mutually exclusive with Result and is the reason a nil
+	// Result must not be read as "the provider knows nothing about this
+	// transaction".
+	Error *JSONRPCError `json:"error"`
 }
 
 // addFBData annotates the given transactions with the data of the blocks that
@@ -114,6 +120,12 @@ func (txbh TXBHFetcher) Fetch(ctxt c.Context, hs []c.Hashable) ([]c.TxByHash, er
 // floor: it is the only evidence there is that a transaction we watched get
 // mined is gone from both the chain and the mempool. Whether that is enough
 // to fail the donation is c.TxByHash.Judge's decision, not ours.
+//
+// A batch element that carries an *error* object is a different matter
+// altogether: the provider did not look the transaction up (rate limit, bad
+// spell, ...), so it is not evidence of anything. It yields no element at all
+// and the donation is simply re-examined on the next run -- a fail verdict
+// must rest on positive evidence, and an error object is the absence of it.
 func parseTxByHash(body []byte, hs []c.Hashable) ([]c.TxByHash, error) {
 	var resp []TxByHashBody
 	err := json.Unmarshal(body, &resp)
@@ -129,10 +141,18 @@ func parseTxByHash(body []byte, hs []c.Hashable) ([]c.TxByHash, error) {
 		// the ids handed to the provider are 1-based indexes into hs; a
 		// response we cannot attribute to a request is unusable
 		if d.ID < 1 || d.ID > len(hs) {
-			log.Warnf("tx not found on chain, unattributable jsonrpc id %d, skipping", d.ID)
+			log.Warnf("no tx data for unattributable jsonrpc id %d, skipping", d.ID)
 			continue
 		}
 		hash := hs[d.ID-1].GetHash()
+		if d.Error != nil {
+			// the provider answered with an error instead of looking the
+			// transaction up -> no verdict, leave the donation alone
+			log.Warnf(
+				"tx by hash request #%d ('%s') failed: %d, %s -- it will be re-examined later",
+				d.ID, hash, d.Error.Code, d.Error.Message)
+			continue
+		}
 		log.Warnf("tx '%s' found neither on chain nor in the mempool", hash)
 		res = append(res, c.TxByHash{Hash: hash, Absent: true})
 	}
