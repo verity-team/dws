@@ -975,3 +975,145 @@ func TestRaisedTokenSaleLimitIssuesTokensOnFinalizeTx(t *testing.T) {
 	require.EqualValues(t, 50000, tokens, "the raised token sale limit takes effect immediately")
 	require.Equal(t, "open", campaignStatus(t, dbh))
 }
+
+// donationBlock returns the block identity recorded for a donation.
+func donationBlock(t *testing.T, dbh *sqlx.DB, hash string) (uint64, string, time.Time) {
+	t.Helper()
+
+	var (
+		number uint64
+		bhash  string
+		btime  time.Time
+	)
+	err := dbh.QueryRowx(
+		`SELECT block_number, block_hash, block_time FROM donation WHERE tx_hash=$1`, hash,
+	).Scan(&number, &bhash, &btime)
+	require.NoError(t, err)
+
+	return number, bhash, btime
+}
+
+// confirmSingleTx used to set block_number, block_time and status but not
+// block_hash, so the block identity it wrote was only coherent because the
+// caller happens to reject every transaction whose recorded block hash
+// differs from the finalized one. The update has to be self-contained: a row
+// carrying the block number and time of one block and the hash of another is
+// exactly what the donation(block_hash) index would then serve wrong sets
+// from.
+func TestFinalizeTxWritesTheWholeBlockIdentity(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+
+	const (
+		hash   = "0xeeee999999999999999999999999999999999999999999999999999999999999"
+		fbHash = "0xfinalizedblockhash"
+	)
+	insertDonation(t, dbh, hash, "unconfirmed", "200.00", 200000)
+
+	// the donation was inserted with block_hash '0xblock'
+	_, before, _ := donationBlock(t, dbh, hash)
+	require.Equal(t, "0xblock", before)
+
+	ftx := txByHash(hash)
+	ftx.BlockNumber = 42
+	ftx.BlockHash = fbHash
+	ftx.FBBlockHash = fbHash
+	ftx.FBBlockTime = time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC)
+	ftx.FBContainsTx = true
+	require.NoError(t, FinalizeTx(testContext(dbh), ftx))
+
+	number, bhash, btime := donationBlock(t, dbh, hash)
+	require.EqualValues(t, 42, number)
+	require.Equal(t, fbHash, bhash, "block_hash has to be updated along with the rest of the block identity")
+	require.Equal(t, ftx.FBBlockTime.UTC(), btime.UTC())
+	require.Equal(t, "confirmed", donationStatus(t, dbh, hash))
+}
+
+// hashes are stored lower case throughout (c.NormalizeHash); a provider that
+// reports a checksummed block hash must not write a row the exact-case
+// lookups elsewhere will never find again
+func TestFinalizeTxNormalizesTheBlockHash(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+
+	const hash = "0xeeee888888888888888888888888888888888888888888888888888888888888"
+	insertDonation(t, dbh, hash, "unconfirmed", "200.00", 200000)
+
+	ftx := txByHash(hash)
+	ftx.BlockHash = "0xABCDEF0123456789"
+	ftx.FBBlockHash = "0xABCDEF0123456789"
+	ftx.FBContainsTx = true
+	require.NoError(t, FinalizeTx(testContext(dbh), ftx))
+
+	_, bhash, _ := donationBlock(t, dbh, hash)
+	require.Equal(t, "0xabcdef0123456789", bhash)
+}
+
+// TxFinalize is unreachable without a finalized block hash, but an empty one
+// must never replace the hash the donation already carries
+func TestFinalizeTxKeepsTheBlockHashWhenTheFinalizedOneIsEmpty(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+
+	const hash = "0xeeee777777777777777777777777777777777777777777777777777777777777"
+	insertDonation(t, dbh, hash, "unconfirmed", "200.00", 200000)
+
+	ftx := txByHash(hash)
+	ftx.BlockHash = ""
+	ftx.FBBlockHash = ""
+	ftx.FBContainsTx = true
+	require.NoError(t, FinalizeTx(testContext(dbh), ftx))
+
+	_, bhash, _ := donationBlock(t, dbh, hash)
+	require.Equal(t, "0xblock", bhash)
+	require.Equal(t, "confirmed", donationStatus(t, dbh, hash))
+}
+
+// insertZeroDonation records the kind of row the crawler used to create for a
+// zero value transfer: amount 0, usd_amount 0, 0 tokens.
+func insertZeroDonation(t *testing.T, dbh *sqlx.DB, hash, status string) {
+	t.Helper()
+
+	q := `
+		INSERT INTO donation(
+			address, amount, usd_amount, asset, tokens, price, tx_hash, status,
+			block_number, block_hash, block_time)
+		VALUES(
+			'0x00000000000000000000000000000000000000ff', 0, 0, 'eth', 0,
+			0.001, $1, $2, 1, '0xblock', timezone('utc', now()))
+		`
+	_, err := dbh.Exec(q, hash, status)
+	require.NoError(t, err)
+}
+
+// filterTransactions no longer accepts a transfer that would be recorded as
+// zero, but rows written before that are still on the chain and still in the
+// database. They must not be stranded: the finalized crawler skips them now,
+// so the old-unconfirmed crawler is what settles them -- c.TxByHash.Judge
+// returns TxFinalize for a transaction its finalized block carries, and
+// FinalizeTx confirms it with the 0 tokens it already had.
+func TestPreExistingZeroAmountDonationStillSettles(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+
+	const hash = "0xeeee000000000000000000000000000000000000000000000000000000000000"
+	insertZeroDonation(t, dbh, hash, "unconfirmed")
+
+	// the tx is on chain and its finalized block carries it
+	ftx := txByHash(hash)
+	ftx.FBBlockHash = "0xblock"
+	ftx.FBContainsTx = true
+	ftx.FBDataAvailable = true
+	require.Equal(t, c.TxFinalize, ftx.Judge(ftx.BlockNumber))
+
+	require.NoError(t, FinalizeTx(testContext(dbh), ftx))
+
+	require.Equal(t, "confirmed", donationStatus(t, dbh, hash))
+	_, tokens := donationTokens(t, dbh, hash)
+	require.EqualValues(t, 0, tokens)
+
+	// and it contributes nothing to the campaign totals, exactly as before
+	total, statsTokens := donationStats(t, dbh)
+	require.Equal(t, "0.00", total)
+	require.EqualValues(t, 0, statsTokens)
+}

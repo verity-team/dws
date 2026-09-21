@@ -73,7 +73,9 @@ const UserStat = (
     }
   }, [activeIndex, page, pageSize, onPageChange]);
 
-  if (donations == null) {
+  // an empty array reaches the same conclusion as a missing one: there is no
+  // donation to render, and `donations[activeIndex]` below would be undefined
+  if (donations == null || donations.length === 0) {
     return <div></div>;
   }
 

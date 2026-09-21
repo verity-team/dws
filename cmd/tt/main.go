@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -18,8 +19,16 @@ import (
 	"github.com/verity-team/dws/api"
 )
 
+// PrivateKeyEnvVar is where the ECDSA private key used to sign the request is
+// read from.
+//
+// It used to be a command-line flag, which put the raw key into `argv`: it is
+// then readable by every user on the box via `ps aux` / /proc/<pid>/cmdline
+// for as long as the process lives, and it is persisted in the shell history
+// on top of that.
+const PrivateKeyEnvVar = "DWS_TT_PRIVATE_KEY"
+
 func main() {
-	privateKey := flag.String("private-key", "", "private key for generating delphi-signature")
 	url := flag.String("url", "http://localhost:8080/affiliate/code", "URL for the POST request")
 	delphiKey := flag.String("delphi-key", "0xb938F65DfE303EdF96A511F1e7E3190f69036860", "eth address")
 	timeoutSeconds := flag.Int("timeout", 5, "request timeout in seconds")
@@ -28,13 +37,15 @@ func main() {
 	msg := flag.String("msg", "affiliate code", "message to sign")
 	flag.Parse()
 
-	if *privateKey == "" {
-		log.Fatal("please pass a private key")
+	privateKey, present := os.LookupEnv(PrivateKeyEnvVar)
+	if !present || strings.TrimSpace(privateKey) == "" {
+		log.Fatalf("please set the %s environment variable", PrivateKeyEnvVar)
 	}
 
-	pk, err := crypto.HexToECDSA(*privateKey)
+	// the parse error carries the key material it choked on
+	pk, err := crypto.HexToECDSA(strings.TrimSpace(privateKey))
 	if err != nil {
-		log.Fatalf("error parsing private key: %v", err)
+		log.Fatalf("failed to parse the private key in %s", PrivateKeyEnvVar)
 	}
 
 	client := &http.Client{
@@ -44,7 +55,6 @@ func main() {
 	req, err := http.NewRequest("POST", *url, nil)
 	if err != nil {
 		log.Fatal("error creating request:", err)
-		return
 	}
 	req.Header.Set("delphi-key", *delphiKey)
 
@@ -63,29 +73,31 @@ func main() {
 	signature, err := signMessage(*msg, *delphiKey, pk, ts)
 	if err != nil {
 		log.Fatalf("error signing message: %v", err)
-		return
 	}
 	req.Header.Set("delphi-signature", signature)
 
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Fatal("error sending request:", err)
-		return
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	log.Info("Status Code:", resp.Status)
-	if resp.StatusCode != http.StatusOK {
-		log.Errorf("failed to request affiliate code with status: %s", resp.Status)
-	}
 
 	// Read the response body
-	responseBody, err := io.ReadAll(resp.Body)
+	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	log.Info(string(responseBody))
+
+	// a non-2xx answer carries an error document, not an affiliate code:
+	// unmarshalling it yields the zero value, which used to be printed as if
+	// it were the result
+	if resp.StatusCode != http.StatusOK {
+		log.Fatalf("failed to request affiliate code with status: %s", resp.Status)
+	}
+
 	// Define a struct to unmarshal the JSON response
 	var data api.AffiliateCode
 
@@ -96,6 +108,10 @@ func main() {
 
 	log.Info(data)
 }
+
+// maxResponseBytes bounds what this tool reads into memory; the endpoint it
+// talks to answers with a handful of bytes.
+const maxResponseBytes = 1 << 20
 
 // signMessage builds and signs the message delphi expects: the words of the
 // endpoint path, the lower cased address and the timestamp.

@@ -51,9 +51,23 @@ FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
 
 CREATE INDEX ON donation (address);
-CREATE INDEX ON donation (tx_hash);
+-- NB: no separate index on tx_hash -- the UNIQUE constraint above already
+-- creates one (donation_tx_hash_key) and a second copy of it only costs
+-- write time and disk.
 CREATE INDEX ON donation (block_hash);
 CREATE INDEX ON donation (block_time);
+-- Serves GetOldUnconfirmed, which looks for `status = 'unconfirmed'` by block
+-- time every 15 minutes. That predicate is highly selective -- next to every
+-- row is 'confirmed' -- so the planner uses this index and reads only the
+-- handful of rows that match instead of the whole table.
+--
+-- It does *not* help the aggregate updateDonationStats runs while holding the
+-- donation_stats row lock. `status = 'confirmed'` matches next to every row,
+-- so the planner rightly keeps scanning the table sequentially (measured on
+-- 300k rows at 0.3% unconfirmed, pg14: Parallel Seq Scan either way). Making
+-- that aggregate cheap needs a different change -- an incrementally
+-- maintained total, or a covering index -- and not this one.
+CREATE INDEX ON donation (status, block_time);
 
 --- price ----------------------------------------------------
 DROP TABLE IF EXISTS price;
@@ -62,7 +76,19 @@ CREATE TABLE price (
     asset asset_enum NOT NULL,
     price NUMERIC(15,5) NOT NULL,
 
-    created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())
+    created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
+
+    -- one price per asset and point in time. The historical price requests
+    -- filed by `buck` are served with the ten klines that start at the minute
+    -- asked for, so two requests a few minutes apart return overlapping
+    -- windows and used to insert the same minute twice: identical values, so
+    -- reads were unaffected, but the table grows without bound and the
+    -- `ORDER BY created_at DESC LIMIT 1` reads resolve the tie arbitrarily.
+    -- pulitzer's persistKline inserts ON CONFLICT DO NOTHING against this
+    -- constraint. It doubles as the (asset, created_at) index the price
+    -- lookups need: GetETHPrice and getTokenPrice both filter by asset and
+    -- order/bound by created_at.
+    UNIQUE(asset, created_at)
 );
 CREATE INDEX ON price (created_at);
 

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +20,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/gommon/log"
 	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -494,4 +497,94 @@ func TestUserDataResponseHasNoAffiliateCode(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, string(body), "affiliate_code")
 	assert.NotContains(t, string(body), "us_code")
+}
+
+// GET /version used to assemble the build stamp into a package level variable
+// on every request. The value never changed, but two concurrent requests still
+// wrote it while a third read it -- a data race, which this test provokes
+// under `go test -race`.
+func TestVersionIsRaceFree(t *testing.T) {
+	s := NewDelphiServer(nil)
+	e := echo.New()
+
+	const callers = 16
+	var wg sync.WaitGroup
+	wg.Add(callers)
+	for i := 0; i < callers; i++ {
+		go func() {
+			defer wg.Done()
+			req := httptest.NewRequest(http.MethodGet, "/version", nil)
+			rec := httptest.NewRecorder()
+			assert.NoError(t, s.Version(e.NewContext(req, rec)))
+			assert.Equal(t, http.StatusOK, rec.Code)
+		}()
+	}
+	wg.Wait()
+
+	// the value is still the build stamp and it is stable
+	assert.Equal(t, versionString(), versionString())
+	assert.True(t, strings.HasPrefix(versionString(), "delphi::"))
+}
+
+// an address without a `user_data` row must not be reported with empty strings
+// for every amount and an empty `status`: `""` is not one of the values the
+// enum in api/delphi.yaml declares
+func TestDefaultUserDataIsSpecCompliant(t *testing.T) {
+	ud := defaultUserData()
+	assert.Equal(t, "0", ud.Total)
+	assert.Equal(t, "0", ud.Tokens)
+	assert.Equal(t, "0", ud.Staked)
+	assert.Equal(t, "0", ud.Reward)
+	assert.Equal(t, api.None, ud.Status)
+	assert.Contains(t, []api.UserDataStatus{api.None, api.Staking, api.Unstaking}, ud.Status)
+}
+
+// the whole user data result carries the defaults, not the zero value of the
+// struct
+func TestUserDataResultDefaults(t *testing.T) {
+	// nothing is listening there, so the read path is not exercised; the
+	// defaults have to be in place before the first query regardless
+	res := api.UserDataResult{UserData: defaultUserData()}
+	body, err := json.Marshal(res)
+	require.NoError(t, err)
+	assert.NotContains(t, string(body), `"status":""`)
+	assert.Contains(t, string(body), `"status":"none"`)
+}
+
+// within the `delphi-ts` replay window the signature is a bearer credential:
+// anyone who can read the log can replay a failed request verbatim
+func TestSigDigestDoesNotRevealTheSignature(t *testing.T) {
+	const sig = "0x93433430e249145433931dd4fda65090fcb250489e107d460b8adcef4a3c05f863c860d63c3f4ff92dcda4cce9755e4771e9dc6b91dafd5c900c7a5b99c169d71b"
+
+	digest := sigDigest(sig)
+	assert.NotContains(t, sig, digest)
+	assert.NotContains(t, digest, sig)
+	assert.Len(t, digest, 16)
+	// stable, so log lines can still be correlated with each other
+	assert.Equal(t, digest, sigDigest(sig))
+	// and it discriminates
+	assert.NotEqual(t, digest, sigDigest(sig[:len(sig)-1]+"c"))
+	assert.Equal(t, "<empty>", sigDigest(""))
+}
+
+// verifySig logs on every rejection; none of those log lines may carry the
+// signature that was rejected
+func TestVerifySigDoesNotLogTheSignature(t *testing.T) {
+	const (
+		msg  = "aea3eb2f5a6a2efe002d3c88da52ba5a8702c9722ae2d67d1260e4318f5ccd6c"
+		from = "0xb938F65DfE303EdF96A511F1e7E3190f69036860"
+	)
+	// a well formed signature of the right length that recovers to nobody,
+	// plus one that is not hex at all
+	for _, sig := range []string{
+		"0x" + strings.Repeat("ff", crypto.SignatureLength),
+		"not-hex-at-all",
+	} {
+		var buf bytes.Buffer
+		log.SetOutput(&buf)
+		t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
+		assert.False(t, verifySig(from, msg, sig))
+		assert.NotContains(t, buf.String(), sig, "the raw signature must not be logged")
+	}
 }

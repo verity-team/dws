@@ -23,8 +23,16 @@ const UserDonationStat = () => {
   );
 
   // User have not connected, or there are no data on this user
-  // Simply skip user stats rendering
-  if (userWallet == null || userDonationData?.donations == null) {
+  // Simply skip user stats rendering.
+  //
+  // The length check is what the null check used to stand in for: the backend
+  // now always sends `donations` as an array (the API spec requires one), so
+  // "no donations" is an empty array rather than `null`.
+  if (
+    userWallet == null ||
+    userDonationData?.donations == null ||
+    userDonationData.donations.length === 0
+  ) {
     return (
       <div className="w-full font-changa">
         <div className="flex flex-col items-center justify-center">

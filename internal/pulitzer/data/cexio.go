@@ -26,9 +26,13 @@ type CexIOResponse struct {
 	Pair                  string  `json:"pair"`
 }
 
+// cexIOPair is the pair this source asks for; the response is checked against
+// it.
+const cexIOPair = "ETH/USD"
+
 func GetCexIOETHUSDLastPrice() (decimal.Decimal, error) {
 	params := common.HTTPParams{
-		URL: "https://cex.io/api/ticker/ETH/USD",
+		URL: "https://cex.io/api/ticker/" + cexIOPair,
 	}
 	responseBody, err := common.HTTPGet(params)
 	if err != nil {
@@ -47,11 +51,17 @@ func GetCexIOETHUSDLastPrice() (decimal.Decimal, error) {
 
 // parseCexIOTicker extracts the last price from a cex.io ticker response. The
 // venue publishes the time the quote was taken; a quote that is no longer
-// current is rejected instead of being averaged in at full weight.
+// current is rejected instead of being averaged in at full weight. It also
+// echoes the pair it answered for, which is checked against the pair that was
+// asked for.
 func parseCexIOTicker(responseBody []byte) (decimal.Decimal, error) {
 	// Parse the JSON response
 	var data CexIOResponse
 	if err := json.Unmarshal(responseBody, &data); err != nil {
+		return decimal.Zero, err
+	}
+
+	if err := checkPair("cex.io", cexIOPair, data.Pair); err != nil {
 		return decimal.Zero, err
 	}
 

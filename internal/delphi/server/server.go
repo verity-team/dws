@@ -1,12 +1,15 @@
 package server
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts"
@@ -54,8 +57,18 @@ const (
 )
 
 var (
-	bts, rev, version string
+	bts, rev string
 )
+
+// versionString renders the build stamp exactly once.
+//
+// It used to be assembled into a package level variable on every GET /version
+// request: `bts` and `rev` are fixed at link time, so the write produced the
+// same string every time -- but two concurrent requests still wrote the same
+// variable while a third read it, which is a data race whatever the value.
+var versionString = sync.OnceValue(func() string {
+	return fmt.Sprintf("delphi::%s::%s", bts, rev)
+})
 
 type DelphiServer struct {
 	db *sqlx.DB
@@ -129,8 +142,30 @@ func (s *DelphiServer) ConnectWallet(ctx echo.Context, params api.ConnectWalletP
 	return ctx.JSON(http.StatusOK, struct{}{})
 }
 
+// defaultUserData is what an address without a `user_data` row is reported
+// with. The zero value of api.UserData renders `""` for every amount and an
+// empty `status`, and `""` is not one of the values the enum in
+// api/delphi.yaml declares. An address that has not donated has donated
+// nothing and is not staking.
+func defaultUserData() api.UserData {
+	return api.UserData{
+		Total:  "0",
+		Tokens: "0",
+		Staked: "0",
+		Reward: "0",
+		Status: api.None,
+	}
+}
+
 func (s *DelphiServer) getUserData(address string, limit, offset int) (*api.UserDataResult, error) {
-	var result api.UserDataResult
+	// `donations` is a required array in api/delphi.yaml:232. A nil slice
+	// marshals to `null`, which is not an array: a caller doing
+	// donations.map(..) throws on it, so the frontend had to carry a null
+	// check that an empty array makes unnecessary.
+	result := api.UserDataResult{
+		Donations: []api.Donation{},
+		UserData:  defaultUserData(),
+	}
 	address = strings.ToLower(address)
 	dd, err := db.GetUserDonationData(s.db, address, limit, offset)
 	if err != nil {
@@ -145,7 +180,9 @@ func (s *DelphiServer) getUserData(address string, limit, offset int) (*api.User
 		return &result, nil
 	}
 
-	result.Donations = dd
+	if dd != nil {
+		result.Donations = dd
+	}
 	if udata != nil {
 		result.UserData = *udata
 	}
@@ -201,15 +238,27 @@ func (s *DelphiServer) Ready(ctx echo.Context) error {
 }
 
 func (s *DelphiServer) Version(ctx echo.Context) error {
-	version = fmt.Sprintf("delphi::%s::%s", bts, rev)
-	log.Info("version = ", version)
-	return ctx.JSON(http.StatusOK, map[string]string{"version": version})
+	return ctx.JSON(http.StatusOK, map[string]string{"version": versionString()})
+}
+
+// sigDigest identifies a signature in a log line without reproducing it.
+//
+// Inside the `delphi-ts` replay window the signature *is* the credential:
+// anyone who can read the log can replay a failed request verbatim. The first
+// bytes of its SHA-256 digest are enough to correlate log lines with each
+// other and cannot be replayed.
+func sigDigest(sigHex string) string {
+	if sigHex == "" {
+		return "<empty>"
+	}
+	sum := sha256.Sum256([]byte(sigHex))
+	return hex.EncodeToString(sum[:8])
 }
 
 func verifySig(from, msg, sigHex string) bool {
 	sig, err := hexutil.Decode(sigHex)
 	if err != nil {
-		err = fmt.Errorf("invalid sig ('%s'), %w", sigHex, err)
+		err = fmt.Errorf("invalid sig (sha256:%s), %w", sigDigest(sigHex), err)
 		log.Error(err)
 		return false
 	}
@@ -228,7 +277,7 @@ func verifySig(from, msg, sigHex string) bool {
 
 	pk, err := crypto.SigToPub(msgHash, sig)
 	if err != nil {
-		err = fmt.Errorf("failed to recover public key from sig ('%s'), %w", sigHex, err)
+		err = fmt.Errorf("failed to recover public key from sig (sha256:%s), %w", sigDigest(sigHex), err)
 		log.Error(err)
 		return false
 	}
@@ -336,7 +385,11 @@ func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodePar
 		// return the newly generated affiliate code
 		return ctx.JSON(http.StatusOK, *afc)
 	}
-	return nil
+	// db.GenerateAffiliateCode returned neither a code nor an error. A bare
+	// `return nil` here answers 200 with an empty body and no content type,
+	// which no caller can make sense of -- report the failure instead.
+	cerr := getError(110, msgInternalError, "", errors.New("no affiliate code and no error from GenerateAffiliateCode"))
+	return ctx.JSON(http.StatusInternalServerError, cerr)
 }
 
 func (s *DelphiServer) DonationData(ctx echo.Context) error {
