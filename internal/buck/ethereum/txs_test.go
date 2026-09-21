@@ -113,6 +113,65 @@ func (suite *TxsSuite) TestETHTx() {
 	assert.Equal(suite.T(), "2023-10-15T00:15:59Z", txs[0].BlockTime.Format(time.RFC3339))
 }
 
+// jsonrpc API providers may emit checksummed addresses and transaction
+// hashes; the repo convention is lower case and every read path lowercases,
+// so both have to be normalized before they reach the database
+func (suite *TxsSuite) TestMixedCaseTxIsNormalized() {
+	const (
+		ethHash   = "0x0AEC48263D9EF216779AAC6210C665723519251FBCB2B2D73CBB364C1B10F56D"
+		erc20Hash = "0x2BC8EF53D6A20B91E5DD3B856D78F5ED0AEB4F56232E6BF6DE3783C6C58C13DE"
+		from      = "0xB938F65DfE303EdF96A511F1e7E3190f69036860"
+		receiver  = "0x4667A044543e7f1B7D3a4b88396e024BE0E34F36"
+		contract  = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+		// erc-20 transfer of 224.99 USDC to `receiver`
+		erc20Input = "0xa9059cbb0000000000000000000000004667a044543e7f1b7d3a4b88396e024be0e34f36000000000000000000000000000000000000000000000000000000000d691330"
+	)
+	ctxt := c.Context{
+		ABI:           suite.abi,
+		ReceivingAddr: strings.ToLower(receiver),
+		StableCoins: map[string]c.ERC20{
+			strings.ToLower(contract): {
+				Asset:   "usdc",
+				Address: strings.ToLower(contract),
+				Scale:   6,
+			},
+		},
+	}
+	block := c.Block{
+		Hash:      "0x7d5b2b8e8d09ee1e3c1b0e1b0e1b0e1b0e1b0e1b0e1b0e1b0e1b0e1b0e1b0e1b",
+		Number:    18352138,
+		Timestamp: time.Unix(1697328959, 0).UTC(),
+		Transactions: []c.Transaction{
+			{
+				TXH:   c.TXH{Hash: ethHash},
+				From:  from,
+				To:    receiver,
+				Value: "0x2386f26fc10000",
+				Input: "0x",
+			},
+			{
+				TXH:   c.TXH{Hash: erc20Hash},
+				From:  from,
+				To:    contract,
+				Value: "0x0",
+				Input: erc20Input,
+			},
+		},
+	}
+
+	txs, err := filterTransactions(ctxt, block)
+	suite.Require().Nil(err)
+	suite.Require().Equal(2, len(txs))
+	for _, tx := range txs {
+		assert.Equal(suite.T(), strings.ToLower(tx.Hash), tx.Hash, "tx hash is not lower case")
+		assert.Equal(suite.T(), strings.ToLower(from), tx.From, "donor address is not lower case")
+	}
+	assert.Equal(suite.T(), strings.ToLower(ethHash), txs[0].Hash)
+	assert.Equal(suite.T(), "0.01000000", txs[0].Value)
+	assert.Equal(suite.T(), strings.ToLower(erc20Hash), txs[1].Hash)
+	assert.Equal(suite.T(), "224.990000", txs[1].Value)
+}
+
 func TestTxsSuite(t *testing.T) {
 	s := new(TxsSuite)
 	s.path = "testdata/18352138.json"

@@ -335,3 +335,196 @@ func TestFailTxLeavesConfirmedDonationAlone(t *testing.T) {
 	require.NoError(t, dbh.Get(&n, `SELECT COUNT(*) FROM donation WHERE tx_hash=$1`, hash))
 	require.Equal(t, 1, n, fmt.Sprintf("confirmed donation %s was deleted", hash))
 }
+
+// resetPrices empties the price table; the token price rows the test needs
+// are inserted with insertPrice.
+func resetPrices(t *testing.T, dbh *sqlx.DB) {
+	t.Helper()
+
+	_, err := dbh.Exec(`TRUNCATE price RESTART IDENTITY`)
+	require.NoError(t, err)
+}
+
+// insertPrice records a price for the given asset, `age` old.
+func insertPrice(t *testing.T, dbh *sqlx.DB, asset, price string, age time.Duration) {
+	t.Helper()
+
+	q := `
+		INSERT INTO price(asset, price, created_at)
+		VALUES($1, $2, timezone('utc', now()) - $3::interval)
+		`
+	_, err := dbh.Exec(q, asset, price, fmt.Sprintf("%d seconds", int(age.Seconds())))
+	require.NoError(t, err)
+}
+
+func donationTokens(t *testing.T, dbh *sqlx.DB, hash string) (string, int64) {
+	t.Helper()
+
+	var (
+		usdAmount decimal.Decimal
+		tokens    int64
+	)
+	err := dbh.QueryRowx(`SELECT usd_amount, tokens FROM donation WHERE tx_hash=$1`, hash).Scan(&usdAmount, &tokens)
+	require.NoError(t, err)
+
+	return usdAmount.StringFixed(2), tokens
+}
+
+func campaignStatus(t *testing.T, dbh *sqlx.DB) string {
+	t.Helper()
+
+	var status string
+	require.NoError(t, dbh.Get(&status, `SELECT status FROM donation_stats`))
+
+	return status
+}
+
+func donationTx(hash, value string) c.Transaction {
+	return c.Transaction{
+		TXH:         c.TXH{Hash: hash},
+		From:        "0x00000000000000000000000000000000000000ff",
+		Value:       value,
+		Asset:       "usdt",
+		BlockNumber: 42,
+		BlockHash:   "0xblock42",
+		BlockTime:   time.Now().UTC(),
+	}
+}
+
+// M2: SUM() over zero confirmed donations is NULL and donation_stats.total is
+// NOT NULL -- the finalized crawler must not wedge on a block whose donations
+// were all skipped.
+func TestPersistTxsWithoutConfirmedDonations(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	ctxt := testContext(dbh)
+	ctxt.CrawlerType = c.Finalized
+
+	hash := "0x8888888888888888888888888888888888888888888888888888888888888888"
+	// an amount that cannot be parsed -> the donation is skipped and the
+	// database holds no confirmed donation at all
+	tx := donationTx(hash, "not-a-number")
+	tx.Status = "confirmed"
+
+	require.NoError(t, PersistTxs(ctxt, 42, decimal.NewFromInt(1), []c.Transaction{tx}))
+
+	var n int
+	require.NoError(t, dbh.Get(&n, `SELECT COUNT(*) FROM donation`))
+	require.Equal(t, 0, n, "the donation should have been skipped")
+	total, tokens := donationStats(t, dbh)
+	require.Equal(t, "0.00", total)
+	require.EqualValues(t, 0, tokens)
+}
+
+// M3: donation_stats is the single row every writer updates without a WHERE
+// clause and every reader picks with LIMIT 1 -- a second row would make the
+// two disagree.
+func TestDonationStatsHoldsASingleRow(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+
+	_, err := dbh.Exec(`INSERT INTO donation_stats(total, tokens) VALUES(1, 1)`)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "donation_stats_single_row")
+}
+
+// M4: the "single row" escape hatch of the token price query has to look at
+// the token price rows only -- pulitzer fills the price table with an `eth`
+// row every minute.
+func TestGetTokenPriceIgnoresOtherAssets(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	resetPrices(t, dbh)
+	ctxt := testContext(dbh)
+
+	// the only token price row, younger than the two minute grace period
+	insertPrice(t, dbh, "truth", "0.00250", 30*time.Second)
+	// ... and the price rows pulitzer writes every minute
+	insertPrice(t, dbh, "eth", "1798.12", time.Minute)
+	insertPrice(t, dbh, "eth", "1799.34", 0)
+
+	dtx, err := dbh.Beginx()
+	require.NoError(t, err)
+	defer dtx.Rollback() // nolint:errcheck
+
+	price, err := getTokenPrice(dtx, ctxt)
+	require.NoError(t, err)
+	require.Equal(t, "0.00250", price.StringFixed(5), "the single token price row was ignored")
+}
+
+// M4: with more than one token price row on record a tier change only takes
+// effect after the two minute grace period.
+func TestGetTokenPriceHonoursGracePeriod(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	resetPrices(t, dbh)
+	ctxt := testContext(dbh)
+
+	insertPrice(t, dbh, "truth", "0.00250", 5*time.Minute)
+	insertPrice(t, dbh, "truth", "0.00500", 0)
+	insertPrice(t, dbh, "eth", "1799.34", 0)
+
+	dtx, err := dbh.Beginx()
+	require.NoError(t, err)
+	defer dtx.Rollback() // nolint:errcheck
+
+	price, err := getTokenPrice(dtx, ctxt)
+	require.NoError(t, err)
+	require.Equal(t, "0.00250", price.StringFixed(5), "a token price younger than 2 minutes was used")
+}
+
+// M5: a closed campaign records the donation but issues no tokens -- the sale
+// cannot deliver them.
+func TestPersistTxsClosedCampaignIssuesNoTokens(t *testing.T) {
+	for _, ct := range []c.CrawlerType{c.Latest, c.Finalized} {
+		t.Run(ct.String(), func(t *testing.T) {
+			dbh := testDB(t)
+			resetDB(t, dbh)
+			resetPrices(t, dbh)
+			insertPrice(t, dbh, "truth", "0.00100", 5*time.Minute)
+			ctxt := testContext(dbh)
+			ctxt.CrawlerType = ct
+
+			_, err := dbh.Exec(`UPDATE donation_stats SET status='closed'`)
+			require.NoError(t, err)
+
+			hash := "0x9999999999999999999999999999999999999999999999999999999999999999"
+			tx := donationTx(hash, "200")
+			if ct == c.Finalized {
+				tx.Status = "confirmed"
+			} else {
+				tx.Status = "unconfirmed"
+			}
+
+			require.NoError(t, PersistTxs(ctxt, 42, decimal.NewFromInt(1), []c.Transaction{tx}))
+
+			// the donation is on record (the money arrived and is refundable)
+			// but it does not credit the donor with a single token
+			usdAmount, tokens := donationTokens(t, dbh, hash)
+			require.Equal(t, "200.00", usdAmount)
+			require.EqualValues(t, 0, tokens, "tokens were issued for a closed campaign")
+			require.Equal(t, "closed", campaignStatus(t, dbh))
+		})
+	}
+}
+
+// M5: an open campaign issues tokens as before.
+func TestPersistTxsOpenCampaignIssuesTokens(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	resetPrices(t, dbh)
+	insertPrice(t, dbh, "truth", "0.00100", 5*time.Minute)
+	ctxt := testContext(dbh)
+	ctxt.CrawlerType = c.Finalized
+
+	hash := "0xaaaa111111111111111111111111111111111111111111111111111111111111"
+	tx := donationTx(hash, "200")
+	tx.Status = "confirmed"
+
+	require.NoError(t, PersistTxs(ctxt, 42, decimal.NewFromInt(1), []c.Transaction{tx}))
+
+	usdAmount, tokens := donationTokens(t, dbh, hash)
+	require.Equal(t, "200.00", usdAmount)
+	require.EqualValues(t, 200000, tokens)
+	require.Equal(t, "open", campaignStatus(t, dbh))
+}

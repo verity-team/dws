@@ -97,6 +97,14 @@ func filterTransactions(ctxt c.Context, b c.Block) ([]c.Transaction, error) {
 			}
 		}
 		if txBelongsToUs {
+			// the repo convention is lower case and every read path
+			// lowercases: normalize here, at the point of acceptance, so a
+			// provider that emits checksummed values cannot write a donation
+			// row that the exact-case lookups elsewhere will never find
+			// again (a mixed case tx_hash makes the old-unconfirmed crawler
+			// fail a perfectly valid donation).
+			tx.Hash = c.NormalizeHash(tx.Hash)
+			tx.From = strings.ToLower(strings.TrimSpace(tx.From))
 			tx.BlockNumber = b.Number
 			tx.BlockTime = b.Timestamp
 			if ctxt.CrawlerType == c.Finalized {

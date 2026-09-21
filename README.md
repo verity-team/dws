@@ -54,13 +54,14 @@ These values used to be accepted as-is and only did damage once donations were p
 
 `go test ./...` runs the unit tests, no database required.
 
-The database integration tests for the `buck` donation statistics and for the `pulitzer` price request state machine are hidden behind the `dbtest` build tag since they need a live database with the schema in `deployments/db/01-schema.sql` loaded. They truncate the tables they use, so *never* point them at a production database:
+The database integration tests for the `buck` donation statistics, for the `pulitzer` price request state machine and for the `delphi` affiliate code/donation data are hidden behind the `dbtest` build tag since they need a live database with the schema in `deployments/db/01-schema.sql` loaded. They truncate the tables they use, so *never* point them at a production database:
 
 1. `make run_db`
 1. `go test -tags dbtest -count=1 ./internal/buck/db/...`
 1. `go test -tags dbtest -count=1 ./internal/pulitzer/db/...`
+1. `go test -tags dbtest -count=1 ./internal/delphi/db/...`
 
-The connection string defaults to the dockerized development database and can be overridden with `DWS_TEST_DB_DSN`.
+The connection string defaults to the dockerized development database and can be overridden with `DWS_TEST_DB_DSN`. The three packages share the database, run them one after the other (`go test -tags dbtest -count=1 -p 1 ./...`) -- concurrently they truncate each other's tables.
 
 ## requirements & rules
 1. all amounts are passed as strings and should be decoded to a `decimal` type to preserve precision
