@@ -37,10 +37,12 @@ func TestGetUserDataDoesNotSelectTheAffiliateCode(t *testing.T) {
 	assert.Contains(t, userDataQuery, "update_user_data")
 }
 
-// the donation page is bounded in the SQL itself, not only in the caller
+// the donation page is bounded in the SQL itself, not only in the caller, and
+// ordered oldest on-chain first (block_time) with id as a deterministic
+// tie-break so paging is stable -- see #231.
 func TestUserDonationQueryIsPaginated(t *testing.T) {
 	q := strings.ToUpper(userDonationQuery)
 	assert.Contains(t, q, "LIMIT $2")
 	assert.Contains(t, q, "OFFSET $3")
-	assert.Contains(t, q, "ORDER BY ID")
+	assert.Contains(t, q, "ORDER BY BLOCK_TIME, ID")
 }
