@@ -45,10 +45,12 @@ func TestParseCexIOTickerStale(t *testing.T) {
 }
 
 func TestParseCexIOTickerBadTimestamp(t *testing.T) {
+	// the pair is the one that was asked for, so the timestamp is what these
+	// bodies are rejected for
 	for _, body := range []string{
-		`{"timestamp":"","last":"2000.50"}`,
-		`{"timestamp":"not-a-timestamp","last":"2000.50"}`,
-		`{"last":"2000.50"}`,
+		`{"timestamp":"","last":"2000.50","pair":"ETH:USD"}`,
+		`{"timestamp":"not-a-timestamp","last":"2000.50","pair":"ETH:USD"}`,
+		`{"last":"2000.50","pair":"ETH:USD"}`,
 	} {
 		price, err := parseCexIOTicker([]byte(body))
 		assert.Error(t, err, body)

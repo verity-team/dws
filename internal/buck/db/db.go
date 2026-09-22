@@ -327,23 +327,6 @@ func getTokenPrice(dtx *sqlx.Tx, ctxt c.Context) (decimal.Decimal, error) {
 	return result, nil
 }
 
-func PersistFailedBlock(dbh *sqlx.DB, b c.Block) error {
-	q := `
-		INSERT INTO failed_block(
-			block_number, block_hash, block_time)
-		VALUES(
-			:block_number, :block_hash, :block_time)
-		ON CONFLICT (block_number) DO NOTHING
-		`
-	if _, err := dbh.NamedExec(q, b); err != nil {
-		err = fmt.Errorf("failed to insert failed block with number %d, %w", b.Number, err)
-		log.Error(err)
-		return err
-	}
-
-	return nil
-}
-
 func PersistFailedTx(dbh *sqlx.DB, b c.Block, tx c.Transaction) error {
 	q := `
 		INSERT INTO failed_tx(
@@ -360,29 +343,6 @@ func PersistFailedTx(dbh *sqlx.DB, b c.Block, tx c.Transaction) error {
 	}
 
 	return nil
-}
-
-func GetOldestUnconfirmed(dbh *sqlx.DB) (uint64, error) {
-	var (
-		err    error
-		q      string
-		result uint64
-	)
-	q = `
-		SELECT block_number
-		FROM donation
-		WHERE status='unconfirmed'
-		ORDER BY block_time
-		LIMIT 1
-		`
-	err = dbh.Get(&result, q)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		err = fmt.Errorf("failed to fetch oldest unconfirmed block number, %w", err)
-		log.Error(err)
-		return 0, err
-	}
-
-	return result, nil
 }
 
 const (
@@ -658,18 +618,32 @@ func FinalizeTx(ctxt c.Context, tx c.TxByHash) (err error) {
 // transition, so zeroing the tokens of a donation that is confirmed while the
 // campaign is closed cannot touch a donation that was credited legitimately
 // earlier.
+//
+// The whole block identity is written, `block_hash` included. The caller only
+// reaches this function for a transaction whose recorded block hash already
+// equals the hash of the finalized block (c.TxByHash.Judge returns TxFinalize
+// for nothing else), so the value does not change today -- but the update is
+// then self-contained: relaxing that check later cannot leave behind a row
+// whose block_number/block_time belong to one block and whose block_hash
+// belongs to another, which is precisely the mismatch the donation(block_hash)
+// index would serve wrong sets from.
 func confirmSingleTx(dtx *sqlx.Tx, tx c.TxByHash, campaignClosed bool) (decimal.Decimal, decimal.Decimal, error) {
 	q := `
 		UPDATE donation SET
 			block_number=$1,
 			block_time=$2,
+			-- an empty finalized block hash must not replace the hash the
+			-- donation already carries; TxFinalize is unreachable without
+			-- one, so this only rules out writing a value that is worse than
+			-- what is there
+			block_hash=COALESCE(NULLIF($5, ''), block_hash),
 			status='confirmed',
 			tokens=CASE WHEN $4 THEN 0 ELSE tokens END
 		WHERE status='unconfirmed' AND tx_hash=$3
 		RETURNING usd_amount, tokens
 	`
 	var amount, tokens decimal.Decimal
-	err := dtx.QueryRowx(q, tx.BlockNumber, tx.FBBlockTime, tx.Hash, campaignClosed).Scan(&amount, &tokens)
+	err := dtx.QueryRowx(q, tx.BlockNumber, tx.FBBlockTime, tx.Hash, campaignClosed, c.NormalizeHash(tx.FBBlockHash)).Scan(&amount, &tokens)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			// tx was already confirmed or no longer unconfirmed

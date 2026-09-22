@@ -2,6 +2,7 @@ package data
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -37,4 +38,30 @@ func checkQuoteAge(source string, ts time.Time) error {
 		return fmt.Errorf("%s: quote timestamp is %s in the future", source, (-age).Truncate(time.Second))
 	}
 	return nil
+}
+
+// checkPair rejects a response that is not for the pair that was requested.
+//
+// Every venue echoes the instrument it answered for and none of the sources
+// used to look at it: a pair that is renamed, re-listed or simply mistyped in
+// the request would have been averaged into the ethereum price as if it were
+// ETH. The comparison ignores the separator and the casing -- venues spell the
+// same pair `ETHUSD`, `ETH-USD`, `ETH/USD` and `ETH:USD` -- so it only fires
+// on a genuinely different instrument.
+func checkPair(source, want, got string) error {
+	if got == "" {
+		return fmt.Errorf("%s: no pair in the response, expected '%s'", source, want)
+	}
+	if normalizePair(want) != normalizePair(got) {
+		return fmt.Errorf("%s: response is for pair '%s', expected '%s'", source, got, want)
+	}
+	return nil
+}
+
+// pairSeparators are the characters venues use to separate base from quote.
+var pairSeparators = strings.NewReplacer("-", "", "/", "", ":", "", "_", "", " ", "")
+
+// normalizePair reduces a pair identifier to base+quote in upper case.
+func normalizePair(pair string) string {
+	return strings.ToUpper(pairSeparators.Replace(pair))
 }

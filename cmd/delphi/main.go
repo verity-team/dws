@@ -13,7 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	echomiddleware "github.com/labstack/echo/v4/middleware"
@@ -101,10 +100,11 @@ func main() {
 	// that server names match. We don't know how this thing will be run.
 	swagger.Servers = nil
 
-	dsn := common.GetDSN()
-	db, err := sqlx.Open("postgres", dsn)
+	// common.OpenDB proves the connection works before the server starts
+	// serving; the error it returns is safe to log, see common.RedactDBError
+	db, err := common.OpenDB(common.GetDSN())
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("delphi: %v", err)
 	}
 	defer func() { _ = db.Close() }()
 	db.SetMaxOpenConns(25)

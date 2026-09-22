@@ -17,6 +17,52 @@ import (
 	c "github.com/verity-team/dws/internal/common"
 )
 
+const (
+	// DonationAmountDecimals is the number of decimal places a donated amount
+	// is rendered with before it is written to `donation.amount`, which is
+	// NUMERIC(20,10) -- see deployments/db/01-schema.sql. Rendering at
+	// exactly the scale of the column is what keeps the stored value from
+	// depending on the scale of the token: `Shift` is already driven by the
+	// configured erc-20 scale, so pinning the rendering at 6 was only correct
+	// for as long as every configured coin happened to have 6 decimals.
+	// c.GetContext accepts any scale greater than zero, so an 18 decimal
+	// stable coin is a supported configuration -- and it used to be credited
+	// up to 1.1e-7 too much per donation, because StringFixed rounds half
+	// away from zero rather than truncating.
+	DonationAmountDecimals = 10
+	// ETHAmountDecimals is the scale ethereum donations are rendered with.
+	//
+	// It is deliberately *not* DonationAmountDecimals. Raising it is not
+	// value preserving -- it changes the amount recorded for every donation
+	// whose wei value is not a multiple of 1e10 -- and it would widen the set
+	// of dust transfers that record a non-zero amount, each of which is
+	// issued a whole token by the Ceil in calcTokens. Changing it belongs
+	// with a minimum donation amount, which is a business decision.
+	ETHAmountDecimals = 8
+	// WeiDecimals is the scale of the ethereum base unit.
+	WeiDecimals = 18
+)
+
+// recordedAmount renders a transferred amount exactly the way it will be
+// stored and reports whether anything at all is left of it at that scale.
+//
+// The second return value is what keeps a transfer that records nothing out
+// of the donation table. `value: "0x0"` is the obvious case, but rejecting
+// only that buys nothing: one wei costs the same 21000 gas and renders as
+// 0.00000000 just the same. Every such row would carry amount 0, usd_amount 0
+// and 0 tokens -- it records no donation, while the per-address aggregates
+// and the full-table aggregate updateDonationStats runs under the
+// donation_stats lock on every finalized block pay for it forever.
+//
+// Note this is not a minimum donation amount: the only transfers turned away
+// are the ones that would have been stored as zero anyway.
+func recordedAmount(raw decimal.Decimal, scale, places int32) (string, bool) {
+	// StringFixed rounds to `places` internally; rounding here first makes
+	// the value that is tested and the value that is stored the same one
+	value := raw.Shift(-scale).Round(places)
+	return value.StringFixed(places), value.IsPositive()
+}
+
 func GetTransactions(ctxt c.Context, blockNumber uint64) ([]c.Transaction, error) {
 	block, err := GetBlock(ctxt, blockNumber)
 	if err != nil {
@@ -62,7 +108,12 @@ func filterTransactions(ctxt c.Context, b c.Block) ([]c.Transaction, error) {
 				}
 				continue
 			}
-			tx.Value = amount.Shift(-18).StringFixed(8)
+			value, ok := recordedAmount(amount, WeiDecimals, ETHAmountDecimals)
+			if !ok {
+				log.Warnf("skipping ETH tx ('%s') that transfers no recordable amount (%s wei)", tx.Hash, amount.String())
+				continue
+			}
+			tx.Value = value
 			txBelongsToUs = true
 		}
 		// ERC-20 transfer?
@@ -82,7 +133,13 @@ func filterTransactions(ctxt c.Context, b c.Block) ([]c.Transaction, error) {
 					log.Error(err)
 					err = db.PersistFailedTx(ctxt.DB, b, tx)
 					if err != nil {
+						// failed txs must be persisted -- otherwise we are
+						// losing them altogether: the donation ends up in
+						// neither `donation` nor `failed_tx` while the block
+						// is advanced past it
+						err = fmt.Errorf("failed to persist failed tx '%s', %w", tx.Hash, err)
 						log.Error(err)
+						return nil, err
 					}
 					continue
 				}
@@ -90,8 +147,13 @@ func filterTransactions(ctxt c.Context, b c.Block) ([]c.Transaction, error) {
 				if strings.ToLower(receiver) != ctxt.ReceivingAddr {
 					continue
 				}
+				value, vok := recordedAmount(amount, erc20.Scale, DonationAmountDecimals)
+				if !vok {
+					log.Warnf("skipping %s tx ('%s') that transfers no recordable amount (%s base units)", erc20.Asset, tx.Hash, amount.String())
+					continue
+				}
 				tx.To = ctxt.ReceivingAddr
-				tx.Value = amount.Shift(-erc20.Scale).StringFixed(6)
+				tx.Value = value
 				tx.Asset = erc20.Asset
 				txBelongsToUs = true
 			}

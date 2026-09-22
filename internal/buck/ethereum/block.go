@@ -168,13 +168,17 @@ func parseFinalizedBlock(body []byte) (*c.FinalizedBlock, error) {
 		err = fmt.Errorf("failed to convert block number, %w", err)
 		return nil, err
 	}
+	bn, err := c.ToUint64(number, "block number")
+	if err != nil {
+		return nil, err
+	}
 	ts := time.Unix(seconds.IntPart(), 0)
 	result := c.FinalizedBlock{
 		BaseFeePerGas: resp.Block.BaseFeePerGas,
 		GasLimit:      resp.Block.GasLimit,
 		GasUsed:       resp.Block.GasUsed,
 		Hash:          resp.Block.Hash,
-		Number:        uint64(number.IntPart()),
+		Number:        bn,
 		ReceiptsRoot:  resp.Block.ReceiptsRoot,
 		Size:          resp.Block.Size,
 		StateRoot:     resp.Block.StateRoot,

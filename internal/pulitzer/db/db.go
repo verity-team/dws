@@ -90,8 +90,11 @@ func retryInterval() string {
 // were written: an empty kline set and a kline set that misses the requested
 // minute are both rejected outright, so the function cannot record success for
 // work it did not do.
-func CloseRequest(dbh *sqlx.DB, rid uint64, ts time.Time, data []data.Kline) (err error) {
-	if err = validateKlines(rid, ts, data); err != nil {
+func CloseRequest(dbh *sqlx.DB, rid uint64, ts time.Time, kls []data.Kline) (err error) {
+	// a price that is still moving must not become the permanent record for
+	// its minute, see klineIsFinal
+	kls = finalKlines(rid, kls, time.Now().UTC())
+	if err = validateKlines(rid, ts, kls); err != nil {
 		return err
 	}
 
@@ -114,7 +117,7 @@ func CloseRequest(dbh *sqlx.DB, rid uint64, ts time.Time, data []data.Kline) (er
 		}
 	}()
 
-	for _, d := range data {
+	for _, d := range kls {
 		err = persistKline(dtx, "eth", d)
 		if err != nil {
 			return err
@@ -155,6 +158,47 @@ func FailRequest(dbh *sqlx.DB, rid uint64) error {
 	}
 	log.Warnf("price request #%d marked as failed, retry in %v", rid, FailedRetryDelay)
 	return nil
+}
+
+// klineIsFinal reports whether the minute a kline covers has fully elapsed.
+//
+// A request whose window reaches into the minute that is currently in
+// progress is answered with that minute's kline *as it stands so far*: its
+// close price is provisional and keeps moving until the minute ends. Storing
+// one used to be self correcting, after a fashion -- a later, overlapping
+// window inserted a second row for the same minute and c.GetETHPrice broke
+// the tie arbitrarily -- but a price table with UNIQUE(asset, created_at)
+// keeps the row that got there first, so a provisional close would become the
+// permanent record for that minute and the final one would be discarded by
+// the ON CONFLICT DO NOTHING in persistKline.
+//
+// The close time reported for a kline is the last instant of its minute,
+// truncated to the second by parseKlines, so a kline is final exactly when
+// its close time falls before the minute currently in progress.
+func klineIsFinal(kl data.Kline, now time.Time) bool {
+	return kl.CloseTime.UTC().Before(now.UTC().Truncate(time.Minute))
+}
+
+// finalKlines drops the klines whose minute has not closed yet.
+//
+// Dropping the requested minute along with them is deliberate: the request
+// then has no price that serves it, validateKlines refuses to close it and
+// the caller fails it, so the existing retry path asks again a few minutes
+// later -- by which time the minute is closed and its price is the final one.
+// Recording a provisional price instead would be permanent, and the amount a
+// donation is credited in USD is never rewritten.
+func finalKlines(rid uint64, kls []data.Kline, now time.Time) []data.Kline {
+	result := make([]data.Kline, 0, len(kls))
+	for _, kl := range kls {
+		if !klineIsFinal(kl, now) {
+			log.Infof(
+				"price request #%d: ignoring the still open kline for %s",
+				rid, kl.CloseTime.UTC().Format(time.RFC3339))
+			continue
+		}
+		result = append(result, kl)
+	}
+	return result
 }
 
 // validateKlines rejects kline sets that must not be persisted. An empty set
@@ -215,10 +259,23 @@ func validateKlines(rid uint64, ts time.Time, kls []data.Kline) error {
 	return nil
 }
 
+// persistKline records the price of a single minute.
+//
+// GetHistoricalPriceFromBinance returns the ten klines that start at the
+// minute a request asks for, so the windows of two requests a few minutes
+// apart overlap and a minute that is already on record is offered again. The
+// UNIQUE(asset, created_at) constraint turns that into a conflict, and
+// skipping the insert is correct *because* the caller has already dropped the
+// klines whose minute is still open (see finalKlines): what is offered here
+// is a closed kline, which no longer moves, so the row already stored holds
+// the same price. Failing instead would fail the whole CloseRequest
+// transaction, and the request would keep failing on every retry for as long
+// as the overlapping minute is on record, i.e. forever.
 func persistKline(dbt *sqlx.Tx, asset string, kl data.Kline) error {
 	q := `
 		INSERT INTO price(asset, price, created_at)
 		VALUES(:asset, :price, :created_at)
+		ON CONFLICT (asset, created_at) DO NOTHING
 		`
 	qd := map[string]interface{}{
 		"asset":      asset,
@@ -231,7 +288,16 @@ func persistKline(dbt *sqlx.Tx, asset string, kl data.Kline) error {
 		log.Error(err)
 		return err
 	}
-	return expectOneRow(res, fmt.Sprintf("insert historical ETH price for %s", kl.CloseTime))
+	rows, err := res.RowsAffected()
+	if err != nil {
+		err = fmt.Errorf("failed to check the result of the historical ETH price insert for %s, %w", kl.CloseTime, err)
+		log.Error(err)
+		return err
+	}
+	if rows == 0 {
+		log.Infof("historical ETH price for %s is already on record", kl.CloseTime.UTC().Format(time.RFC3339))
+	}
+	return nil
 }
 
 func closeRequest(dbt *sqlx.Tx, id uint64) error {

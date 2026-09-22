@@ -53,10 +53,11 @@ func main() {
 	version = fmt.Sprintf("pulitzer::%s::%s", bts, rev)
 	log.Info("version = ", version)
 
-	dsn := common.GetDSN()
-	dbh, err := sqlx.Open("postgres", dsn)
+	// common.OpenDB proves the connection works before the first scheduled
+	// job runs; the error it returns is safe to log, see common.RedactDBError
+	dbh, err := common.OpenDB(common.GetDSN())
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("pulitzer: %v", err)
 	}
 	defer func() { _ = dbh.Close() }()
 	dbh.SetMaxOpenConns(10)
@@ -347,7 +348,7 @@ func getETHPrice(ctx context.Context) (decimal.Decimal, error) {
 
 	// ethereum price sources and the functions to call to get the price
 	sources := map[string]func() (decimal.Decimal, error){
-		"binance":  data.GetWeightedAvgPriceFromBinance,
+		"binance":  data.GetBinanceETHPrice,
 		"kraken":   data.GetKrakenETHPrice,
 		"bitfinex": data.GetBitfinexETHPrice,
 		"coinbase": data.GetCoinbaseETHPrice,

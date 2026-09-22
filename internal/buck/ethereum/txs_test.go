@@ -8,8 +8,11 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/jmoiron/sqlx"
+	_ "github.com/lib/pq"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/verity-team/dws/api"
 	c "github.com/verity-team/dws/internal/common"
@@ -81,7 +84,11 @@ func (suite *TxsSuite) TestERC20Tx() {
 	assert.Equal(suite.T(), hash, txs[0].Hash)
 	assert.Equal(suite.T(), block.Hash, txs[0].BlockHash)
 	assert.Equal(suite.T(), block.Number, txs[0].BlockNumber)
-	assert.Equal(suite.T(), "224.990000", txs[0].Value)
+	// rendered at the scale of the `donation.amount` column rather than at a
+	// hardcoded 6; for a 6 decimal stable coin the two render the same value,
+	// see TestERC20RenderingIsValuePreserving
+	assert.Equal(suite.T(), "224.9900000000", txs[0].Value)
+	assert.True(suite.T(), decimal.RequireFromString("224.990000").Equal(decimal.RequireFromString(txs[0].Value)))
 	assert.Equal(suite.T(), "2023-10-15T00:15:59Z", txs[0].BlockTime.Format(time.RFC3339))
 }
 
@@ -169,7 +176,8 @@ func (suite *TxsSuite) TestMixedCaseTxIsNormalized() {
 	assert.Equal(suite.T(), strings.ToLower(ethHash), txs[0].Hash)
 	assert.Equal(suite.T(), "0.01000000", txs[0].Value)
 	assert.Equal(suite.T(), strings.ToLower(erc20Hash), txs[1].Hash)
-	assert.Equal(suite.T(), "224.990000", txs[1].Value)
+	assert.Equal(suite.T(), "224.9900000000", txs[1].Value)
+	assert.True(suite.T(), decimal.RequireFromString("224.990000").Equal(decimal.RequireFromString(txs[1].Value)))
 }
 
 func TestTxsSuite(t *testing.T) {
@@ -290,4 +298,224 @@ func (suite *ApplyTxReceiptsSuite) TestNoTransactions() {
 
 func TestApplyTxReceiptsSuite(t *testing.T) {
 	suite.Run(t, new(ApplyTxReceiptsSuite))
+}
+
+// failed txs must be persisted -- otherwise we are losing them altogether.
+// The ETH branch has always returned an error when the failed_tx write did
+// not go through; the ERC-20 branch only logged it and carried on, so a brief
+// postgres outage left the donation in neither `donation` nor `failed_tx`
+// while the block was advanced past it.
+func TestERC20FailedTxMustBePersisted(t *testing.T) {
+	const (
+		contract = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+		receiver = "0x2051f9d1082008924f751eb396df1101d4b123e1"
+		hash     = "0x2bc8ef53d6a20b91e5dd3b856d78f5ed0aeb4f56232e6bf6de3783c6c58c13de"
+		// a transfer() selector with an input too short to unpack, so
+		// parseInputData fails and the transaction has to be recorded as
+		// failed
+		badInput = "0xa9059cbbdeadbeef"
+	)
+
+	abis, err := InitABI()
+	require.NoError(t, err)
+
+	ctxt := c.Context{
+		ReceivingAddr: receiver,
+		StableCoins: map[string]c.ERC20{
+			contract: {Asset: "usdc", Address: contract, Scale: 6},
+		},
+		ABI: abis,
+		DB:  closedDB(t),
+	}
+	block := c.Block{
+		Hash:      "0xbbbb111111111111111111111111111111111111111111111111111111111111",
+		Number:    18_000_000,
+		Timestamp: time.Unix(1697328959, 0).UTC(),
+		Transactions: []c.Transaction{{
+			TXH:   c.TXH{Hash: hash},
+			From:  "0xcccc111111111111111111111111111111111111",
+			To:    contract,
+			Value: "0x0",
+			Input: badInput,
+		}},
+	}
+
+	txs, err := filterTransactions(ctxt, block)
+	require.Error(t, err, "a failed_tx write that did not go through must not be swallowed")
+	assert.Contains(t, err.Error(), "failed to persist failed tx")
+	assert.Nil(t, txs)
+}
+
+// closedDB hands out a database handle whose every statement fails.
+func closedDB(t *testing.T) *sqlx.DB {
+	t.Helper()
+
+	dbh, err := sqlx.Open("postgres", "postgres://dws:dws@127.0.0.1:1/dwsdb?sslmode=disable&connect_timeout=1")
+	require.NoError(t, err)
+	require.NoError(t, dbh.Close())
+	return dbh
+}
+
+// The rendering scale used to be hardcoded at 6 while the `Shift` that
+// precedes it is driven by the configured erc-20 scale. For the two coins
+// configured today (USDC/USDT, scale 6) that is exactly value preserving, so
+// moving to the scale of the `donation.amount` column cannot change a single
+// stored amount: NUMERIC(20,10) normalizes both renderings to the same value.
+//
+// Confirmed in postgres 14 against the real column type:
+//
+//	SELECT '224.990000'::numeric(20,10) = '224.9900000000'::numeric(20,10);  -- t
+func TestERC20RenderingIsValuePreservingForScale6(t *testing.T) {
+	// the smallest unit, a representative donation and a large one
+	for _, raw := range []string{"1", "224990000", "392876180", "999999999999999"} {
+		amount := decimal.RequireFromString(raw)
+
+		was, wasOK := amount.Shift(-6).StringFixed(6), amount.Shift(-6).IsPositive()
+		is, isOK := recordedAmount(amount, 6, DonationAmountDecimals)
+
+		require.True(t, wasOK, raw)
+		require.True(t, isOK, raw)
+		assert.True(t, decimal.RequireFromString(was).Equal(decimal.RequireFromString(is)),
+			"raw %s: old rendering %s, new rendering %s", raw, was, is)
+		// and the new rendering is exact, i.e. postgres has nothing left to
+		// round when it stores it
+		assert.True(t, amount.Shift(-6).Equal(decimal.RequireFromString(is)), raw)
+	}
+}
+
+// the scale is derived from the column, so a token whose own scale exceeds it
+// is rounded once, by us, at exactly the precision the column keeps -- the
+// hardcoded 6 used to round an 18 decimal coin up by as much as 1.1e-7
+func TestERC20RenderingHonoursTheTokenScale(t *testing.T) {
+	// 1.234567890123456789 DAI
+	amount := decimal.RequireFromString("1234567890123456789")
+
+	old := amount.Shift(-18).StringFixed(6)
+	assert.Equal(t, "1.234568", old)
+	// the hardcoded rendering credited *more* than was transferred
+	assert.True(t, decimal.RequireFromString(old).GreaterThan(amount.Shift(-18)))
+
+	got, ok := recordedAmount(amount, 18, DonationAmountDecimals)
+	require.True(t, ok)
+	assert.Equal(t, "1.2345678901", got)
+	// at the scale of the column, the error is bounded by half a unit in the
+	// last place the column can hold
+	delta := decimal.RequireFromString(got).Sub(amount.Shift(-18)).Abs()
+	assert.True(t, delta.LessThanOrEqual(decimal.RequireFromString("0.00000000005")), delta.String())
+}
+
+// ethereum donations keep their scale: raising it is not value preserving and
+// would widen the set of dust transfers that record a non-zero amount
+func TestETHRenderingScaleIsUnchanged(t *testing.T) {
+	amount := decimal.RequireFromString("1234567890123456789")
+	got, ok := recordedAmount(amount, WeiDecimals, ETHAmountDecimals)
+	require.True(t, ok)
+	assert.Equal(t, "1.23456789", got)
+	assert.Equal(t, int32(8), int32(ETHAmountDecimals))
+}
+
+func TestRecordedAmountRejectsWhatWouldBeStoredAsZero(t *testing.T) {
+	// ETH: zero, one wei, and everything below half a unit in the last place
+	for _, raw := range []string{"0", "1", "1000000000", "4999999999"} {
+		value, ok := recordedAmount(decimal.RequireFromString(raw), WeiDecimals, ETHAmountDecimals)
+		assert.False(t, ok, "%s wei must not be recorded", raw)
+		assert.True(t, decimal.RequireFromString(value).IsZero(), value)
+	}
+	// the smallest ETH amount that does record something
+	value, ok := recordedAmount(decimal.RequireFromString("5000000000"), WeiDecimals, ETHAmountDecimals)
+	assert.True(t, ok)
+	assert.Equal(t, "0.00000001", value)
+
+	// erc-20: zero is rejected, one smallest unit of a 6 decimal coin is not
+	_, ok = recordedAmount(decimal.Zero, 6, DonationAmountDecimals)
+	assert.False(t, ok)
+	value, ok = recordedAmount(decimal.RequireFromString("1"), 6, DonationAmountDecimals)
+	assert.True(t, ok)
+	assert.Equal(t, "0.0000010000", value)
+}
+
+// a zero value ETH transfer to the receiving address used to yield a donation
+// row with amount 0, usd_amount 0 and 0 tokens for the price of 21000 gas.
+// Rejecting `value: "0x0"` alone would have bought nothing -- one wei costs
+// the same and renders as 0.00000000 just the same -- so both are turned away.
+func TestZeroValueETHTransferIsNotADonation(t *testing.T) {
+	const receiver = "0x2051f9d1082008924f751eb396df1101d4b123e1"
+
+	ctxt := c.Context{ReceivingAddr: receiver}
+	var err error
+	ctxt.ABI, err = InitABI()
+	require.NoError(t, err)
+
+	for _, value := range []string{"0x0", "0x1", "0x12a05f1ff"} { // 0 wei, 1 wei, 4999999999 wei (half a unit short)
+		block := c.Block{
+			Hash:      "0xbbbb111111111111111111111111111111111111111111111111111111111111",
+			Number:    18_000_000,
+			Timestamp: time.Unix(1697328959, 0).UTC(),
+			Transactions: []c.Transaction{{
+				TXH:   c.TXH{Hash: "0xaaaa111111111111111111111111111111111111111111111111111111111111"},
+				From:  "0xcccc111111111111111111111111111111111111",
+				To:    receiver,
+				Value: value,
+				Input: "0x",
+			}},
+		}
+		txs, err := filterTransactions(ctxt, block)
+		require.NoError(t, err)
+		assert.Empty(t, txs, "value %s must not produce a donation", value)
+	}
+
+	// a transfer that does carry value is still accepted
+	block := c.Block{
+		Hash:      "0xbbbb111111111111111111111111111111111111111111111111111111111111",
+		Number:    18_000_000,
+		Timestamp: time.Unix(1697328959, 0).UTC(),
+		Transactions: []c.Transaction{{
+			TXH:   c.TXH{Hash: "0xaaaa111111111111111111111111111111111111111111111111111111111111"},
+			From:  "0xcccc111111111111111111111111111111111111",
+			To:    receiver,
+			Value: "0x2386f26fc10000", // 0.01 ETH
+			Input: "0x",
+		}},
+	}
+	txs, err := filterTransactions(ctxt, block)
+	require.NoError(t, err)
+	require.Len(t, txs, 1)
+	assert.Equal(t, "0.01000000", txs[0].Value)
+}
+
+// the same rule applies to a stable coin transfer of zero
+func TestZeroValueERC20TransferIsNotADonation(t *testing.T) {
+	const (
+		contract = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+		receiver = "0x4667a044543e7f1b7d3a4b88396e024be0e34f36"
+		// transfer(0x4667...F36, 0)
+		zeroTransfer = "0xa9059cbb0000000000000000000000004667a044543e7f1b7d3a4b88396e024be0e34f360000000000000000000000000000000000000000000000000000000000000000"
+	)
+
+	abis, err := InitABI()
+	require.NoError(t, err)
+
+	ctxt := c.Context{
+		ReceivingAddr: receiver,
+		StableCoins: map[string]c.ERC20{
+			contract: {Asset: "usdc", Address: contract, Scale: 6},
+		},
+		ABI: abis,
+	}
+	block := c.Block{
+		Hash:      "0xbbbb111111111111111111111111111111111111111111111111111111111111",
+		Number:    18_000_000,
+		Timestamp: time.Unix(1697328959, 0).UTC(),
+		Transactions: []c.Transaction{{
+			TXH:   c.TXH{Hash: "0xaaaa222222222222222222222222222222222222222222222222222222222222"},
+			From:  "0xcccc111111111111111111111111111111111111",
+			To:    contract,
+			Value: "0x0",
+			Input: zeroTransfer,
+		}},
+	}
+
+	txs, err := filterTransactions(ctxt, block)
+	require.NoError(t, err)
+	assert.Empty(t, txs)
 }

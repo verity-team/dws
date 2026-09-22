@@ -448,3 +448,46 @@ func TestTxVerdictString(t *testing.T) {
 	assert.Equal(t, "absent from chain and mempool for more than 24h0m0s", TxDropped.String())
 	assert.Equal(t, "invalid tx verdict", TxVerdict(-1).String())
 }
+
+// a block number or transaction index beyond the int64 range used to be
+// truncated by decimal.IntPart() and then converted, i.e. the crawler was
+// handed a position on the chain that the provider never reported
+func TestUnmarshalOutOfRangeTxByHash(t *testing.T) {
+	// 2^64 - 1: above math.MaxInt64, so IntPart() cannot render it
+	body := []byte(`{
+		"blockHash": "0xaaa",
+		"blockNumber": "0xffffffffffffffff",
+		"from": "0xbbb",
+		"hash": "0xccc",
+		"to": "0xddd",
+		"transactionIndex": "0x1"
+	}`)
+	var tx TxByHash
+	err := json.Unmarshal(body, &tx)
+	assert.ErrorContains(t, err, "block number")
+
+	body = []byte(`{
+		"blockHash": "0xaaa",
+		"blockNumber": "0x1",
+		"from": "0xbbb",
+		"hash": "0xccc",
+		"to": "0xddd",
+		"transactionIndex": "0x10000000000000000"
+	}`)
+	tx = TxByHash{}
+	err = json.Unmarshal(body, &tx)
+	assert.ErrorContains(t, err, "transaction index")
+}
+
+// the same conversion guards the block number of a full block
+func TestUnmarshalOutOfRangeBlock(t *testing.T) {
+	body := []byte(`{
+		"hash": "0xaaa",
+		"number": "0xffffffffffffffff",
+		"timestamp": "0x652b0f2f",
+		"transactions": []
+	}`)
+	var b Block
+	err := json.Unmarshal(body, &b)
+	assert.ErrorContains(t, err, "block number")
+}

@@ -145,7 +145,9 @@ func (b *Block) UnmarshalJSON(data []byte) error {
 		err = fmt.Errorf("failed to convert block number, %w", err)
 		return err
 	}
-	b.Number = uint64(number.IntPart())
+	if b.Number, err = ToUint64(number, "block number"); err != nil {
+		return err
+	}
 
 	b.Hash = pb.Hash
 	b.Transactions = pb.Transactions
@@ -412,14 +414,18 @@ func (t *TxByHash) UnmarshalJSON(data []byte) error {
 		err = fmt.Errorf("failed to convert block number, %w", err)
 		return err
 	}
-	t.BlockNumber = uint64(bn.IntPart())
+	if t.BlockNumber, err = ToUint64(bn, "block number"); err != nil {
+		return err
+	}
 
 	tidx, err := HexStringToDecimal(pd.TransactionIndex)
 	if err != nil {
 		err = fmt.Errorf("failed to convert transaction index, %w", err)
 		return err
 	}
-	t.TransactionIndex = uint64(tidx.IntPart())
+	if t.TransactionIndex, err = ToUint64(tidx, "transaction index"); err != nil {
+		return err
+	}
 
 	return nil
 }

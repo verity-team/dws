@@ -86,10 +86,13 @@ func main() {
 		ctxt.BlockCache = blockCache
 	}
 
-	dsn := c.GetDSN()
-	dbh, err := sqlx.Open("postgres", dsn)
+	// c.OpenDB proves the connection works before the crawler starts; the
+	// error it returns is safe to log, see c.RedactDBError. The bare
+	// log.Fatal(err) this replaces printed whatever lib/pq handed back, which
+	// for a malformed connection string is a quoted fragment of it.
+	dbh, err := c.OpenDB(c.GetDSN())
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("buck: %v", err)
 	}
 	defer func() { _ = dbh.Close() }()
 	dbh.SetMaxOpenConns(10)
@@ -100,7 +103,9 @@ func main() {
 	ctxt.UpdateLastBlock = true
 
 	log.Infof("receiving address: %v", ctxt.ReceivingAddr)
-	log.Infof("ETH rpc url: %v", ctxt.ETHRPCURL)
+	// the jsonrpc API provider credentials live in the part of ETH_RPC_URL
+	// that RedactURL withholds
+	log.Infof("ETH rpc url: %v", c.RedactURL(ctxt.ETHRPCURL))
 	log.Infof("erc-20 data: %v", ctxt.StableCoins)
 	log.Infof("sale params: %v", ctxt.SaleParams)
 
