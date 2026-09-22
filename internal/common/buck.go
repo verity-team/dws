@@ -287,7 +287,29 @@ type TxByHash struct {
 	// seen in. It is only consulted for an absent transaction and is the zero
 	// time if it is not known -- which leaves the donation alone.
 	DBBlockTime time.Time
+	// AbsentCount is how many consecutive old-unconfirmed runs -- *including*
+	// the current one -- the transaction has been observed absent. It is read
+	// from donation.absent_count and incremented for this run before Judge is
+	// consulted. Only consulted for an absent transaction; it is what stops a
+	// single transient provider `null` from failing a donation whose money
+	// arrived (see SustainedAbsenceRuns).
+	AbsentCount int
 }
+
+// SustainedAbsenceRuns is how many consecutive old-unconfirmed runs a
+// transaction must be observed absent from both chain and mempool -- on top of
+// having aged past DroppedTxGracePeriod -- before it is declared dropped.
+//
+// The old-unconfirmed crawler polls `eth_getTransactionByHash` for every held
+// donation each run; a lagging load-balanced node or a malformed batch element
+// can answer a single poll with `null`, which reads as absent. Failing a
+// donation on one such answer would destroy a donation whose money verifiably
+// arrived -- especially after a pause, which parks a donation seen in a
+// finalized block as unconfirmed and lets its block time age past the 24h
+// grace. Requiring the absence to persist across a few runs (~45 minutes at the
+// 15-minute cadence) defeats a transient response while a genuinely evicted
+// transaction -- absent on every poll -- still fails, only a run or two later.
+const SustainedAbsenceRuns = 3
 
 // DroppedTxGracePeriod is how long a transaction that is absent from both the
 // chain and the mempool is given to (re-)appear before the donation is
@@ -360,14 +382,22 @@ func (v TxVerdict) String() string {
 //
 // A transaction the provider knows nothing about at all is the one case where
 // the passage of time is the evidence: it is failed (TxDropped) once it has
-// been gone for longer than DroppedTxGracePeriod, and left alone (TxAbsent)
-// until then.
+// been gone for longer than DroppedTxGracePeriod *and* has stayed absent across
+// SustainedAbsenceRuns consecutive runs, and left alone (TxAbsent) until then.
 func (t TxByHash) Judge(mfbn uint64) TxVerdict {
 	if t.Absent {
 		// no block, no mempool entry, nothing to compare -- the age of the
 		// donation is all we have to go on. An unknown block time (the zero
 		// time) leaves the donation alone.
 		if t.DBBlockTime.IsZero() || time.Since(t.DBBlockTime) < DroppedTxGracePeriod {
+			return TxAbsent
+		}
+		// aged past the grace period, but a single transient `null` (a lagging
+		// replica, a bad batch element) must not fail a donation whose money
+		// arrived: require the absence to have persisted across several
+		// consecutive runs. A genuinely evicted transaction is absent on every
+		// poll and clears this within a run or two of the grace period.
+		if t.AbsentCount < SustainedAbsenceRuns {
 			return TxAbsent
 		}
 		return TxDropped

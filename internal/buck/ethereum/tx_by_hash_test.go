@@ -267,6 +267,9 @@ func (suite *TxByHashSuite) TestDroppedTxOlderThanGracePeriodIsFailed() {
 
 	tx := txs[1]
 	tx.DBBlockTime = time.Now().UTC().Add(-c.DroppedTxGracePeriod - time.Hour)
+	// absent on enough consecutive runs to count as a sustained (not transient)
+	// absence
+	tx.AbsentCount = c.SustainedAbsenceRuns
 	assert.Equal(suite.T(), c.TxDropped, tx.Judge(uint64(18459500)))
 }
 
@@ -393,5 +396,6 @@ func (suite *TxByHashSuite) TestGenuineNullResultStillAbsent() {
 	assert.Equal(suite.T(), droppedTxHash, txs[0].Hash)
 
 	txs[0].DBBlockTime = time.Now().UTC().Add(-c.DroppedTxGracePeriod - time.Hour)
+	txs[0].AbsentCount = c.SustainedAbsenceRuns
 	assert.Equal(suite.T(), c.TxDropped, txs[0].Judge(uint64(18459500)))
 }

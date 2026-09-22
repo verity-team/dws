@@ -202,17 +202,31 @@ func TestJudge(t *testing.T) {
 			expected: TxNoFinalizedBlockData,
 		},
 		{
-			// gone from chain and mempool for longer than the grace period:
-			// the tx was evicted by a re-org and never re-mined
-			name:     "absent tx older than the grace period is dropped",
-			tx:       TxByHash{Absent: true, DBBlockTime: time.Now().UTC().Add(-DroppedTxGracePeriod - time.Minute)},
+			// gone from chain and mempool for longer than the grace period and
+			// absent on enough consecutive runs: the tx was evicted by a re-org
+			// and never re-mined
+			name:     "absent tx older than the grace period and sustained is dropped",
+			tx:       TxByHash{Absent: true, DBBlockTime: time.Now().UTC().Add(-DroppedTxGracePeriod - time.Minute), AbsentCount: SustainedAbsenceRuns},
 			expected: TxDropped,
 		},
 		{
-			// a single `null` from a lagging replica must not cost a donor
-			// their donation
+			// past the grace period on chain age, but a single transient `null`
+			// (count 1) must not cost a donor their donation
+			name:     "absent tx past the grace period but not yet sustained is left alone",
+			tx:       TxByHash{Absent: true, DBBlockTime: time.Now().UTC().Add(-DroppedTxGracePeriod - time.Minute), AbsentCount: 1},
+			expected: TxAbsent,
+		},
+		{
+			// one run short of the threshold is still not enough evidence
+			name:     "absent tx one run short of the threshold is left alone",
+			tx:       TxByHash{Absent: true, DBBlockTime: time.Now().UTC().Add(-DroppedTxGracePeriod - time.Minute), AbsentCount: SustainedAbsenceRuns - 1},
+			expected: TxAbsent,
+		},
+		{
+			// even a sustained absence is left alone while the chain age is
+			// still within the grace period
 			name:     "absent tx within the grace period is left alone",
-			tx:       TxByHash{Absent: true, DBBlockTime: time.Now().UTC().Add(-DroppedTxGracePeriod + time.Minute)},
+			tx:       TxByHash{Absent: true, DBBlockTime: time.Now().UTC().Add(-DroppedTxGracePeriod + time.Minute), AbsentCount: SustainedAbsenceRuns},
 			expected: TxAbsent,
 		},
 		{
