@@ -99,6 +99,17 @@ func TestParseKrakenTickerRejectsAmbiguousResults(t *testing.T) {
 	assert.ErrorContains(t, err, "invalid last trade price")
 }
 
+// the single pair entry has to be the pair that was asked for, under either of
+// kraken's spellings of it -- a response for a different instrument must not
+// be averaged into the ethereum price
+func TestParseKrakenTickerRejectsAWrongPair(t *testing.T) {
+	_, err := parseKrakenTicker([]byte(`{"error":[],"result":{"SOLUSD":{"c":["2600.55","0.5"]}}}`))
+	assert.ErrorContains(t, err, "pair 'SOLUSD'")
+
+	_, err = parseKrakenTicker([]byte(`{"error":[],"result":{"XSOLZUSD":{"c":["2600.55","0.5"]}}}`))
+	assert.ErrorContains(t, err, "pair 'XSOLZUSD'")
+}
+
 // --------------------------------------------------------------- coinbase ---
 
 func TestParseCoinbaseSpotSuccess(t *testing.T) {

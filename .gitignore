@@ -65,7 +65,9 @@ next-env.d.ts
 **/yarn.lock
 
 bin/**
-go.sum
+
+# go.sum is deliberately NOT ignored: committing it pins the module checksums
+# every build verifies against
 
 # AI scratch space (red-team notes, assessments -- must never be committed)
 ai/

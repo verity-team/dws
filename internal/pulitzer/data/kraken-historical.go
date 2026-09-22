@@ -12,17 +12,11 @@ import (
 	"github.com/verity-team/dws/internal/common"
 )
 
-// krakenOHLCPair is the altname spelling kraken keys the OHLC result by
-// (`XETHZUSD` for `ETHUSD`). The pair the venue answered for is accepted under
-// either spelling and rejected otherwise, so a response for a different
-// instrument is never priced as ETH.
-const krakenOHLCPair = "XETHZUSD"
-
 // KrakenOHLCResponse mirrors kraken's /0/public/OHLC reply. The result is
 // keyed by kraken's own altname spelling of the pair (`XETHZUSD` for
-// `ETHUSD`) and carries a trailing `last` field alongside it, so the pair
-// entry is picked out by shape rather than by a hardcoded key -- see
-// parseKrakenOHLC.
+// `ETHUSD`, see krakenAltNamePair) and carries a trailing `last` field
+// alongside it, so the pair entry is picked out by shape rather than by a
+// hardcoded key -- see parseKrakenOHLC.
 type KrakenOHLCResponse struct {
 	Error  []interface{}              `json:"error"`
 	Result map[string]json.RawMessage `json:"result"`
@@ -106,8 +100,8 @@ func parseKrakenOHLC(responseBody []byte) ([]Kline, error) {
 	// the key kraken answered under has to be the pair that was asked for,
 	// spelled either as ETHUSD or as its altname XETHZUSD; anything else is a
 	// different instrument. checkPair ignores the separator and casing.
-	if checkPair("kraken", krakenPair, pair) != nil && checkPair("kraken", krakenOHLCPair, pair) != nil {
-		return nil, fmt.Errorf("kraken: OHLC response is for pair '%s', expected '%s' (or its altname '%s')", pair, krakenPair, krakenOHLCPair)
+	if checkPair("kraken", krakenPair, pair) != nil && checkPair("kraken", krakenAltNamePair, pair) != nil {
+		return nil, fmt.Errorf("kraken: OHLC response is for pair '%s', expected '%s' (or its altname '%s')", pair, krakenPair, krakenAltNamePair)
 	}
 	if err := json.Unmarshal(raw, &rows); err != nil {
 		return nil, err

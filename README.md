@@ -114,6 +114,26 @@ variable. Independently of it, a timestamp more than 5 seconds in the *future*
 is rejected -- otherwise a signature harvested over a far future timestamp
 would stay valid, and replayable, until that timestamp had come and gone.
 
+Two optional debug facilities, both `buck` only and both off unless set; leave
+them off in production:
+
+- `DWS_DEBUG_DATA_STORE` names a directory into which `buck` dumps the raw
+  jsonrpc responses it works from -- every block it fetches
+  (`<crawler>-<block>.json`), the transaction objects and the receipts
+  (`txs-*.json`, `txr-*.json`) -- so a crawl can be replayed and inspected
+  after the fact. Write failures are logged as warnings and otherwise ignored;
+  the crawl itself is not affected.
+- `DWS_BLOCK_CACHE` names a directory in which the finalized crawler keeps
+  every finalized block it fetched (`fb-<block>.json`) and from which `buck`
+  serves later requests for the same block instead of asking the provider (a
+  cached copy that fails to parse is discarded and fetched again). Unlike the
+  debug store this changes behaviour: a block that cannot be written to the
+  cache is treated as an error and the block is retried on the next run.
+
+Both directories are created on first use and the files are written `0600`;
+the data is what the provider returned, not secrets, but the volume grows with
+every block.
+
 ## what counts as a donation
 
 A transfer is recorded as a donation when it reaches the receiving address and
@@ -277,14 +297,14 @@ apples-to-apples with the other five.
 A response that echoes the instrument it answered for is also checked against
 the pair that was asked for, so a pair that is renamed, re-listed or mistyped
 is rejected rather than averaged into the ethereum price as if it were ETH.
-Three venues carry a checkable instrument field and are validated with
-`checkPair`: binance, coinbase and cex.io. kraken is the special case: it keys
-the result by its own spelling of the pair (`XETHZUSD` for `ETHUSD`), which
-used to be hardcoded -- the single entry of the result map is taken instead,
-and the `error` array kraken populates while still answering HTTP 200 is
-reported rather than ignored. kucoin and bitfinex query a fixed, pair-specific
-endpoint whose body carries no instrument identifier, so there is nothing to
-check against there.
+binance, coinbase and cex.io echo the instrument in the body and are validated
+with `checkPair`. kraken is the special case: it keys the result by its own
+spelling of the pair (`XETHZUSD` for `ETHUSD`), which used to be hardcoded --
+the single entry of the result map is taken instead and checked against that
+pair under either spelling, and the `error` array kraken populates while still
+answering HTTP 200 is reported rather than ignored. kucoin and bitfinex query a
+fixed, pair-specific endpoint whose body carries no instrument identifier, so
+there is nothing to check against there.
 
 Quotes are also rejected when the venue says they are stale: cex.io and kucoin
 publish the time their quote was taken, and a quote older than 2 minutes (or
@@ -312,6 +332,66 @@ is credited with is never rewritten.
 deliberately does not call out to an exchange: a third party being slow, or
 answering the probe with a rate limit error, would take an otherwise healthy
 pod out of service and burn the very request budget the price fetch needs.
+
+## a crawler is stuck on a block
+
+`buck` advances past a block only with positive evidence for every donation it
+found in it, so a jsonrpc API provider that never returns the receipt of a
+filtered transaction -- or never returns the block itself -- holds the crawler
+on that block: the scheduled-job error listener logs the same error on every
+run and the cursor does not move. That is deliberate -- absence of evidence is
+not evidence of failure, and skipping a block silently would lose the donations
+in it -- but it means a wedged block needs an operator.
+
+The error names the block and the transaction and ends with a fixed suffix
+pointing here, so it can be grepped for:
+
+```
+block: 4404251 -- no tx receipt for tx '0xabc...' (0 usable receipt(s) for 1 tx(s)); if this persists see 'a crawler is stuck on a block' in the README
+```
+
+Look the transaction up on a block explorer first:
+
+- the transaction exists and succeeded -- the provider is broken for this
+  request. Fix or replace it (`ETH_RPC_URL`); the crawler retries the block on
+  its next run and nothing is lost.
+- the provider is permanently unable to answer for this block/transaction and
+  there is no replacement -- the block can be skipped by moving the cursor of
+  the wedged crawler(s) past it. Set **only** the cursor of the crawler that
+  is actually stuck, and verify in `last_block` which one that is:
+
+  ```
+  SELECT label, value, modified_at FROM last_block WHERE chain='eth';
+  ```
+
+  `value` is the last block a crawler *processed*, so the wedged crawler's row
+  sits at 4404250 and its `modified_at` has stopped advancing. The two
+  crawlers are rarely wedged together: the finalized crawler trails the latest
+  tip by roughly 13 minutes, so if only the latest crawler is stuck, moving the
+  finalized cursor as well jumps it past finalized-but-uncrawled blocks --
+  the donations in those miss the finalized pass and are only confirmed later
+  by the old-unconfirmed crawler, i.e. credited late and at the tier in force
+  at that time. Set the stuck cursor to the wedged block so the next run
+  resumes at the block after it:
+
+  ```
+  bin/buck -set-latest 4404251   # only if label 'latest' is stuck
+  bin/buck -set-final 4404251    # only if label 'finalized' is stuck
+  ```
+
+  Skipping means the donations of that block are *not recorded* for now. The
+  skip is recoverable, not final: once the provider is fixed or replaced the
+  block can be re-crawled with `bin/buck -monitor-final -single-block 4404251`
+  (`-monitor-latest` for the latest crawler), which processes just that block
+  without touching the cursor -- the donation writes are `ON CONFLICT
+  (tx_hash)` upserts, so a re-crawl duplicates nothing already on record.
+  Until then the money may still have arrived: whoever sent it has a
+  transaction hash and needs handling out of band, like the donors of a paused
+  campaign above.
+
+The old-unconfirmed crawler has no cursor and cannot be wedged this way; a
+transaction whose receipt it cannot fetch is simply re-examined on the next
+run.
 
 ## tests
 
