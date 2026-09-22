@@ -2,6 +2,7 @@ package common
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/gommon/log"
 	"github.com/stretchr/testify/assert"
@@ -121,4 +123,51 @@ func TestMaxResponseBytesIsEnforced(t *testing.T) {
 	_, err := HTTPGet(HTTPParams{URL: srv.URL})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "exceeds")
+}
+
+// HTTPGetCtx binds the request to the context: a server that never answers is
+// abandoned as soon as the context deadline fires, well before the 10s client
+// timeout, so the caller's chain budget actually bounds an in-flight request.
+func TestHTTPGetCtxCancelsAnInFlightRequest(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		<-release // hang until the test lets go
+		_, _ = fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer srv.Close()
+	defer close(release)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, err := HTTPGetCtx(ctx, HTTPParams{URL: srv.URL + "/v3/" + apiKey})
+	elapsed := time.Since(start)
+
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), apiKey, "a cancelled request must not leak the URL")
+	assert.Less(t, elapsed, 5*time.Second, "the request must be cancelled by the context, not wait out the client timeout")
+}
+
+// the healthy path is unchanged from HTTPGet: a 200 body is returned, and a
+// non-200 is an error carrying the status but not the credentials
+func TestHTTPGetCtxSuccessAndRedaction(t *testing.T) {
+	ok := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer ok.Close()
+
+	body, err := HTTPGetCtx(context.Background(), HTTPParams{URL: ok.URL + "/v3/" + apiKey})
+	require.NoError(t, err)
+	assert.Equal(t, `{"ok":true}`, string(body))
+
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer bad.Close()
+
+	_, err = HTTPGetCtx(context.Background(), HTTPParams{URL: bad.URL + "/v3/" + apiKey})
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), apiKey)
+	assert.Contains(t, err.Error(), "403")
 }

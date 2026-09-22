@@ -301,34 +301,150 @@ func servePriceRequests(ctx context.Context) error {
 		return err
 	}
 	for _, rq := range rqs {
+		// now is captured *before* the fetch and threaded into CloseRequest so
+		// a kline served in the last fraction of its minute is judged against
+		// the clock as it stood then, not after the round trip (see #227)
+		now := time.Now().UTC()
 		// a single request that cannot be fulfilled must not block the
 		// remaining (older or newer) requests in the queue
-		klines, err := data.GetHistoricalPriceFromBinance(rq.Time)
+		klines, source, err := historicalKlines(ctx, rq.Time, now)
 		if err != nil {
 			err = fmt.Errorf("failed to obtain historical prices for %s, %w", rq.Time, err)
 			log.Error(err)
-			failPriceRequest(dbh, rq.ID)
+			failPriceRequest(dbh, rq, now)
 			continue
 		}
-		err = db.CloseRequest(dbh, rq.ID, rq.Time, klines)
+		err = db.CloseRequest(dbh, rq.ID, rq.Time, klines, now)
 		if err != nil {
 			err = fmt.Errorf("failed to persist historical prices for request #%d/%s, %w", rq.ID, rq.Time, err)
 			log.Error(err)
-			failPriceRequest(dbh, rq.ID)
+			failPriceRequest(dbh, rq, now)
 			continue
 		}
-		log.Infof("obtained %d historical price(s) for request #%d/%s", len(klines), rq.ID, rq.Time)
+		log.Infof("obtained %d historical price(s) for request #%d/%s from %s", len(klines), rq.ID, rq.Time, source)
 	}
 	return nil
+}
+
+// HistoricalChainBudget bounds the wall-clock time selectHistorical may spend
+// walking the whole fallback chain for one request.
+//
+// The chain fetches from binance, kraken and coinbase in sequence, each with
+// the default 10s common.HTTPGet client timeout, so three hung sources would
+// otherwise take ~30s -- and servePriceRequests is scheduled every 10s and
+// cannot overlap itself under SingletonModeAll, so a slow run delays every
+// later request. A single 15s deadline over the whole chain caps that: it is
+// generous for a healthy walk (three reachable venues answer in well under a
+// second combined) yet still lets one genuinely slow-but-working source run out
+// its own 10s client timeout once, while guaranteeing the chain returns in
+// ~15s rather than ~30s. The deadline is threaded into each fetch (see
+// HTTPGetCtx), so a request already in flight when the budget is spent is
+// actually cancelled, not merely prevented from starting the next source.
+const HistoricalChainBudget = 15 * time.Second
+
+// historicalSource pairs a venue name with its historical kline fetcher.
+type historicalSource struct {
+	name  string
+	fetch func(context.Context, time.Time) ([]data.Kline, error)
+}
+
+// historicalSources is the ordered fallback chain the backfill path walks to
+// price a minute. binance is tried first, unchanged; kraken and coinbase back
+// it up so a binance-specific data gap or outage no longer stalls donation
+// finalization the way a single hardcoded source did (see #228). The live
+// price path already fans out to six venues -- this gives the backfill, the
+// path that has to unblock a stalled crawler, source diversity of its own.
+var historicalSources = []historicalSource{
+	{"binance", data.GetHistoricalPriceFromBinance},
+	{"kraken", data.GetHistoricalPriceFromKraken},
+	{"coinbase", data.GetHistoricalPriceFromCoinbase},
+}
+
+// historicalKlines returns the klines from the first configured source that
+// can actually serve the requested minute, together with the name of that
+// source. It is the production entry point; selectHistorical holds the logic so
+// it can be exercised with stub sources and a shorter budget.
+func historicalKlines(ctx context.Context, ts, now time.Time) ([]data.Kline, string, error) {
+	return selectHistorical(ctx, historicalSources, ts, now, HistoricalChainBudget)
+}
+
+// selectHistorical walks the sources in order and returns the klines from the
+// first one that can serve the requested minute.
+//
+// The whole walk shares a single budget: ctx is given a deadline of budget and
+// each source's fetch is bound to it, so one hung source cannot make the chain
+// run past ~budget and a fetch still in flight when the budget is spent is
+// cancelled rather than left to its own 10s client timeout. ctx is the caller's
+// (the gocron job context), so a shutdown also cancels an in-flight fetch.
+//
+// A source is skipped -- in favour of the next -- when it errors (a cancelled
+// fetch is just another error) or when what it returns does not cover the
+// minute with a final kline (db.ServesMinute, the same gate CloseRequest
+// applies). Only when every source has been tried and none can serve the minute
+// is an error returned, carrying the reason each one gave so a genuine gap --
+// or a spent budget -- is diagnosable; the caller then fails the request and it
+// is retried.
+func selectHistorical(ctx context.Context, sources []historicalSource, ts, now time.Time, budget time.Duration) ([]data.Kline, string, error) {
+	ctx, cancel := context.WithTimeout(ctx, budget)
+	defer cancel()
+
+	var errs []error
+	for _, s := range sources {
+		if err := ctx.Err(); err != nil {
+			errs = append(errs, fmt.Errorf("chain budget (%v) spent before %s: %w", budget, s.name, err))
+			break
+		}
+		klines, err := s.fetch(ctx, ts)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", s.name, err))
+			continue
+		}
+		if !db.ServesMinute(ts, now, klines) {
+			errs = append(errs, fmt.Errorf(
+				"%s: no final kline within %v of the requested minute", s.name, common.PriceLookupWindow))
+			continue
+		}
+		return klines, s.name, nil
+	}
+	return nil, "", fmt.Errorf(
+		"no historical source could serve %s, %w", ts.UTC().Format(time.RFC3339), errors.Join(errs...))
 }
 
 // failPriceRequest records a price request that could not be served so that the
 // failure is visible; the request is retried later instead of silently
 // remaining at 'new' and being picked up on every single cycle.
-func failPriceRequest(dbh *sqlx.DB, rid uint64) {
-	if err := db.FailRequest(dbh, rid); err != nil {
-		log.Errorf("failed to record the failure of price request #%d, %v", rid, err)
+//
+// The request is never abandoned -- FailRequest keeps it eligible for retry
+// forever, so the stall self-heals when the underlying fault clears. But a
+// request that has stayed unfulfilled past db.PriceReqAlertAge is additionally
+// logged at error level on every failed attempt, so that a fault which no
+// source can work around (a pulitzer-side egress/DNS/CA/NetworkPolicy problem
+// hitting all venues at once, or a genuinely missing minute) is alertable and
+// gets a human, rather than only ever showing up as a slowly falling behind
+// crawler.
+func failPriceRequest(dbh *sqlx.DB, rq db.PriceReq, now time.Time) {
+	if err := db.FailRequest(dbh, rq.ID); err != nil {
+		log.Errorf("failed to record the failure of price request #%d, %v", rq.ID, err)
 	}
+	if msg, due := stuckPriceRequestAlert(rq, now); due {
+		log.Error(msg)
+	}
+}
+
+// stuckPriceRequestAlert returns an alert line, and whether one is due, for a
+// request that could not be served this cycle. A request open longer than
+// db.PriceReqAlertAge has resisted every attempt so far; it keeps being retried
+// (it never becomes terminal) but is surfaced at error level so it is visible
+// and alertable. The age is measured from created_at, so no schema column is
+// needed to track it.
+func stuckPriceRequestAlert(rq db.PriceReq, now time.Time) (string, bool) {
+	age := now.UTC().Sub(rq.CreatedAt.UTC())
+	if age < db.PriceReqAlertAge {
+		return "", false
+	}
+	return fmt.Sprintf(
+		"price request #%d for %s has been unfulfilled for %v (>= %v): no price source can serve the minute -- needs attention (still retrying every %v)",
+		rq.ID, rq.Time.UTC().Format(time.RFC3339), age.Truncate(time.Second), db.PriceReqAlertAge, db.FailedRetryDelay), true
 }
 
 func getETHPrice(ctx context.Context) (decimal.Decimal, error) {

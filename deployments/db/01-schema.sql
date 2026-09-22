@@ -276,6 +276,14 @@ CREATE TRIGGER price_req_update_timestamp
 BEFORE UPDATE ON price_req
 FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
+-- GetOpenPriceRequests polls every 10s with
+--   WHERE status='new' OR (status='failed' AND modified_at < now() - interval)
+-- so (status, modified_at) lets the planner satisfy the filter from the index
+-- instead of scanning the whole table (see #229). A failed request is retried
+-- forever (there is no terminal 'dead' state): an outage self-heals when it
+-- ends, and a request that stays unfulfilled too long is surfaced by
+-- servePriceRequests at error level for alerting instead.
+CREATE INDEX ON price_req (status, modified_at);
 
 --- update_user_data() ---------------------------------------------
 CREATE OR REPLACE FUNCTION update_user_data(p_address VARCHAR(42))

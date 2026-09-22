@@ -1,6 +1,7 @@
 package data
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -17,12 +18,27 @@ type Kline struct {
 	CloseTime  time.Time
 }
 
-func GetHistoricalPriceFromBinance(ts time.Time) ([]Kline, error) {
+// closeTimeFromOpen turns a candle's open time (whole seconds, minute aligned)
+// into the close time the rest of the pipeline keys on: the last whole second
+// of the minute, i.e. minute start + 59s.
+//
+// It exists so the fallback sources agree with binance on the timestamp of a
+// given minute. binance reports a kline's own close time (minute start +
+// 59.999s, truncated to the second by parseKlines), whereas kraken and
+// coinbase report the open time; without normalising them the same minute
+// would land under two different `created_at` values and the
+// UNIQUE(asset, created_at) dedupe -- and the overlap tolerance in
+// persistKline -- would both break.
+func closeTimeFromOpen(openSec int64) time.Time {
+	return time.Unix(openSec, 0).UTC().Truncate(time.Minute).Add(59 * time.Second)
+}
+
+func GetHistoricalPriceFromBinance(ctx context.Context, ts time.Time) ([]Kline, error) {
 	url := fmt.Sprintf("https://api.binance.com/api/v3/klines?symbol=ETHUSDT&interval=1m&limit=10&startTime=%d", ts.UnixMilli())
 	params := common.HTTPParams{
 		URL: url,
 	}
-	responseBody, err := common.HTTPGet(params)
+	responseBody, err := common.HTTPGetCtx(ctx, params)
 	if err != nil {
 		return nil, err
 	}

@@ -21,11 +21,42 @@ import (
 // question) would be retried on every single cycle.
 const FailedRetryDelay = 5 * time.Minute
 
+// KlineFinalityMargin is how far past the end of a kline's minute the wall
+// clock must have moved before the kline is treated as final.
+//
+// A kline's minute ends one minute after it opens; the extra margin guards the
+// finality decision against positive clock skew of this host relative to the
+// exchange. Without it a host running a couple of seconds fast could judge a
+// kline final while the venue is still filling it, and -- because a provisional
+// close would win the UNIQUE(asset, created_at) row under
+// ON CONFLICT DO NOTHING -- make that provisional value the permanent record.
+//
+// The cost of the margin is a delayed serve, not a lost price: a request whose
+// minute closed within the last KlineFinalityMargin has its only covering kline
+// dropped, so CloseRequest refuses it and the request waits FailedRetryDelay (5
+// minutes) for the next attempt. The margin is therefore kept small -- the
+// window in which a backfill request lands within two seconds of its minute
+// closing is narrow.
+const KlineFinalityMargin = 2 * time.Second
+
+// PriceReqAlertAge is how long a price request may stay unfulfilled before
+// every failed serve attempt is surfaced at error level for alerting.
+//
+// A failed request is retried forever (it never becomes terminal), so an
+// outage self-heals when it ends. But a request that no source can serve for
+// a long time -- a pulitzer-side egress/DNS/CA/NetworkPolicy fault that hits
+// all sources at once, or a genuinely missing minute -- stalls buck on that
+// block and needs a human. Thirty minutes is comfortably past any transient
+// venue blip yet well inside the window before the stall matters, and buck's
+// finalized crawler already runs ~13 minutes behind head.
+const PriceReqAlertAge = 30 * time.Minute
+
 type PriceReq struct {
-	ID     uint64    `db:"id"`
-	Asset  string    `db:"what_asset"`
-	Time   time.Time `db:"what_time"`
-	Status string    `db:"status"`
+	ID        uint64    `db:"id"`
+	Asset     string    `db:"what_asset"`
+	Time      time.Time `db:"what_time"`
+	Status    string    `db:"status"`
+	CreatedAt time.Time `db:"created_at"`
 }
 
 func PersistETHPrice(dbh *sqlx.DB, avp decimal.Decimal) error {
@@ -58,7 +89,7 @@ func GetOpenPriceRequests(dbh *sqlx.DB) ([]PriceReq, error) {
 		result []PriceReq
 	)
 	q = `
-		SELECT id, what_asset, what_time, status
+		SELECT id, what_asset, what_time, status, created_at
 		FROM price_req
 		WHERE
 			status='new'
@@ -86,14 +117,25 @@ func retryInterval() string {
 // CloseRequest persists the prices obtained for a price request and marks the
 // request as succeeded. ts is the minute the request asks a price for.
 //
+// now is the wall clock captured by the caller *before* the historical prices
+// were fetched (see #227). Judging finality against it -- rather than a
+// time.Now() read after the round trip -- is what keeps a kline served in the
+// last fraction of its minute from being classified as final by the time the
+// response lands and, under ON CONFLICT DO NOTHING, becoming the permanent
+// record for that minute.
+//
 // A request is only ever marked succeeded if prices that actually serve it
 // were written: an empty kline set and a kline set that misses the requested
 // minute are both rejected outright, so the function cannot record success for
 // work it did not do.
-func CloseRequest(dbh *sqlx.DB, rid uint64, ts time.Time, kls []data.Kline) (err error) {
+func CloseRequest(dbh *sqlx.DB, rid uint64, ts time.Time, kls []data.Kline, now time.Time) (err error) {
 	// a price that is still moving must not become the permanent record for
 	// its minute, see klineIsFinal
-	kls = finalKlines(rid, kls, time.Now().UTC())
+	final := finalKlines(kls, now)
+	if dropped := len(kls) - len(final); dropped > 0 {
+		log.Infof("price request #%d: ignoring %d still open kline(s)", rid, dropped)
+	}
+	kls = final
 	if err = validateKlines(rid, ts, kls); err != nil {
 		return err
 	}
@@ -134,6 +176,13 @@ func CloseRequest(dbh *sqlx.DB, rid uint64, ts time.Time, kls []data.Kline) (err
 // thus visible instead of the request silently sitting at 'new' forever, and
 // the request becomes eligible for another attempt FailedRetryDelay later.
 //
+// There is no terminal failure state: a failed request is retried forever, so
+// an outage -- venue side or pulitzer side -- self-heals the moment it ends,
+// rather than leaving the request wedged until an operator intervenes. A
+// request that stays unfulfilled for too long is surfaced separately at error
+// level for alerting (see PriceReqAlertAge and servePriceRequests), it is not
+// abandoned.
+//
 // Every failure rewrites the row, so the price_req_update_timestamp trigger
 // bumps modified_at: a request that keeps failing keeps backing off instead of
 // being picked up on every cycle.
@@ -172,11 +221,13 @@ func FailRequest(dbh *sqlx.DB, rid uint64) error {
 // permanent record for that minute and the final one would be discarded by
 // the ON CONFLICT DO NOTHING in persistKline.
 //
-// The close time reported for a kline is the last instant of its minute,
-// truncated to the second by parseKlines, so a kline is final exactly when
-// its close time falls before the minute currently in progress.
+// The close time reported for a kline is the last instant of its minute
+// (minute start + 59s, see closeTimeFromOpen), so the minute it covers ends one
+// minute after its start. The kline is final once the wall clock is at least
+// KlineFinalityMargin past that end.
 func klineIsFinal(kl data.Kline, now time.Time) bool {
-	return kl.CloseTime.UTC().Before(now.UTC().Truncate(time.Minute))
+	minuteEnd := kl.CloseTime.UTC().Truncate(time.Minute).Add(time.Minute)
+	return !now.UTC().Before(minuteEnd.Add(KlineFinalityMargin))
 }
 
 // finalKlines drops the klines whose minute has not closed yet.
@@ -187,18 +238,41 @@ func klineIsFinal(kl data.Kline, now time.Time) bool {
 // later -- by which time the minute is closed and its price is the final one.
 // Recording a provisional price instead would be permanent, and the amount a
 // donation is credited in USD is never rewritten.
-func finalKlines(rid uint64, kls []data.Kline, now time.Time) []data.Kline {
+func finalKlines(kls []data.Kline, now time.Time) []data.Kline {
 	result := make([]data.Kline, 0, len(kls))
 	for _, kl := range kls {
 		if !klineIsFinal(kl, now) {
-			log.Infof(
-				"price request #%d: ignoring the still open kline for %s",
-				rid, kl.CloseTime.UTC().Format(time.RFC3339))
 			continue
 		}
 		result = append(result, kl)
 	}
 	return result
+}
+
+// ServesMinute reports whether kls would let CloseRequest close a request for
+// the minute ts, judged against the wall clock now: the still open klines are
+// dropped and what remains must be a set CloseRequest would accept -- non
+// empty, every kline positive and timestamped, and at least one within
+// c.PriceLookupWindow of ts. It mirrors CloseRequest's own gate (validateKlines
+// on the finalized set) as a bool so servePriceRequests can pick the first
+// historical source that can actually serve the minute and fall through to the
+// next when one cannot, instead of failing the request on the first source's
+// gap.
+func ServesMinute(ts, now time.Time, kls []data.Kline) bool {
+	final := finalKlines(kls, now)
+	if len(final) == 0 {
+		return false
+	}
+	covered := false
+	for _, kl := range final {
+		if !kl.ClosePrice.IsPositive() || kl.CloseTime.IsZero() {
+			return false
+		}
+		if kl.CloseTime.Sub(ts).Abs() <= c.PriceLookupWindow {
+			covered = true
+		}
+	}
+	return covered
 }
 
 // validateKlines rejects kline sets that must not be persisted. An empty set

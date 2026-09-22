@@ -2,6 +2,7 @@ package common
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -48,6 +49,42 @@ func HTTPGet(params HTTPParams) ([]byte, error) {
 	}
 
 	req, err := http.NewRequest("GET", params.URL, nil)
+	if err != nil {
+		err = fmt.Errorf("failed to prep request for url ('%s'), %w", RedactURL(params.URL), redactTransportError(err))
+		log.Error(err)
+		return nil, err
+	}
+
+	response, err := client.Do(req)
+	if err != nil {
+		err = fmt.Errorf("failed to execute GET request for url ('%s'), %w", RedactURL(params.URL), redactTransportError(err))
+		log.Error(err)
+		return nil, err
+	}
+	defer func() { _ = response.Body.Close() }()
+
+	return readResponse("GET", params.URL, response)
+}
+
+// HTTPGetCtx is the context-aware sibling of HTTPGet: the request is bound to
+// ctx, so a caller with a deadline (the historical backfill chain, which caps
+// its whole Binance->Kraken->Coinbase walk with one budget) actually cancels
+// an in-flight request when the deadline is spent, rather than only preventing
+// the next call from starting.
+//
+// It is deliberately separate from HTTPGet so the live-price and RPC paths keep
+// their exact behaviour. The per-request client timeout still applies as an
+// upper bound alongside ctx -- whichever fires first wins -- and the redaction,
+// status and bounded-read handling are shared with HTTPGet via readResponse and
+// redactTransportError. A cancelled request surfaces as an ordinary fetch error
+// (context.Canceled / context.DeadlineExceeded, with the URL redacted), which
+// the chain treats like any other failed source.
+func HTTPGetCtx(ctx context.Context, params HTTPParams) ([]byte, error) {
+	client := &http.Client{
+		Timeout: timeout(params),
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", params.URL, nil)
 	if err != nil {
 		err = fmt.Errorf("failed to prep request for url ('%s'), %w", RedactURL(params.URL), redactTransportError(err))
 		log.Error(err)
