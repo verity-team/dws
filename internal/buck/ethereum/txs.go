@@ -214,7 +214,12 @@ func applyTxReceipts(bn uint64, txs []c.Transaction, rcpts []c.TxReceipt) error 
 	for i := range txs {
 		rcpt, ok := byHash[c.NormalizeHash(txs[i].Hash)]
 		if !ok {
-			err := fmt.Errorf("block: %d -- no tx receipt for tx '%s' (%d usable receipt(s) for %d tx(s))", bn, txs[i].Hash, len(byHash), len(txs))
+			// the message points at the runbook: this error repeats on every
+			// run for as long as the provider refuses the receipt, and the
+			// block -- and with it the crawler -- does not advance
+			err := fmt.Errorf(
+				"block: %d -- no tx receipt for tx '%s' (%d usable receipt(s) for %d tx(s)); if this persists see 'a crawler is stuck on a block' in the README",
+				bn, txs[i].Hash, len(byHash), len(txs))
 			log.Error(err)
 			return err
 		}

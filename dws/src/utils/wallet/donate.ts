@@ -14,7 +14,13 @@ import {
   sendTransaction,
   writeContract,
 } from "@wagmi/core";
-import { formatEther, formatUnits, getContract, parseEther } from "viem";
+import {
+  formatEther,
+  formatUnits,
+  getContract,
+  parseEther,
+  parseUnits,
+} from "viem";
 import { Maybe } from "@/utils";
 import Decimal from "decimal.js";
 import toast from "react-hot-toast";
@@ -195,7 +201,10 @@ export const donateERCWagmi = async (
     address: tokenInfo.contractAddress as any,
     abi: erc20ABI,
     functionName: "transfer",
-    args: [receiveWallet as any, parseEther(amount.toString())],
+    args: [
+      receiveWallet as any,
+      parseUnits(amount.toString(), tokenInfo.decimals),
+    ],
   });
 
   const { hash } = await writeContract(request);

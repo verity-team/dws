@@ -277,14 +277,14 @@ apples-to-apples with the other five.
 A response that echoes the instrument it answered for is also checked against
 the pair that was asked for, so a pair that is renamed, re-listed or mistyped
 is rejected rather than averaged into the ethereum price as if it were ETH.
-Three venues carry a checkable instrument field and are validated with
-`checkPair`: binance, coinbase and cex.io. kraken is the special case: it keys
-the result by its own spelling of the pair (`XETHZUSD` for `ETHUSD`), which
-used to be hardcoded -- the single entry of the result map is taken instead,
-and the `error` array kraken populates while still answering HTTP 200 is
-reported rather than ignored. kucoin and bitfinex query a fixed, pair-specific
-endpoint whose body carries no instrument identifier, so there is nothing to
-check against there.
+binance, coinbase and cex.io echo the instrument in the body and are validated
+with `checkPair`. kraken is the special case: it keys the result by its own
+spelling of the pair (`XETHZUSD` for `ETHUSD`), which used to be hardcoded --
+the single entry of the result map is taken instead and checked against that
+pair under either spelling, and the `error` array kraken populates while still
+answering HTTP 200 is reported rather than ignored. kucoin and bitfinex query a
+fixed, pair-specific endpoint whose body carries no instrument identifier, so
+there is nothing to check against there.
 
 Quotes are also rejected when the venue says they are stale: cex.io and kucoin
 publish the time their quote was taken, and a quote older than 2 minutes (or
@@ -312,6 +312,44 @@ is credited with is never rewritten.
 deliberately does not call out to an exchange: a third party being slow, or
 answering the probe with a rate limit error, would take an otherwise healthy
 pod out of service and burn the very request budget the price fetch needs.
+
+## a crawler is stuck on a block
+
+`buck` advances past a block only with positive evidence for every donation it
+found in it, so a jsonrpc API provider that never returns the receipt of a
+filtered transaction -- or never returns the block itself -- holds the crawler
+on that block: the scheduled-job error listener logs the same error on every
+run and the cursor does not move. That is deliberate -- absence of evidence is
+not evidence of failure, and skipping a block silently would lose the donations
+in it -- but it means a wedged block needs an operator.
+
+The error names the block and the transaction, e.g.
+
+```
+block: 4404251 -- no tx receipt for tx '0xabc...' (0 usable receipt(s) for 1 tx(s))
+```
+
+Look the transaction up on a block explorer first:
+
+- the transaction exists and succeeded -- the provider is broken for this
+  request. Fix or replace it (`ETH_RPC_URL`); the crawler retries the block on
+  its next run and nothing is lost.
+- the provider is permanently unable to answer for this block/transaction and
+  there is no replacement -- the block can be skipped by moving the cursor
+  past it:
+
+  ```
+  bin/buck -set-latest 4404252   # latest crawler
+  bin/buck -set-final 4404252    # finalized crawler
+  ```
+
+  Skipping means the donations of that block are *not recorded*. The money may
+  still have arrived: whoever sent it has a transaction hash and needs handling
+  out of band, like the donors of a paused campaign above.
+
+The old-unconfirmed crawler has no cursor and cannot be wedged this way; a
+transaction whose receipt it cannot fetch is simply re-examined on the next
+run.
 
 ## tests
 
