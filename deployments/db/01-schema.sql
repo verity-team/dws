@@ -93,6 +93,13 @@ CREATE TABLE donation (
     block_number BIGINT NOT NULL,
     block_hash VARCHAR(66) NOT NULL,
     block_time TIMESTAMP NOT NULL,
+    -- number of consecutive old-unconfirmed crawler runs this transaction has
+    -- been observed absent from both chain and mempool; reset to 0 the moment
+    -- it reappears. A single transient provider `null` (a lagging replica, a
+    -- bad batch element) must not fail a donation whose money verifiably
+    -- arrived, so a donation is only declared dropped after a *sustained*
+    -- absence -- see c.SustainedAbsenceRuns and c.TxByHash.Judge.
+    absent_count INTEGER NOT NULL DEFAULT 0,
 
     modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
     created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())

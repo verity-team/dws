@@ -32,6 +32,7 @@ type recorder struct {
 	priceReqs   []time.Time  // block times handed to requestPrice
 	failed      []c.TxByHash // txs handed to FailTx
 	finalized   []c.TxByHash // txs handed to FinalizeTx
+	absences    []string     // "<hash>:<absent>" handed to recordAbsence
 	mrbnCalls   int
 	byHashCalls int
 }
@@ -69,6 +70,16 @@ func stubDeps(r *recorder) buckDeps {
 		getTxsByHash: func(c.Context, []c.Hashable) ([]c.TxByHash, error) {
 			r.byHashCalls++
 			return nil, nil
+		},
+		// by default report an absence as already sustained, so the dispatch
+		// tests exercise the verdict->action mapping without threading a run
+		// count; the tests about the count itself override this.
+		recordAbsence: func(_ c.Context, hash string, absent bool) (int, error) {
+			r.absences = append(r.absences, fmt.Sprintf("%s:%t", hash, absent))
+			if absent {
+				return c.SustainedAbsenceRuns, nil
+			}
+			return 0, nil
 		},
 		failTx: func(_ c.Context, tx c.TxByHash) error {
 			r.failed = append(r.failed, tx)
@@ -438,6 +449,39 @@ func TestMonitorOldUnconfirmedVerdictDispatch(t *testing.T) {
 	}
 }
 
+// #224 F1: a transaction absent past the grace period but not yet on a
+// *sustained* run of absences (a single transient provider `null`) must not be
+// failed. recordAbsence reports the run count; below the threshold the verdict
+// is TxAbsent and the donation is left to be retried.
+func TestMonitorOldUnconfirmedDoesNotFailATransientAbsence(t *testing.T) {
+	bt := time.Now().UTC().Add(-c.DroppedTxGracePeriod - time.Hour)
+	r := &recorder{}
+	deps := oldUnconfirmedDeps(r,
+		unconfirmed(testTxHash, bt),
+		[]c.TxByHash{{Hash: testTxHash, Absent: true}})
+	// this is the first run the transaction is seen absent -> count 1
+	deps.recordAbsence = func(_ c.Context, _ string, _ bool) (int, error) {
+		return 1, nil
+	}
+
+	require.NoError(t, monitorOldUnconfirmedWith(buckCtx(c.OldUnconfirmed), deps))
+	assert.Empty(t, r.failed, "a single transient absence must not fail a donation")
+	assert.Empty(t, r.finalized)
+}
+
+// #224 F1: the observation is recorded for every polled transaction -- absent
+// or present -- so the sustained-absence counter is kept up to date each run.
+func TestMonitorOldUnconfirmedRecordsEveryObservation(t *testing.T) {
+	bt := time.Now().UTC().Add(-c.DroppedTxGracePeriod - time.Hour)
+	r := &recorder{}
+	deps := oldUnconfirmedDeps(r,
+		unconfirmed(testTxHash, bt),
+		[]c.TxByHash{{Hash: testTxHash, Absent: true}})
+
+	require.NoError(t, monitorOldUnconfirmedWith(buckCtx(c.OldUnconfirmed), deps))
+	assert.Equal(t, []string{testTxHash + ":true"}, r.absences)
+}
+
 // An absent transaction carries no block data at all, so the block time
 // recorded for the donation is what Judge has to go on; it is stamped onto the
 // transaction before the verdict is taken.
@@ -633,6 +677,7 @@ func liveWiring() map[string]any {
 		"requestPrice":          db.RequestPrice,
 		"persistTxs":            db.PersistTxs,
 		"getOldUnconfirmed":     db.GetOldUnconfirmed,
+		"recordAbsence":         db.RecordAbsence,
 		"failTx":                db.FailTx,
 		"finalizeTx":            db.FinalizeTx,
 	}

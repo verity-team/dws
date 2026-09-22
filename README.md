@@ -11,7 +11,7 @@ The backend used by the donation web site frontend is called `delphi` and it wil
 The `dws` backend consists of a `postgres` database and 5 services
 - `buck`: ETH/latest crawler, checks the latest blocks for donation transactions and inserts these into the database (in state `unconfirmed`)
 - `buck`: ETH/finalized crawler, checks the finalized blocks for donation transactions and confrm them, also updates the donation campaign statistics and the token price (if/as needed), see [token sale limit](#token-sale-limit)
-- `buck`: ETH/old-unconfirmed crawler, checks for donations that are older than 30 minutes but still unconfirmed, attempts to fetch the respective finalized blocks and confirm these donation transactions. A donation is marked as `failed` if its finalized block was fetched and does *not* carry the transaction, or if the transaction is absent from both the chain and the mempool and the block it was originally seen in is more than 24 hours old (it was evicted by a re-org and never re-mined, so no money moved); the donation campaign statistics are then recalculated -- the donation records are retained, they are *not* deleted. Donations whose transaction is still in the mempool, whose block has not been finalized yet, whose finalized block could not be fetched, for which the jsonrpc provider answered with an error object instead of a result (a rate limit or a bad spell is the absence of evidence, not evidence of absence) or that are absent from the chain but younger than 24 hours are left untouched and re-examined on a later run
+- `buck`: ETH/old-unconfirmed crawler, checks for donations that are older than 30 minutes but still unconfirmed, attempts to fetch the respective finalized blocks and confirm these donation transactions. A donation is marked as `failed` if its finalized block was fetched and does *not* carry the transaction, or if the transaction is absent from both the chain and the mempool and the block it was originally seen in is more than 24 hours old **and** it has been observed absent on several consecutive runs (it was evicted by a re-org and never re-mined, so no money moved -- the consecutive-run requirement keeps a single transient provider `null` from failing a donation whose money arrived); the donation campaign statistics are then recalculated -- the donation records are retained, they are *not* deleted. Donations whose transaction is still in the mempool, whose block has not been finalized yet, whose finalized block could not be fetched, for which the jsonrpc provider answered with an error object instead of a result (a rate limit or a bad spell is the absence of evidence, not evidence of absence), that are absent from the chain but younger than 24 hours, or whose absence has not yet persisted across enough consecutive runs are left untouched and re-examined on a later run
 - `pulitzer`: pulls the ETH price from 6 exchanges and inserts an average price into the database every minute, see [price aggregation](#price-aggregation). It also serves the historical price requests filed by `buck`: a request that cannot be fulfilled is marked `failed` and retried a few minutes later, a request is only marked `succeeded` once prices that actually serve it were written, i.e. at least one of them has to fall inside the same ±1.5 minute window the donation crawler searches for a price -- across an exchange data gap the prices returned can be minutes off, and `succeeded` is terminal
 - `delphi`: [REST API](https://app.swaggerhub.com/apis/MUHAREM_1/delphi/) server -- only serves data from the database
 
@@ -142,6 +142,38 @@ threshold above zero is a separate, commercial decision.
 Whether the sale can still deliver tokens is derived, on every write, from the confirmed token total read under the `donation_stats` lock compared against `DWS_SALE_PARAMS`' token limit -- *not* from the stored `donation_stats.status`, which only records what the previous statistics write concluded and goes stale the moment the configured limit changes. `donation_stats.status` follows that same comparison, so the campaign is `closed` once the confirmed tokens reach the limit and `open` again when they no longer do. Two things reopen it: the limit is raised, or a finalized re-crawl whose receipt reports an already `confirmed` donation as reverted -- that donation becomes `failed` and drops out of the total. (The old-unconfirmed crawler marking a vanished transaction `failed` does *not*: it only ever transitions `unconfirmed` rows, which were never in the total to begin with.) `paused` is the operator's manual lever and is never touched by a crawler.
 
 While the sale is closed donations are still recorded -- the money arrived and is refundable -- but they issue **0 tokens**. The rule is applied when a donation *enters* the `confirmed` state, not when it is first inserted: the latest crawler runs ~13 minutes ahead of the finalized one, so the donations mined in that window are inserted while the total is still under the limit. Accordingly the latest crawler, which inserts `unconfirmed` rows, never zeroes them -- those rows are not counted towards the campaign anyway, and zeroing them would strand the donation at 0 tokens if the sale reopened before it was confirmed. A donation that is *already* `confirmed` keeps its tokens no matter how often its block is crawled again -- applying the rule is a state transition, not a re-pricing. That cuts both ways: a donation confirmed at 0 tokens while the sale was closed keeps 0 even if the limit is later raised and the sale reopens. Reopening credits the donations confirmed *after* it, not the ones already settled, so raising the limit is not a way to retroactively compensate donors who were mined during the closed window -- they need handling out of band.
+
+### pausing the sale (manual kill switch)
+
+`paused` is the operator's manual lever to **halt token issuance without stopping the crawlers**. Use it for a live incident -- a pricing bug, a compromised receiving address, a bad `DWS_SALE_PARAMS` deploy, a legal hold -- where you want to keep *recording* donations but stop *crediting* them. Unlike `open`/`closed` it is **never written or cleared by a crawler**; it is set and unset by hand:
+
+```sql
+-- halt issuance
+UPDATE donation_stats SET status='paused';
+
+-- resume: re-derive the status from the confirmed token total against the
+-- limit of the LAST (highest) DWS_SALE_PARAMS entry, which is the sale's token
+-- limit (TokenSaleLimit()); substitute that number for <LIMIT>, so a campaign
+-- that was sold out when it was paused reports 'closed' again at once
+UPDATE donation_stats
+SET status = (CASE WHEN tokens >= <LIMIT> THEN 'closed' ELSE 'open' END)::donation_stats_status_enum
+WHERE status='paused';
+```
+
+The resume recipe re-derives rather than bluntly setting `open` on purpose. Issuance is always correct -- it is derived at runtime from the confirmed `tokens` against `DWS_SALE_PARAMS`, not from the stored status -- but delphi serves `donation_stats.status` straight to the frontend. A bare `SET status='open'` on a campaign that was `closed` when it was paused would show a sold-out sale as `open` (and a donor could see `open` yet be issued 0 tokens) until the next block that actually carries a donation recomputes the status -- which may never come on a quiet, sold-out sale. Substituting the sale's token limit -- the `limit` of the **last (highest)** `DWS_SALE_PARAMS` entry, which is what `TokenSaleLimit()` compares against; the earlier entries are cheaper tiers, not the cap -- for `<LIMIT>` fixes the displayed status immediately; the crawler still re-derives it on every later stats write, so an approximate `<LIMIT>` is self-correcting.
+
+While `status='paused'`:
+
+- the finalized crawler records a freshly seen donation as `unconfirmed` instead of `confirmed`, and `FinalizeTx` (the old-unconfirmed crawler's confirmation path) does not confirm. `updateDonationStats` sums only `confirmed` rows, so `donation_stats` freezes -- **nothing is credited** -- with no special-casing;
+- the donation is still **recorded** with its real token count and stays visible to the frontend (delphi serves `donation_stats.status`, so `paused` surfaces to users), and `last_block` keeps advancing, so there is no backlog and no re-crawl storm on resume;
+- a pause **cannot un-credit a donation**: a re-crawl of an already-`confirmed` donation keeps it `confirmed` (a genuine revert still fails it, exactly as while the sale is open);
+- a pause is **not failed by a single transient response, but a sustained absence past the grace period still fails**. A donation parked `unconfirmed` is subject to the old-unconfirmed `Judge`, and its block time keeps ageing during the pause. A donation whose money arrived is not dropped by one stray `null` from a lagging provider node: a transaction is only declared dropped after it has aged past the 24h grace period **and** been observed absent on `SustainedAbsenceRuns` (3) consecutive runs (~45 min). A genuinely dropped transaction -- absent on every poll -- still fails; a transient blip resets the counter and never does.
+
+On resume, the donations parked `unconfirmed` during the pause are credited through the **normal** path: the old-unconfirmed crawler picks them up and `FinalizeTx` confirms them against the campaign state that holds *then* (still subject to the closed-campaign rule above). There is no backfill and no retroactive logic. A pause is a hold, not a cap: donors who paid during it get their tokens when it resumes.
+
+**Token price on resume.** The confirmed total is frozen during a pause, so the token-price tier does not advance while paused. A donation held across a tier boundary therefore confirms on resume at the tier that was in effect **when the pause began** (the cheaper one), not the tier its confirmation time would fall in. This is the same effect as the ~13-minute latest-vs-finalized crawler lag, stretched to the length of the pause; it is intended -- the backlog is sold at the pause-time tier -- and is not re-priced.
+
+**Resume lag.** A donation confirms only once it is older than 30 minutes *and* the old-unconfirmed crawler's next run (every 15 minutes) comes round, so expect a lag of up to ~45 minutes after unpausing before the queued donations are credited. That is acceptable for an emergency lever but worth knowing mid-incident. Each run confirms at most `oldUnconfirmedBatchLimit` (500) donations, oldest first, so that no single `eth_getTransactionByHash` batch grows unbounded and wedges the resume (the [#201](https://github.com/verity-team/dws/issues/201) provider-batch-limit failure mode). A backlog larger than that -- a long pause on a busy campaign -- therefore drains over several runs and takes proportionally longer to credit in full; it always drains, and the oldest donors are credited first.
 
 ## rate limiting
 
@@ -602,6 +634,18 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 ```
+
+### donation.absent_count (migrate BEFORE deploying the new `buck`)
+
+`donation` gains `absent_count`, the number of consecutive old-unconfirmed runs a transaction has been observed absent from both chain and mempool. It is what keeps a single transient provider `null` from failing a donation whose money arrived: a donation is dropped only after it has aged past the 24h grace period **and** been absent on `SustainedAbsenceRuns` (3) consecutive runs. The column is additive and has a constant default, so `ADD COLUMN` is a metadata-only change on PostgreSQL 11+ (no table rewrite). Existing rows backfill to `0`, which simply means "not yet observed absent":
+
+```sql
+ALTER TABLE donation ADD COLUMN absent_count INTEGER NOT NULL DEFAULT 0;
+```
+
+**Apply this migration before deploying the new `buck`.** The new binary's old-unconfirmed crawler calls `RecordAbsence` -- which reads and writes `absent_count` -- for **every** polled transaction on **every** run, before it judges any of them, and a failure there aborts the whole run. So a new `buck` on an un-migrated schema fails with `pq: column "absent_count" does not exist` on the first transaction of every run: no donation is confirmed or failed until the `ALTER` lands. It is loud in the logs and self-heals the moment the column exists (no corruption, no lost donations -- the finalized crawler is unaffected and `last_block` keeps advancing), but it is a needless outage of the old-unconfirmed path. Migrate first.
+
+Migrate-**before**-deploy is safe with the old `buck` still running: it never reads or writes `absent_count` (every `donation` insert is column-listed, there is no `SELECT *`/`RETURNING *`), so the column is simply ignored until the new binary starts. On that first run the new binary starts counting from `0`, so a transaction already long dropped at migration time takes up to `SustainedAbsenceRuns` more runs (~45 min) to fail -- an additive, safe delay.
 
 ## requirements & rules
 1. all amounts are passed as strings and should be decoded to a `decimal` type to preserve precision

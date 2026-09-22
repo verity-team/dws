@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 	c "github.com/verity-team/dws/internal/common"
@@ -583,8 +583,9 @@ func TestGetOldUnconfirmedReturnsBlockTime(t *testing.T) {
 	require.WithinDuration(t, oldBT, txs[0].BlockTime, time.Second)
 
 	// ... and the block time is old enough for the transaction to be
-	// declared dead once the provider reports it as absent
-	tx := c.TxByHash{Hash: txs[0].Hash, Absent: true, DBBlockTime: txs[0].BlockTime}
+	// declared dead once the provider reports it as absent on a sustained run
+	// of polls (a single transient null is not enough)
+	tx := c.TxByHash{Hash: txs[0].Hash, Absent: true, DBBlockTime: txs[0].BlockTime, AbsentCount: c.SustainedAbsenceRuns}
 	require.Equal(t, c.TxDropped, tx.Judge(uint64(1)))
 }
 
@@ -1116,4 +1117,481 @@ func TestPreExistingZeroAmountDonationStillSettles(t *testing.T) {
 	total, statsTokens := donationStats(t, dbh)
 	require.Equal(t, "0.00", total)
 	require.EqualValues(t, 0, statsTokens)
+}
+
+// #224: the manual pause lever. While the campaign is paused the finalized
+// crawler records a freshly seen donation 'unconfirmed' instead of 'confirmed'
+// -- the money is on record with its real token count, but updateDonationStats
+// (which sums only 'confirmed' rows) credits nothing.
+func TestPersistTxsPausedRecordsDonationUnconfirmed(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	resetPrices(t, dbh)
+	insertPrice(t, dbh, "truth", "0.00100", 5*time.Minute)
+
+	_, err := dbh.Exec(`UPDATE donation_stats SET status='paused'`)
+	require.NoError(t, err)
+
+	ctxt := testContext(dbh)
+	ctxt.CrawlerType = c.Finalized
+	hash := "0xbeef111111111111111111111111111111111111111111111111111111111111"
+	tx := donationTx(hash, "200")
+	// the finalized crawler's default status for a healthy transaction
+	tx.Status = "confirmed"
+
+	require.NoError(t, PersistTxs(ctxt, 42, decimal.NewFromInt(1), []c.Transaction{tx}))
+
+	// recorded, but held 'unconfirmed' -> not credited
+	require.Equal(t, "unconfirmed", donationStatus(t, dbh, hash))
+	usdAmount, tokens := donationTokens(t, dbh, hash)
+	require.Equal(t, "200.00", usdAmount, "the money is still on record")
+	require.EqualValues(t, 200000, tokens, "the real token count is stored, credited only on resume")
+	// nothing credited: donation_stats is frozen at zero
+	total, statsTokens := donationStats(t, dbh)
+	require.Equal(t, "0.00", total)
+	require.EqualValues(t, 0, statsTokens)
+	// the pause survives the crawler run
+	require.Equal(t, "paused", campaignStatus(t, dbh))
+}
+
+// #224 (the sharp edge): re-crawling a paused block must never downgrade a
+// donation that is *already* 'confirmed' -- that would un-credit the donor and
+// drop the amount out of the campaign totals. This test fails against a naive
+// "write 'unconfirmed' while paused" implementation.
+func TestPersistTxsPausedKeepsConfirmedDonationConfirmed(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	resetPrices(t, dbh)
+	insertPrice(t, dbh, "truth", "0.00100", 5*time.Minute)
+
+	ctxt := testContext(dbh)
+	ctxt.CrawlerType = c.Finalized
+	hash := "0xbeef222222222222222222222222222222222222222222222222222222222222"
+	tx := donationTx(hash, "200")
+	tx.Status = "confirmed"
+
+	// 1. the donation is confirmed and credited while the sale is open
+	require.NoError(t, PersistTxs(ctxt, 42, decimal.NewFromInt(1), []c.Transaction{tx}))
+	require.Equal(t, "confirmed", donationStatus(t, dbh, hash))
+	_, statsTokens := donationStats(t, dbh)
+	require.EqualValues(t, 200000, statsTokens)
+
+	// 2. the operator pauses, then the finalized crawler re-crawls the block
+	_, err := dbh.Exec(`UPDATE donation_stats SET status='paused'`)
+	require.NoError(t, err)
+	require.NoError(t, PersistTxs(ctxt, 42, decimal.NewFromInt(1), []c.Transaction{tx}))
+
+	// the already-confirmed donation is left alone, its tokens intact
+	require.Equal(t, "confirmed", donationStatus(t, dbh, hash),
+		"a pause must never downgrade an already confirmed donation")
+	usdAmount, tokens := donationTokens(t, dbh, hash)
+	require.Equal(t, "200.00", usdAmount)
+	require.EqualValues(t, 200000, tokens)
+	total, statsTokens := donationStats(t, dbh)
+	require.Equal(t, "200.00", total, "the confirmed donation stays in the totals")
+	require.EqualValues(t, 200000, statsTokens)
+	require.Equal(t, "paused", campaignStatus(t, dbh))
+}
+
+// #224: a pause defers confirmation, it never fails a donation and never
+// credits one. FinalizeTx (the old-unconfirmed crawler's confirmation path)
+// leaves the donation 'unconfirmed' while paused, then confirms it normally
+// once the pause is lifted.
+func TestFinalizeTxPausedDefersConfirmationThenCreditsOnResume(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	resetPrices(t, dbh)
+	insertPrice(t, dbh, "truth", "0.00100", 5*time.Minute)
+
+	hash := "0xbeef333333333333333333333333333333333333333333333333333333333333"
+	insertDonation(t, dbh, hash, "unconfirmed", "50.00", 50000)
+
+	_, err := dbh.Exec(`UPDATE donation_stats SET status='paused'`)
+	require.NoError(t, err)
+
+	ftx := txByHash(hash)
+	ftx.FBContainsTx = true
+
+	// while paused the confirmation is deferred: unconfirmed, not failed, not
+	// credited
+	require.NoError(t, FinalizeTx(testContext(dbh), ftx))
+	require.Equal(t, "unconfirmed", donationStatus(t, dbh, hash))
+	require.Equal(t, 0, failedTxCount(t, dbh, hash), "a pause must not fail a donation")
+	_, statsTokens := donationStats(t, dbh)
+	require.EqualValues(t, 0, statsTokens)
+	require.Equal(t, "paused", campaignStatus(t, dbh))
+
+	// resume: the very same call now confirms and credits through the normal path
+	_, err = dbh.Exec(`UPDATE donation_stats SET status='open'`)
+	require.NoError(t, err)
+	require.NoError(t, FinalizeTx(testContext(dbh), ftx))
+	require.Equal(t, "confirmed", donationStatus(t, dbh, hash))
+	_, tokens := donationTokens(t, dbh, hash)
+	require.EqualValues(t, 50000, tokens)
+	_, statsTokens = donationStats(t, dbh)
+	require.EqualValues(t, 50000, statsTokens)
+	require.Equal(t, "open", campaignStatus(t, dbh))
+}
+
+// #224: a genuine revert must still fail a confirmed donation even under a
+// pause -- the money is gone and keeping it credited would be worse. The pause
+// guard protects a confirmed row only against the pause's own 'unconfirmed'
+// downgrade, never against a 'failed' receipt.
+func TestPersistTxsPausedStillFailsRevertedConfirmedDonation(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	resetPrices(t, dbh)
+	insertPrice(t, dbh, "truth", "0.00100", 5*time.Minute)
+
+	ctxt := testContext(dbh)
+	ctxt.CrawlerType = c.Finalized
+	hash := "0xbeef666666666666666666666666666666666666666666666666666666666666"
+	tx := donationTx(hash, "200")
+	tx.Status = "confirmed"
+	require.NoError(t, PersistTxs(ctxt, 42, decimal.NewFromInt(1), []c.Transaction{tx}))
+	_, statsTokens := donationStats(t, dbh)
+	require.EqualValues(t, 200000, statsTokens)
+
+	// pause, then a re-crawl whose receipt reports the transaction as reverted
+	_, err := dbh.Exec(`UPDATE donation_stats SET status='paused'`)
+	require.NoError(t, err)
+	tx.Status = "failed"
+	require.NoError(t, PersistTxs(ctxt, 42, decimal.NewFromInt(1), []c.Transaction{tx}))
+
+	require.Equal(t, "failed", donationStatus(t, dbh, hash),
+		"a revert must fail the donation even while paused")
+	_, statsTokens = donationStats(t, dbh)
+	require.EqualValues(t, 0, statsTokens, "the reverted donation drops out of the totals")
+	require.Equal(t, "paused", campaignStatus(t, dbh))
+}
+
+// #224: pause composes with the closed-campaign rule. A donation seen while the
+// campaign is both paused and over the cap is recorded 'unconfirmed' with its
+// *real* token count -- the closed rule is deferred along with the confirmation,
+// not applied at insert time (which would strand it at 0 if the sale reopened).
+// On resume, the closed rule is evaluated at the transition to 'confirmed': the
+// sale is still over the cap, so the donation confirms with 0 tokens.
+func TestPersistTxsPausedOverCapDefersClosedRuleToResume(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	resetPrices(t, dbh)
+	insertPrice(t, dbh, "truth", "0.00100", 5*time.Minute)
+
+	ctxt := sellOutCampaign(t, dbh)
+	require.Equal(t, "closed", campaignStatus(t, dbh))
+
+	// pause while over the cap
+	_, err := dbh.Exec(`UPDATE donation_stats SET status='paused'`)
+	require.NoError(t, err)
+
+	// a new donation arrives during the pause
+	hash := "0xbeef555555555555555555555555555555555555555555555555555555555555"
+	tx := donationTx(hash, "50")
+	tx.Status = "confirmed"
+	require.NoError(t, PersistTxs(ctxt, 43, decimal.NewFromInt(1), []c.Transaction{tx}))
+
+	// recorded 'unconfirmed' with its real token count: the closed rule is NOT
+	// applied at insert time under a pause
+	require.Equal(t, "unconfirmed", donationStatus(t, dbh, hash))
+	_, tokens := donationTokens(t, dbh, hash)
+	require.EqualValues(t, 50000, tokens, "the closed rule must not zero the paused 'unconfirmed' row")
+	_, statsTokens := donationStats(t, dbh)
+	require.EqualValues(t, soldOutTokens, statsTokens, "the totals stay frozen at the sold-out amount")
+	require.Equal(t, "paused", campaignStatus(t, dbh))
+
+	// resume: still over the cap -> the closed rule now applies on confirmation
+	_, err = dbh.Exec(`UPDATE donation_stats SET status='open'`)
+	require.NoError(t, err)
+	oldUnconfirmed := testContext(dbh)
+	oldUnconfirmed.SaleParams = ctxt.SaleParams
+	ftx := txByHash(hash)
+	ftx.FBContainsTx = true
+	require.NoError(t, FinalizeTx(oldUnconfirmed, ftx))
+
+	require.Equal(t, "confirmed", donationStatus(t, dbh, hash))
+	_, tokens = donationTokens(t, dbh, hash)
+	require.EqualValues(t, 0, tokens, "confirmed after resume while still over the cap issues no tokens")
+	_, statsTokens = donationStats(t, dbh)
+	require.EqualValues(t, soldOutTokens, statsTokens)
+	require.Equal(t, "closed", campaignStatus(t, dbh))
+}
+
+// seedUnconfirmed bulk-inserts n unconfirmed donations, all older than the 30
+// minute threshold and each a second older than the last, so the highest index
+// is the oldest. Returns nothing; the rows are addressed by GetOldUnconfirmed.
+func seedUnconfirmed(t *testing.T, dbh *sqlx.DB, n int) {
+	t.Helper()
+
+	q := `
+		INSERT INTO donation(
+			address, amount, usd_amount, asset, tokens, price, tx_hash, status,
+			block_number, block_hash, block_time)
+		SELECT
+			'0x00000000000000000000000000000000000000ff', 1.0, 10.00, 'usdt', 100,
+			0.001, '0x' || lpad(to_hex(g), 64, '0'), 'unconfirmed', 1, '0xblock',
+			timezone('utc', now()) - interval '31 minutes' - (g * interval '1 second')
+		FROM generate_series(1, $1) g
+		`
+	res, err := dbh.Exec(q, n)
+	require.NoError(t, err)
+	ra, err := res.RowsAffected()
+	require.NoError(t, err)
+	require.EqualValues(t, n, ra)
+}
+
+// confirmHashes moves the given donations to 'confirmed', standing in for the
+// FinalizeTx path the old-unconfirmed crawler would take on resume.
+func confirmHashes(t *testing.T, dbh *sqlx.DB, hashes []string) {
+	t.Helper()
+
+	res, err := dbh.Exec(
+		`UPDATE donation SET status='confirmed' WHERE tx_hash = ANY($1) AND status='unconfirmed'`,
+		pq.Array(hashes))
+	require.NoError(t, err)
+	ra, err := res.RowsAffected()
+	require.NoError(t, err)
+	require.EqualValues(t, len(hashes), ra)
+}
+
+// #224 req.2: a long pause holds every donation 'unconfirmed', so the resume
+// backlog can be large. GetOldUnconfirmed must never hand more than
+// oldUnconfirmedBatchLimit rows to a single run (else one oversized batch wedges
+// the resume path, the #201 failure mode), yet successive runs must drain the
+// whole backlog, oldest first.
+func TestGetOldUnconfirmedIsBatchCapped(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+
+	extra := 5
+	seeded := oldUnconfirmedBatchLimit + extra
+	seedUnconfirmed(t, dbh, seeded)
+
+	drained := 0
+	runs := 0
+	var prevNewest time.Time
+	for {
+		txs, err := GetOldUnconfirmed(dbh)
+		require.NoError(t, err)
+		if len(txs) == 0 {
+			break
+		}
+		runs++
+		require.LessOrEqual(t, len(txs), oldUnconfirmedBatchLimit,
+			"a single run must never exceed the batch cap")
+
+		// oldest first: the batch is ascending by block time, and every run's
+		// oldest row is no older than the previous run's newest -- the backlog
+		// drains deterministically from the oldest end
+		require.True(t, txs[0].BlockTime.Before(txs[len(txs)-1].BlockTime) || len(txs) == 1,
+			"a run is ordered oldest first")
+		if runs > 1 {
+			require.False(t, txs[0].BlockTime.Before(prevNewest),
+				"successive runs drain strictly newer rows")
+		}
+		prevNewest = txs[len(txs)-1].BlockTime
+
+		hashes := make([]string, len(txs))
+		for i, tx := range txs {
+			hashes[i] = tx.Hash
+		}
+		confirmHashes(t, dbh, hashes)
+		drained += len(txs)
+		require.LessOrEqual(t, drained, seeded, "drain must not resurrect rows")
+	}
+
+	require.Equal(t, seeded, drained, "every seeded donation drains over successive runs")
+	require.Equal(t, 2, runs, "cap + %d rows drain in exactly two capped runs", extra)
+}
+
+// donationAbsentCount returns the sustained-absence counter recorded for a
+// donation.
+func donationAbsentCount(t *testing.T, dbh *sqlx.DB, hash string) int {
+	t.Helper()
+
+	var n int
+	require.NoError(t, dbh.Get(&n, `SELECT absent_count FROM donation WHERE tx_hash=$1`, hash))
+
+	return n
+}
+
+// #224 F1: RecordAbsence increments the counter for a transaction observed
+// absent and resets it the moment the transaction is observed present again. A
+// row that has left the 'unconfirmed' pool is not touched.
+func TestRecordAbsenceIncrementsAndResets(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	ctxt := testContext(dbh)
+
+	hash := "0xabc1111111111111111111111111111111111111111111111111111111111111"
+	insertDonation(t, dbh, hash, "unconfirmed", "10.00", 100)
+	require.Equal(t, 0, donationAbsentCount(t, dbh, hash))
+
+	// consecutive absences accumulate, and the returned count is the freshly
+	// written value
+	for want := 1; want <= 3; want++ {
+		n, err := RecordAbsence(ctxt, hash, true)
+		require.NoError(t, err)
+		require.Equal(t, want, n)
+		require.Equal(t, want, donationAbsentCount(t, dbh, hash))
+	}
+
+	// a single reappearance clears the whole streak
+	n, err := RecordAbsence(ctxt, hash, false)
+	require.NoError(t, err)
+	require.Equal(t, 0, n)
+	require.Equal(t, 0, donationAbsentCount(t, dbh, hash))
+
+	// a present observation on an already-zero row is a no-op, not an error
+	n, err = RecordAbsence(ctxt, hash, false)
+	require.NoError(t, err)
+	require.Equal(t, 0, n)
+
+	// a row that is no longer unconfirmed is left alone
+	_, err = dbh.Exec(`UPDATE donation SET status='confirmed' WHERE tx_hash=$1`, hash)
+	require.NoError(t, err)
+	n, err = RecordAbsence(ctxt, hash, true)
+	require.NoError(t, err)
+	require.Equal(t, 0, n)
+	require.Equal(t, 0, donationAbsentCount(t, dbh, hash), "a confirmed donation's counter must not move")
+}
+
+// #224 F1: a donation aged past the 24h grace period is *not* failed on a
+// single transient provider `null`; only a sustained absence (observed on
+// SustainedAbsenceRuns consecutive runs) drops it. This exercises the real
+// RecordAbsence + Judge + FailTx together, the way monitorOldUnconfirmed does.
+func TestSustainedAbsenceFailsOnlyAfterThreshold(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	ctxt := testContext(dbh)
+
+	hash := "0xabc2222222222222222222222222222222222222222222222222222222222222"
+	bt := insertDonationAt(t, dbh, hash, "unconfirmed", 25*time.Hour)
+
+	for run := 1; run <= c.SustainedAbsenceRuns; run++ {
+		count, err := RecordAbsence(ctxt, hash, true)
+		require.NoError(t, err)
+		tx := c.TxByHash{Hash: hash, Absent: true, DBBlockTime: bt, AbsentCount: count}
+		verdict := tx.Judge(uint64(1))
+		if verdict == c.TxDropped {
+			require.NoError(t, FailTx(ctxt, tx))
+		}
+
+		if run < c.SustainedAbsenceRuns {
+			require.Equal(t, c.TxAbsent, verdict, "run %d must not yet drop the donation", run)
+			require.Equal(t, "unconfirmed", donationStatus(t, dbh, hash))
+			require.Equal(t, 0, failedTxCount(t, dbh, hash))
+		} else {
+			require.Equal(t, c.TxDropped, verdict, "the sustained absence must drop the donation")
+			require.Equal(t, "failed", donationStatus(t, dbh, hash))
+			require.Equal(t, 1, failedTxCount(t, dbh, hash))
+		}
+	}
+}
+
+// #224 F1: a transaction that reappears after some absences has its counter
+// reset, so the streak must restart from zero -- a transient blip cannot bank
+// progress towards a drop.
+func TestReappearanceResetsSustainedAbsence(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	ctxt := testContext(dbh)
+
+	hash := "0xabc3333333333333333333333333333333333333333333333333333333333333"
+	bt := insertDonationAt(t, dbh, hash, "unconfirmed", 25*time.Hour)
+
+	// two absences short of the threshold
+	for run := 1; run < c.SustainedAbsenceRuns; run++ {
+		_, err := RecordAbsence(ctxt, hash, true)
+		require.NoError(t, err)
+	}
+	// ... then the transaction reappears: the streak is wiped
+	_, err := RecordAbsence(ctxt, hash, false)
+	require.NoError(t, err)
+	require.Equal(t, 0, donationAbsentCount(t, dbh, hash))
+
+	// the next absence starts a fresh streak at 1, well short of the threshold,
+	// so even though the donation is long past the grace period Judge leaves it
+	// alone
+	count, err := RecordAbsence(ctxt, hash, true)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+	tx := c.TxByHash{Hash: hash, Absent: true, DBBlockTime: bt, AbsentCount: count}
+	require.Equal(t, c.TxAbsent, tx.Judge(uint64(1)), "a reset streak must not drop the donation")
+	require.Equal(t, "unconfirmed", donationStatus(t, dbh, hash))
+}
+
+// #224 F3: the resume recipe must re-derive the campaign status so a campaign
+// that was sold out when it was paused reports 'closed' again immediately --
+// delphi serves donation_stats.status straight to the frontend, and a bare
+// `SET status='open'` would show a sold-out sale as open until the next
+// donation-bearing block (never, on a quiet campaign).
+func TestResumeRecipeRederivesCampaignStatus(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		limit int64
+		want  string
+	}{
+		{name: "still over the cap -> closed", limit: soldOutTokens, want: "closed"},
+		{name: "cap since raised -> open", limit: soldOutTokens * 10, want: "open"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dbh := testDB(t)
+			resetDB(t, dbh)
+			resetPrices(t, dbh)
+			insertPrice(t, dbh, "truth", "0.00100", 5*time.Minute)
+
+			// a genuinely sold-out campaign, then paused by hand
+			sellOutCampaign(t, dbh)
+			_, err := dbh.Exec(`UPDATE donation_stats SET status='paused'`)
+			require.NoError(t, err)
+			require.Equal(t, "paused", campaignStatus(t, dbh))
+
+			// the documented resume recipe: re-derive from the confirmed token
+			// total against the operator's DWS_SALE_PARAMS limit
+			_, err = dbh.Exec(
+				`UPDATE donation_stats
+				 SET status = (CASE WHEN tokens >= $1 THEN 'closed' ELSE 'open' END)::donation_stats_status_enum
+				 WHERE status='paused'`, tc.limit)
+			require.NoError(t, err)
+
+			// the status delphi serves is correct at once, with no donation
+			// processed in between
+			require.Equal(t, tc.want, campaignStatus(t, dbh))
+		})
+	}
+}
+
+// #224 F-B: the finalized crawler seeing a transaction in a finalized block is
+// a present observation, so the finalized upsert must clear any
+// sustained-absence streak the old-unconfirmed crawler had accrued. Otherwise a
+// row resurrected from 'failed' to 'unconfirmed' during a pause keeps a stale
+// count >= SustainedAbsenceRuns, and the first later transient `null` would
+// drop a donation whose money arrived in a finalized block.
+func TestFinalizedUpsertResetsAbsentCount(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	resetPrices(t, dbh)
+	insertPrice(t, dbh, "truth", "0.00100", 5*time.Minute)
+
+	// a donation the old-unconfirmed crawler had failed, carrying a maxed-out
+	// absence streak
+	hash := "0xabc4444444444444444444444444444444444444444444444444444444444444"
+	insertDonation(t, dbh, hash, "failed", "50.00", 50000)
+	_, err := dbh.Exec(`UPDATE donation SET absent_count=$1 WHERE tx_hash=$2`, c.SustainedAbsenceRuns, hash)
+	require.NoError(t, err)
+	require.Equal(t, c.SustainedAbsenceRuns, donationAbsentCount(t, dbh, hash))
+
+	// the campaign is paused and the finalized crawler re-observes the tx (now
+	// re-mined into a finalized block): it is resurrected to 'unconfirmed' and
+	// its absence streak must be cleared
+	_, err = dbh.Exec(`UPDATE donation_stats SET status='paused'`)
+	require.NoError(t, err)
+	ctxt := testContext(dbh)
+	ctxt.CrawlerType = c.Finalized
+	tx := donationTx(hash, "50")
+	tx.Status = "confirmed"
+	require.NoError(t, PersistTxs(ctxt, 42, decimal.NewFromInt(1), []c.Transaction{tx}))
+
+	require.Equal(t, "unconfirmed", donationStatus(t, dbh, hash), "the paused finalized upsert resurrects the failed row")
+	require.Equal(t, 0, donationAbsentCount(t, dbh, hash), "a finalized re-observation must clear the absence streak")
 }

@@ -361,6 +361,7 @@ type buckDeps struct {
 	persistTxs            func(ctxt c.Context, bn uint64, ethPrice decimal.Decimal, txs []c.Transaction) error
 	getOldUnconfirmed     func(dbh *sqlx.DB) ([]c.UnconfirmedTx, error)
 	getTxsByHash          func(ctxt c.Context, hs []c.Hashable) ([]c.TxByHash, error)
+	recordAbsence         func(ctxt c.Context, hash string, absent bool) (int, error)
 	failTx                func(ctxt c.Context, tx c.TxByHash) error
 	finalizeTx            func(ctxt c.Context, tx c.TxByHash) error
 }
@@ -381,8 +382,9 @@ var liveDeps = func() buckDeps {
 		getTxsByHash: func(ctxt c.Context, hs []c.Hashable) ([]c.TxByHash, error) {
 			return eth.GetData[c.TxByHash](ctxt, hs, eth.TXBHFetcher{})
 		},
-		failTx:     db.FailTx,
-		finalizeTx: db.FinalizeTx,
+		recordAbsence: db.RecordAbsence,
+		failTx:        db.FailTx,
+		finalizeTx:    db.FinalizeTx,
 	}
 }
 
@@ -523,8 +525,19 @@ func monitorOldUnconfirmedWith(ctx context.Context, deps buckDeps) error {
 		default:
 			// keep going
 		}
+		// record this run's observation before judging: an absent transaction
+		// has its consecutive-absence counter incremented, a present one has it
+		// reset. The returned count -- which includes this run -- is what Judge
+		// weighs against c.SustainedAbsenceRuns, so a single transient `null`
+		// (count 1) can never drop a donation whose money arrived.
+		var absentCount int
+		absentCount, err = deps.recordAbsence(*ctxt, tx.Hash, tx.Absent)
+		if err != nil {
+			return err
+		}
 		if tx.Absent {
 			tx.DBBlockTime = blockTimes[c.NormalizeHash(tx.Hash)]
+			tx.AbsentCount = absentCount
 		}
 		// a donation is only ever failed on positive evidence (see
 		// c.TxByHash.Judge): a pending tx or a tx we could not fetch the
