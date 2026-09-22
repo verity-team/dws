@@ -190,13 +190,17 @@ func GetDonationData(db *sqlx.DB) (*api.DonationData, error) {
 
 // userDonationQuery reads one page of the donation history of an address. The
 // LIMIT is what keeps a single request from materializing an unbounded number
-// of rows; the ORDER BY makes the paging stable.
+// of rows; the ORDER BY makes the paging stable. block_time is the on-chain
+// order the API promises ("oldest first"); id breaks ties deterministically so
+// two donations sharing a block_time never straddle a page boundary
+// inconsistently. Ordering by id alone would sort a late-confirmed donation
+// (higher id, earlier block_time) after newer ones.
 const userDonationQuery = `
 		SELECT
 			amount, usd_amount, asset, tokens, price, tx_hash, status, block_time
 		FROM donation
 		WHERE address=$1
-		ORDER BY id
+		ORDER BY block_time, id
 		LIMIT $2 OFFSET $3
 		`
 

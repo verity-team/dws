@@ -413,3 +413,55 @@ func TestConnectWalletLowercasesAddress(t *testing.T) {
 	require.NoError(t, dbh.Select(&addresses, `SELECT address FROM wallet_connection`))
 	require.Equal(t, []string{testAddress}, addresses)
 }
+
+// insertDonationWithBlockTime inserts one confirmed donation with an explicit
+// block_time (the on-chain time). Insertion order fixes the BIGSERIAL id, so a
+// test can create a donation whose id is higher than another's while its
+// block_time is earlier -- the late-confirmed case.
+func insertDonationWithBlockTime(t *testing.T, dbh *sqlx.DB, address, txHash string, blockTimeAgo time.Duration) {
+	t.Helper()
+	q := `
+		INSERT INTO donation(
+			address, amount, usd_amount, asset, tokens, price, tx_hash,
+			status, block_number, block_hash, block_time)
+		VALUES(
+			$1, 1, 100, 'usdc', 1000, 0.001, $2,
+			'confirmed', 1, '0xblock',
+			timezone('utc', now()) - make_interval(secs => $3))
+		`
+	_, err := dbh.Exec(q, address, txHash, blockTimeAgo.Seconds())
+	require.NoError(t, err)
+}
+
+// #231: GetUserDonationData must return donations oldest on-chain (block_time)
+// first, not in insertion (id) order. A donation confirmed after a long pending
+// period is inserted late -- it gets a higher id than donations already stored
+// -- yet its block_time is earlier, so it is older on-chain and must sort
+// first. ORDER BY id alone would place it last.
+func TestGetUserDonationDataOrdersByBlockTime(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+
+	// inserted FIRST -> lower id, but a *later* block_time (newer on-chain)
+	insertDonationWithBlockTime(t, dbh, testAddress, "0xnewer", 1*time.Hour)
+	// inserted SECOND -> higher id, but an *earlier* block_time: the
+	// late-confirmed donation that is older on-chain
+	insertDonationWithBlockTime(t, dbh, testAddress, "0xolder", 2*time.Hour)
+
+	got, err := GetUserDonationData(dbh, testAddress, 100, 0)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	require.Equal(t, []string{"0xolder", "0xnewer"}, []string{got[0].TxHash, got[1].TxHash},
+		"donations must be returned oldest block_time first, not id order")
+
+	// paging one row at a time walks the same order with no skip or repeat
+	page0, err := GetUserDonationData(dbh, testAddress, 1, 0)
+	require.NoError(t, err)
+	require.Len(t, page0, 1)
+	require.Equal(t, "0xolder", page0[0].TxHash, "first page must be the oldest donation")
+
+	page1, err := GetUserDonationData(dbh, testAddress, 1, 1)
+	require.NoError(t, err)
+	require.Len(t, page1, 1)
+	require.Equal(t, "0xnewer", page1[0].TxHash, "second page must be the newer donation")
+}
