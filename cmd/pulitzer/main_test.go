@@ -1,14 +1,18 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/verity-team/dws/internal/pulitzer/data"
+	"github.com/verity-team/dws/internal/pulitzer/db"
 )
 
 // a panicking price source must not take the process down; it is treated
@@ -169,4 +173,176 @@ func TestRunReadyProbeDependsOnTheDatabase(t *testing.T) {
 	defer func() { _ = dbh.Close() }()
 
 	assert.Error(t, runReadyProbe(dbh))
+}
+
+// --------------------------------------------------- historical fallback ---
+
+// covering builds a single final kline that serves the minute ts.
+func covering(ts time.Time, price string) []data.Kline {
+	return []data.Kline{{
+		ClosePrice: decimal.RequireFromString(price),
+		CloseTime:  ts.Add(59 * time.Second),
+	}}
+}
+
+// stubSource builds a historical source with a canned fetch result.
+func stubSource(name string, kls []data.Kline, err error) historicalSource {
+	return historicalSource{name: name, fetch: func(context.Context, time.Time) ([]data.Kline, error) {
+		return kls, err
+	}}
+}
+
+// sleepySource fetches only after `d`, unless its context is cancelled first --
+// which is how a hung venue behaves under a spent chain budget.
+func sleepySource(name string, d time.Duration, kls []data.Kline) historicalSource {
+	return historicalSource{name: name, fetch: func(ctx context.Context, _ time.Time) ([]data.Kline, error) {
+		select {
+		case <-time.After(d):
+			return kls, nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}}
+}
+
+var (
+	fallbackTS  = time.Date(2026, 9, 21, 12, 30, 0, 0, time.UTC)
+	fallbackNow = fallbackTS.Add(5 * time.Minute) // the requested minute is long closed
+)
+
+// binance fails to fetch -> the next source's price is used
+func TestSelectHistoricalFallsThroughOnFetchError(t *testing.T) {
+	sources := []historicalSource{
+		stubSource("binance", nil, errors.New("no klines")),
+		stubSource("kraken", covering(fallbackTS, "2000.5"), nil),
+	}
+	klines, name, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, HistoricalChainBudget)
+	require.NoError(t, err)
+	require.Equal(t, "kraken", name)
+	require.True(t, klines[0].ClosePrice.Equal(decimal.RequireFromString("2000.5")))
+}
+
+// binance returns klines that do not cover the minute (a data gap) -> the
+// next source is tried; this is the single-sourced stall #228 removes
+func TestSelectHistoricalFallsThroughOnAGap(t *testing.T) {
+	// binance's only kline opens far outside the lookup window
+	gap := []data.Kline{{
+		ClosePrice: decimal.RequireFromString("2000.5"),
+		CloseTime:  fallbackTS.Add(9 * time.Minute),
+	}}
+	sources := []historicalSource{
+		stubSource("binance", gap, nil),
+		stubSource("coinbase", covering(fallbackTS, "1999.75"), nil),
+	}
+	klines, name, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, HistoricalChainBudget)
+	require.NoError(t, err)
+	require.Equal(t, "coinbase", name)
+	require.True(t, klines[0].ClosePrice.Equal(decimal.RequireFromString("1999.75")))
+}
+
+// binance serves the minute -> it wins and the fallbacks are not consulted
+func TestSelectHistoricalPrefersBinance(t *testing.T) {
+	consulted := false
+	sources := []historicalSource{
+		stubSource("binance", covering(fallbackTS, "2000.5"), nil),
+		{name: "kraken", fetch: func(context.Context, time.Time) ([]data.Kline, error) {
+			consulted = true
+			return nil, errors.New("should not be reached")
+		}},
+	}
+	_, name, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, HistoricalChainBudget)
+	require.NoError(t, err)
+	require.Equal(t, "binance", name)
+	require.False(t, consulted, "a later source must not be consulted once one serves the minute")
+}
+
+// every source fails to serve the minute -> an error naming each reason, so
+// the caller fails the request (which is then retried after FailedRetryDelay)
+func TestSelectHistoricalAllSourcesFail(t *testing.T) {
+	outOfWindow := []data.Kline{{
+		ClosePrice: decimal.RequireFromString("2000.5"),
+		CloseTime:  fallbackTS.Add(30 * time.Minute),
+	}}
+	sources := []historicalSource{
+		stubSource("binance", nil, errors.New("binance down")),
+		stubSource("kraken", nil, errors.New("kraken down")),
+		stubSource("coinbase", outOfWindow, nil),
+	}
+	_, _, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, HistoricalChainBudget)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "binance down")
+	require.ErrorContains(t, err, "kraken down")
+	require.ErrorContains(t, err, "coinbase")
+}
+
+// a chain of hung sources is bounded by the budget: it returns in ~budget (not
+// the sum of the sources' own timeouts), with an error, so the request is
+// failed and retried rather than the serve cycle hanging. The in-flight fetch
+// is actually cancelled -- sleepySource returns via ctx.Done(), not by
+// out-sleeping the budget.
+func TestSelectHistoricalBudgetCapsAHungChain(t *testing.T) {
+	const budget = 100 * time.Millisecond
+	// each source sleeps far longer than the budget: the healthy path cancels
+	// them at ~budget. The sleep is bounded (not time.Hour) so that if the
+	// deadline is ever removed the test fails fast -- the first source then
+	// answers after this delay instead of hanging.
+	const hung = 3 * time.Second
+	sources := []historicalSource{
+		sleepySource("binance", hung, covering(fallbackTS, "2000.5")),
+		sleepySource("kraken", hung, covering(fallbackTS, "2000.5")),
+		sleepySource("coinbase", hung, covering(fallbackTS, "2000.5")),
+	}
+
+	start := time.Now()
+	_, _, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, budget)
+	elapsed := time.Since(start)
+
+	require.Error(t, err, "a chain that never serves must fail, so the request is retried")
+	require.Less(t, elapsed, 10*budget, "the chain must be bounded by the budget, not the sources' own timeouts")
+}
+
+// a healthy walk completes well under the budget: the fallbacks are reached
+// quickly and the first that serves wins without waiting on any timeout
+func TestSelectHistoricalHealthyWalkIsFast(t *testing.T) {
+	const budget = 5 * time.Second
+	sources := []historicalSource{
+		stubSource("binance", nil, errors.New("gap")),
+		stubSource("kraken", nil, errors.New("gap")),
+		sleepySource("coinbase", time.Millisecond, covering(fallbackTS, "1999.75")),
+	}
+
+	start := time.Now()
+	_, name, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, budget)
+	elapsed := time.Since(start)
+
+	require.NoError(t, err)
+	require.Equal(t, "coinbase", name)
+	require.Less(t, elapsed, budget, "a healthy three-source walk must finish well inside the budget")
+}
+
+// ------------------------------------------------ stuck request alert ---
+
+// a request open past PriceReqAlertAge is surfaced for alerting on every failed
+// attempt, while a younger one is not; the request is never terminal either way
+func TestStuckPriceRequestAlert(t *testing.T) {
+	now := time.Date(2026, 9, 21, 12, 30, 0, 0, time.UTC)
+	minute := now.Truncate(time.Minute).Add(-time.Minute)
+
+	// younger than the threshold: no alert
+	young := db.PriceReq{ID: 1, Time: minute, CreatedAt: now.Add(-db.PriceReqAlertAge + time.Minute)}
+	msg, due := stuckPriceRequestAlert(young, now)
+	assert.False(t, due, "a request younger than the alert age must not alert")
+	assert.Empty(t, msg)
+
+	// exactly at the threshold: alert (age is not less than the threshold)
+	atAge := db.PriceReq{ID: 2, Time: minute, CreatedAt: now.Add(-db.PriceReqAlertAge)}
+	_, due = stuckPriceRequestAlert(atAge, now)
+	assert.True(t, due, "a request at the alert age must alert")
+
+	// well past the threshold: alert, and the line identifies the minute
+	old := db.PriceReq{ID: 3, Time: minute, CreatedAt: now.Add(-2 * db.PriceReqAlertAge)}
+	msg, due = stuckPriceRequestAlert(old, now)
+	require.True(t, due, "a request older than the alert age must alert")
+	assert.Contains(t, msg, minute.UTC().Format(time.RFC3339))
+	assert.Contains(t, msg, "needs attention")
 }

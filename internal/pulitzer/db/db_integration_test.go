@@ -118,6 +118,15 @@ func requestIDs(rqs []PriceReq) []uint64 {
 	return ids
 }
 
+// closeReq calls CloseRequest with the wall clock captured now -- what
+// servePriceRequests passes for every request. The minute finality tests that
+// depend on a specific now (TestCloseRequestRejectsAStillOpenKline,
+// TestCloseRequestServesTheRequestedMinuteDespiteAnOpenTail) capture it
+// themselves and call CloseRequest directly.
+func closeReq(dbh *sqlx.DB, rid uint64, ts time.Time, kls []data.Kline) error {
+	return CloseRequest(dbh, rid, ts, kls, time.Now().UTC())
+}
+
 // TestCloseRequestRejectsEmptyKlines: a request must not be recorded as
 // succeeded when there is nothing to persist.
 func TestCloseRequestRejectsEmptyKlines(t *testing.T) {
@@ -127,7 +136,7 @@ func TestCloseRequestRejectsEmptyKlines(t *testing.T) {
 	ts := closedMinute()
 	rid := insertPriceReq(t, dbh, ts, "new", time.Now().UTC())
 
-	err := CloseRequest(dbh, rid, ts, nil)
+	err := closeReq(dbh, rid, ts, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no prices to persist")
 
@@ -135,7 +144,7 @@ func TestCloseRequestRejectsEmptyKlines(t *testing.T) {
 	require.Equal(t, 0, priceCount(t, dbh))
 
 	// the empty slice must be rejected just like the nil slice
-	err = CloseRequest(dbh, rid, ts, []data.Kline{})
+	err = closeReq(dbh, rid, ts, []data.Kline{})
 	require.Error(t, err)
 	require.Equal(t, "new", requestStatus(t, dbh, rid))
 	require.Equal(t, 0, priceCount(t, dbh))
@@ -150,7 +159,7 @@ func TestCloseRequestRejectsInvalidKlines(t *testing.T) {
 	ts := closedMinute()
 	rid := insertPriceReq(t, dbh, ts, "new", time.Now().UTC())
 
-	err := CloseRequest(dbh, rid, ts, []data.Kline{
+	err := closeReq(dbh, rid, ts, []data.Kline{
 		{ClosePrice: decimal.NewFromFloat(2000.5), CloseTime: ts},
 		{ClosePrice: decimal.Zero, CloseTime: ts.Add(time.Minute)},
 	})
@@ -159,7 +168,7 @@ func TestCloseRequestRejectsInvalidKlines(t *testing.T) {
 	require.Equal(t, "new", requestStatus(t, dbh, rid))
 	require.Equal(t, 0, priceCount(t, dbh))
 
-	err = CloseRequest(dbh, rid, ts, []data.Kline{{ClosePrice: decimal.NewFromFloat(2000.5)}})
+	err = closeReq(dbh, rid, ts, []data.Kline{{ClosePrice: decimal.NewFromFloat(2000.5)}})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "zero close time")
 	require.Equal(t, "new", requestStatus(t, dbh, rid))
@@ -179,7 +188,7 @@ func TestCloseRequestPersistsKlines(t *testing.T) {
 		{ClosePrice: decimal.NewFromFloat(2000.5), CloseTime: ts},
 		{ClosePrice: decimal.NewFromFloat(2001.25), CloseTime: ts.Add(time.Minute)},
 	}
-	require.NoError(t, CloseRequest(dbh, rid, ts, klines))
+	require.NoError(t, closeReq(dbh, rid, ts, klines))
 
 	require.Equal(t, "succeeded", requestStatus(t, dbh, rid))
 	require.Equal(t, 2, priceCount(t, dbh))
@@ -199,11 +208,11 @@ func TestCloseRequestUnknownRequest(t *testing.T) {
 	resetDB(t, dbh)
 
 	ts := closedMinute()
-	err := CloseRequest(dbh, 4711, ts, []data.Kline{{ClosePrice: decimal.NewFromFloat(2000.5), CloseTime: ts}})
+	err := closeReq(dbh, 4711, ts, []data.Kline{{ClosePrice: decimal.NewFromFloat(2000.5), CloseTime: ts}})
 	require.Error(t, err)
 	require.Equal(t, 0, priceCount(t, dbh))
 
-	require.Error(t, CloseRequest(dbh, 0, ts, []data.Kline{{ClosePrice: decimal.NewFromFloat(2000.5), CloseTime: ts}}))
+	require.Error(t, closeReq(dbh, 0, ts, []data.Kline{{ClosePrice: decimal.NewFromFloat(2000.5), CloseTime: ts}}))
 	require.Equal(t, 0, priceCount(t, dbh))
 }
 
@@ -239,6 +248,37 @@ func TestFailRequestDoesNotDowngradeSucceeded(t *testing.T) {
 	// unknown requests are an error as well
 	require.Error(t, FailRequest(dbh, 4711))
 	require.Error(t, FailRequest(dbh, 0))
+}
+
+// TestFailRequestNeverBecomesTerminal: a request that no source can serve is
+// retried forever -- it never reaches a terminal failure state that would wedge
+// buck permanently. Failing it many times over always leaves it 'failed', and
+// once it has aged past FailedRetryDelay it is handed back to the retry poll.
+func TestFailRequestNeverBecomesTerminal(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+
+	ts := closedMinute()
+	rid := insertPriceReq(t, dbh, ts, "new", time.Now().UTC())
+
+	// well past any hypothetical cap: the status stays 'failed' throughout
+	for i := 0; i < 50; i++ {
+		require.NoError(t, FailRequest(dbh, rid))
+		require.Equal(t, "failed", requestStatus(t, dbh, rid), "attempt %d", i)
+	}
+
+	// aged past the retry delay, it is eligible again -- not abandoned
+	_, err := dbh.Exec(`ALTER TABLE price_req DISABLE TRIGGER price_req_update_timestamp`)
+	require.NoError(t, err)
+	_, err = dbh.Exec(`UPDATE price_req SET modified_at=$2 WHERE id=$1`,
+		rid, time.Now().UTC().Add(-FailedRetryDelay-time.Minute))
+	require.NoError(t, err)
+	_, err = dbh.Exec(`ALTER TABLE price_req ENABLE TRIGGER price_req_update_timestamp`)
+	require.NoError(t, err)
+
+	rqs, err := GetOpenPriceRequests(dbh)
+	require.NoError(t, err)
+	require.Contains(t, requestIDs(rqs), rid, "a failed request must always come back for another attempt")
 }
 
 // TestFailRequestResetsRetryClock: every failure has to bump modified_at,
@@ -296,7 +336,7 @@ func TestFailedRequestRetrySucceeds(t *testing.T) {
 	rid := insertPriceReq(t, dbh, ts, "new", time.Now().UTC())
 
 	// attempt #1: binance returned nothing
-	require.Error(t, CloseRequest(dbh, rid, ts, nil))
+	require.Error(t, closeReq(dbh, rid, ts, nil))
 	require.NoError(t, FailRequest(dbh, rid))
 	require.Equal(t, "failed", requestStatus(t, dbh, rid))
 	require.Equal(t, 0, priceCount(t, dbh))
@@ -321,7 +361,7 @@ func TestFailedRequestRetrySucceeds(t *testing.T) {
 	require.Contains(t, requestIDs(rqs), rid)
 
 	// attempt #2 succeeds
-	require.NoError(t, CloseRequest(dbh, rid, ts, []data.Kline{
+	require.NoError(t, closeReq(dbh, rid, ts, []data.Kline{
 		{ClosePrice: decimal.NewFromFloat(1999.75), CloseTime: ts},
 	}))
 	require.Equal(t, "succeeded", requestStatus(t, dbh, rid))
@@ -355,7 +395,7 @@ func TestCloseRequestRejectsKlinesOutsideTheLookupWindow(t *testing.T) {
 			CloseTime:  ts.Add(time.Duration(i)*time.Minute + 59*time.Second),
 		})
 	}
-	err := CloseRequest(dbh, rid, ts, klines)
+	err := closeReq(dbh, rid, ts, klines)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "within")
 
@@ -386,7 +426,7 @@ func TestCloseRequestAcceptsKlinesInsideTheLookupWindow(t *testing.T) {
 		{ClosePrice: decimal.NewFromFloat(2000.5), CloseTime: ts.Add(59 * time.Second)},
 		{ClosePrice: decimal.NewFromFloat(2001.5), CloseTime: ts.Add(time.Minute + 59*time.Second)},
 	}
-	require.NoError(t, CloseRequest(dbh, rid, ts, klines))
+	require.NoError(t, closeReq(dbh, rid, ts, klines))
 	require.Equal(t, "succeeded", requestStatus(t, dbh, rid))
 
 	price, err := c.GetETHPrice(dbh, ts)
@@ -406,21 +446,21 @@ func TestCloseRequestCoverageMatchesTheLookupWindow(t *testing.T) {
 	}
 
 	rid := insertPriceReq(t, dbh, ts, "new", time.Now().UTC())
-	require.NoError(t, CloseRequest(dbh, rid, ts, kline(c.PriceLookupWindow)))
+	require.NoError(t, closeReq(dbh, rid, ts, kline(c.PriceLookupWindow)))
 	require.Equal(t, "succeeded", requestStatus(t, dbh, rid))
 	_, err := c.GetETHPrice(dbh, ts)
 	require.NoError(t, err, "a kline at the edge of the window must be findable")
 
 	resetDB(t, dbh)
 	rid = insertPriceReq(t, dbh, ts, "new", time.Now().UTC())
-	require.Error(t, CloseRequest(dbh, rid, ts, kline(c.PriceLookupWindow+time.Second)))
+	require.Error(t, closeReq(dbh, rid, ts, kline(c.PriceLookupWindow+time.Second)))
 	require.Equal(t, "new", requestStatus(t, dbh, rid))
 	require.Equal(t, 0, priceCount(t, dbh))
 
 	// ... and the same on the other side of the requested minute
 	resetDB(t, dbh)
 	rid = insertPriceReq(t, dbh, ts, "new", time.Now().UTC())
-	require.Error(t, CloseRequest(dbh, rid, ts, kline(-c.PriceLookupWindow-time.Second)))
+	require.Error(t, closeReq(dbh, rid, ts, kline(-c.PriceLookupWindow-time.Second)))
 	require.Equal(t, "new", requestStatus(t, dbh, rid))
 	require.Equal(t, 0, priceCount(t, dbh))
 }
@@ -434,7 +474,7 @@ func TestCloseRequestRejectsZeroRequestTime(t *testing.T) {
 	ts := closedMinute()
 	rid := insertPriceReq(t, dbh, ts, "new", time.Now().UTC())
 
-	err := CloseRequest(dbh, rid, time.Time{},
+	err := closeReq(dbh, rid, time.Time{},
 		[]data.Kline{{ClosePrice: decimal.NewFromFloat(2000.5), CloseTime: ts}})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "zero request time")
@@ -457,14 +497,14 @@ func TestCloseRequestToleratesOverlappingKlines(t *testing.T) {
 
 	// the first request: minutes 0..3
 	first := insertPriceReq(t, dbh, base, "new", time.Now().UTC())
-	require.NoError(t, CloseRequest(dbh, first, base, klineWindow(base, 4)))
+	require.NoError(t, closeReq(dbh, first, base, klineWindow(base, 4)))
 	require.Equal(t, "succeeded", requestStatus(t, dbh, first))
 	require.Equal(t, 4, priceCount(t, dbh))
 
 	// the second request, two minutes later: minutes 2..5, i.e. minutes 2
 	// and 3 are already on record
 	second := insertPriceReq(t, dbh, base.Add(2*time.Minute), "new", time.Now().UTC())
-	require.NoError(t, CloseRequest(dbh, second, base.Add(2*time.Minute), klineWindow(base.Add(2*time.Minute), 4)))
+	require.NoError(t, closeReq(dbh, second, base.Add(2*time.Minute), klineWindow(base.Add(2*time.Minute), 4)))
 	require.Equal(t, "succeeded", requestStatus(t, dbh, second))
 
 	// six distinct minutes, not eight rows
@@ -519,32 +559,38 @@ func TestKlineIsFinal(t *testing.T) {
 	now := time.Date(2026, 9, 21, 12, 30, 45, 0, time.UTC)
 
 	// the minute in progress: binance reports its close time as the last
-	// instant of 12:30, truncated to the second by parseKlines
+	// instant of 12:30, truncated to the second by parseKlines. Its minute
+	// ends at 12:31:00.
 	open := data.Kline{CloseTime: time.Date(2026, 9, 21, 12, 30, 59, 0, time.UTC)}
 	require.False(t, klineIsFinal(open, now))
 
-	// the minute before it has closed
+	// the minute before it ends at 12:30:00 and, now being well past that plus
+	// the margin, has closed
 	closed := data.Kline{CloseTime: time.Date(2026, 9, 21, 12, 29, 59, 0, time.UTC)}
 	require.True(t, klineIsFinal(closed, now))
 
-	// and the boundary: at 12:31:00 the 12:30 kline is final
-	require.True(t, klineIsFinal(open, time.Date(2026, 9, 21, 12, 31, 0, 0, time.UTC)))
-	// while at 12:30:59.999 it is not
-	require.False(t, klineIsFinal(open, time.Date(2026, 9, 21, 12, 30, 59, 999000000, time.UTC)))
+	// the boundary is the end of the minute plus KlineFinalityMargin: the 12:30
+	// kline is final at 12:31:00 + margin ...
+	minuteEnd := time.Date(2026, 9, 21, 12, 31, 0, 0, time.UTC)
+	require.True(t, klineIsFinal(open, minuteEnd.Add(KlineFinalityMargin)))
+	// ... and not a moment before it
+	require.False(t, klineIsFinal(open, minuteEnd.Add(KlineFinalityMargin-time.Millisecond)))
 }
 
-// the still open minute is dropped, the closed ones are kept
+// the still open minute is dropped, the closed ones are kept. now is fixed
+// mid-minute so the decision does not depend on where in the wall-clock minute
+// the test happens to run (the finality margin makes the last two seconds after
+// a boundary matter).
 func TestFinalKlinesDropsTheOpenMinute(t *testing.T) {
-	now := time.Now().UTC()
-	base := now.Truncate(time.Minute)
+	now := time.Date(2026, 9, 21, 12, 30, 30, 0, time.UTC)
 
 	kls := []data.Kline{
-		{ClosePrice: decimal.NewFromFloat(2000), CloseTime: base.Add(-2*time.Minute + 59*time.Second)},
-		{ClosePrice: decimal.NewFromFloat(2001), CloseTime: base.Add(-time.Minute + 59*time.Second)},
-		{ClosePrice: decimal.NewFromFloat(2002), CloseTime: base.Add(59 * time.Second)}, // in progress
+		{ClosePrice: decimal.NewFromFloat(2000), CloseTime: time.Date(2026, 9, 21, 12, 28, 59, 0, time.UTC)},
+		{ClosePrice: decimal.NewFromFloat(2001), CloseTime: time.Date(2026, 9, 21, 12, 29, 59, 0, time.UTC)},
+		{ClosePrice: decimal.NewFromFloat(2002), CloseTime: time.Date(2026, 9, 21, 12, 30, 59, 0, time.UTC)}, // in progress
 	}
 
-	got := finalKlines(1, kls, now)
+	got := finalKlines(kls, now)
 	require.Len(t, got, 2)
 	require.True(t, got[0].ClosePrice.Equal(decimal.NewFromFloat(2000)))
 	require.True(t, got[1].ClosePrice.Equal(decimal.NewFromFloat(2001)))
@@ -557,19 +603,19 @@ func TestCloseRequestRejectsAStillOpenKline(t *testing.T) {
 	dbh := testDB(t)
 	resetDB(t, dbh)
 
-	// The request names the minute *after* the current one -- RequestPrice
-	// rounds the block time, so a block at M:31 asks for M+1 -- and that is
-	// the only kline binance could answer with. Anchoring on the current
-	// minute instead would make this test flip the moment the clock crosses
-	// a minute boundary between here and the time.Now() inside CloseRequest;
-	// the next minute stays in progress for a full minute, so there is no
-	// such window.
-	ts := time.Now().UTC().Truncate(time.Minute).Add(time.Minute)
-	rid := insertPriceReq(t, dbh, ts, "new", time.Now().UTC())
+	// now is captured once and the request names the minute *after* it --
+	// RequestPrice rounds the block time, so a block at M:31 asks for M+1 --
+	// and that is the only kline the fetch could answer with. Threading the
+	// same now into CloseRequest is the #227 fix: finality is judged against
+	// the clock as it stood before the fetch, so the decision is deterministic
+	// and no longer flips when the test straddles a minute boundary.
+	now := time.Now().UTC()
+	ts := now.Truncate(time.Minute).Add(time.Minute)
+	rid := insertPriceReq(t, dbh, ts, "new", now)
 
 	err := CloseRequest(dbh, rid, ts, []data.Kline{
 		{ClosePrice: decimal.NewFromFloat(2000.5), CloseTime: ts.Add(59 * time.Second)},
-	})
+	}, now)
 	require.Error(t, err)
 	require.Equal(t, 0, priceCount(t, dbh), "a provisional price must not be persisted")
 	require.Equal(t, "new", requestStatus(t, dbh, rid), "the request must not be closed")
@@ -585,7 +631,7 @@ func TestCloseRequestAcceptsTheKlineOnceTheMinuteClosed(t *testing.T) {
 	ts := time.Now().UTC().Truncate(time.Minute).Add(-2 * time.Minute)
 	rid := insertPriceReq(t, dbh, ts, "failed", time.Now().UTC())
 
-	require.NoError(t, CloseRequest(dbh, rid, ts, []data.Kline{
+	require.NoError(t, closeReq(dbh, rid, ts, []data.Kline{
 		{ClosePrice: decimal.NewFromFloat(2000.5), CloseTime: ts.Add(59 * time.Second)},
 	}))
 	require.Equal(t, "succeeded", requestStatus(t, dbh, rid))
@@ -603,17 +649,22 @@ func TestCloseRequestServesTheRequestedMinuteDespiteAnOpenTail(t *testing.T) {
 	resetDB(t, dbh)
 
 	base := time.Now().UTC().Truncate(time.Minute)
+	// now is pinned mid-minute so the two requested minutes (which end at or
+	// before `base`) are decisively final and the open tail (which ends at
+	// base+2m) is decisively not -- independent of where in the wall-clock
+	// minute the test runs.
+	now := base.Add(30 * time.Second)
 	ts := base.Add(-2 * time.Minute)
-	rid := insertPriceReq(t, dbh, ts, "new", time.Now().UTC())
+	rid := insertPriceReq(t, dbh, ts, "new", now)
 
 	// the tail reaches into the minute *after* the current one, so it cannot
-	// go final while the test runs -- see TestCloseRequestRejectsAStillOpenKline
+	// go final at now -- see TestCloseRequestRejectsAStillOpenKline
 	openTail := base.Add(time.Minute + 59*time.Second)
 	require.NoError(t, CloseRequest(dbh, rid, ts, []data.Kline{
 		{ClosePrice: decimal.NewFromFloat(2000.5), CloseTime: ts.Add(59 * time.Second)},
 		{ClosePrice: decimal.NewFromFloat(2001.5), CloseTime: ts.Add(time.Minute + 59*time.Second)},
 		{ClosePrice: decimal.NewFromFloat(2002.5), CloseTime: openTail},
-	}))
+	}, now))
 	require.Equal(t, "succeeded", requestStatus(t, dbh, rid))
 	// the two closed minutes only
 	require.Equal(t, 2, priceCount(t, dbh))

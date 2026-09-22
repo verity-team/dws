@@ -647,6 +647,41 @@ ALTER TABLE donation ADD COLUMN absent_count INTEGER NOT NULL DEFAULT 0;
 
 Migrate-**before**-deploy is safe with the old `buck` still running: it never reads or writes `absent_count` (every `donation` insert is column-listed, there is no `SELECT *`/`RETURNING *`), so the column is simply ignored until the new binary starts. On that first run the new binary starts counting from `0`, so a transaction already long dropped at migration time takes up to `SustainedAbsenceRuns` more runs (~45 min) to fail -- an additive, safe delay.
 
+### price_req poll index (v2.0.1, any time, any binary)
+
+`price_req` gets an index on `(status, modified_at)`. The historical backfill
+poll runs every 10 seconds --
+
+```sql
+SELECT ... FROM price_req WHERE status='new' OR (status='failed' AND modified_at < now() - interval '5 minutes');
+```
+
+-- and used to scan the whole table (#229); the index lets the planner satisfy
+the filter from it instead. This is the **only** schema change in the v2.0.1
+price work: the backfill's fallback sources and its retry-forever behaviour need
+no new column or enum value (a failed request stays `failed` and is retried
+indefinitely, exactly as before, and a request that has stayed unfulfilled too
+long is surfaced by `pulitzer` at error level for alerting rather than tracked
+in a column).
+
+It is **additive and safe at any time, with any version of the binaries
+running**: no code path depends on the index, it only changes how the poll is
+planned. Build it `CONCURRENTLY` so it takes no lock that blocks the poll or the
+`price_req` writers. `CREATE INDEX CONCURRENTLY` **cannot run inside a
+transaction block**, so run it on its own (psql autocommits each statement by
+default -- do not wrap it in `BEGIN`/`COMMIT`):
+
+```sql
+CREATE INDEX CONCURRENTLY IF NOT EXISTS price_req_status_modified_at_idx ON price_req (status, modified_at);
+```
+
+Verify it built `valid` -- a `CONCURRENTLY` build that is interrupted leaves an
+invalid index that has to be dropped and recreated:
+
+```sql
+SELECT indisvalid FROM pg_class c JOIN pg_index i ON i.indexrelid=c.oid WHERE c.relname='price_req_status_modified_at_idx';
+```
+
 ## requirements & rules
 1. all amounts are passed as strings and should be decoded to a `decimal` type to preserve precision
 1. users may be sent to our web site via a link that contains an affiliate code e.g.
