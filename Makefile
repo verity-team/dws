@@ -38,7 +38,7 @@ prompt:
 	export PGPASSWORD=postgres && psql -U postgres -h localhost -p 27501 -d dwsdb
 
 destroy_db:
-	docker kill docker_dws-db_1 && docker rm docker_dws-db_1 && docker volume rm docker_dws_db_volume
+	$(COMPOSE_CMD) -f $(DOCKER_COMPOSE_FOLDER)/db.yaml down -v
 
 codegen:
 	oapi-codegen -config configs/models.cfg.yaml api/delphi.yaml
