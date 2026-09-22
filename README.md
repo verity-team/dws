@@ -45,8 +45,9 @@ All services shut down gracefully on `SIGINT`/`SIGTERM` i.e. they stop accepting
 The services are configured via the environment, see `env.example` for the full set of variables. The donation related configuration is validated at startup: the service logs the offending entry and refuses to start when
 
 - `DWS_DONATION_ADDRESS` (`buck`, `delphi`) is not a well-formed ethereum address
-- `DWS_STABLE_COINS` (`buck`) is empty or one of its entries has an unknown asset (lower case, one of the assets `buck` holds an erc-20 ABI for), an invalid contract address or a scale that is not greater than zero
+- `DWS_STABLE_COINS` (`buck`) is empty or one of its entries has an unknown asset (lower case, one of the assets `buck` holds an erc-20 ABI for), an invalid contract address or a scale outside the plausible range for a USD stable coin (2..18 decimals). The scale bound is a plausibility check, not a correctness guarantee: it rejects gross misconfiguration such as a scale of 1 (which would turn a 1 USDC transfer into a $100,000 credit) but cannot catch a wrong-but-plausible value such as 5 for a 6-decimal coin
 - `DWS_SALE_PARAMS` (`buck`) is empty or one of its entries has a token limit or a token price that is not greater than zero
+- `ETH_RPC_URL` (`buck`) is not an `https` URL. `buck` trusts its json-rpc provider completely -- a plaintext or downgraded endpoint would let an on-path attacker fabricate or fail donations -- so a non-`https` provider is refused at startup. `http` is permitted only for a loopback host (`localhost`/`127.0.0.0/8`/`[::1]`) to keep local dev nodes working
 
 These values used to be accepted as-is and only did damage once donations were processed e.g. a scale of zero leaves a stable coin donation in its smallest unit and turns a 500 USDT donation into a 500,000,000 USD one.
 
@@ -208,7 +209,7 @@ affiliate code, 0xded1fe6b3f61c8f1d874bb86f086d10ffc3f0154, 2023-10-23 18:45:19+
 ```
 
 The address is part of the signed message, so a signature is bound to the
-account it is used for. **This changed the message format**: the backend and
+account it is used for. `POST /wallet/connection` additionally rejects a *self-referral*: an address cannot connect with an affiliate code that belongs to itself (attaching another wallet's code to your own address is the normal referral and is allowed; the signature already prevents attaching a code to an address you do not control). **This changed the message format**: the backend and
 the frontend have to be rolled out together, a new frontend talking to an old
 backend (or the other way round) will see every signed request rejected with a
 401.
@@ -241,23 +242,27 @@ to be dropped by the deviation gate during a fast move -- exactly when the
 cycle can least afford to lose one. `lastPrice` from the same endpoint is
 apples-to-apples with the other five.
 
-Every response is also checked against the pair that was asked for. All six
-venues echo the instrument they answered for and none of them used to be
-looked at, so a pair that is renamed, re-listed or mistyped would have been
-averaged into the ethereum price as if it were ETH. kraken is the special
-case: it keys the result by its own spelling of the pair (`XETHZUSD` for
-`ETHUSD`), which used to be hardcoded -- the single entry of the result map is
-taken instead, and the `error` array kraken populates while still answering
-HTTP 200 is reported rather than ignored.
+A response that echoes the instrument it answered for is also checked against
+the pair that was asked for, so a pair that is renamed, re-listed or mistyped
+is rejected rather than averaged into the ethereum price as if it were ETH.
+Three venues carry a checkable instrument field and are validated with
+`checkPair`: binance, coinbase and cex.io. kraken is the special case: it keys
+the result by its own spelling of the pair (`XETHZUSD` for `ETHUSD`), which
+used to be hardcoded -- the single entry of the result map is taken instead,
+and the `error` array kraken populates while still answering HTTP 200 is
+reported rather than ignored. kucoin and bitfinex query a fixed, pair-specific
+endpoint whose body carries no instrument identifier, so there is nothing to
+check against there.
 
 Quotes are also rejected when the venue says they are stale: cex.io and kucoin
 publish the time their quote was taken, and a quote older than 2 minutes (or
 more than 30 seconds in the future) is discarded -- a cached quote tens of
 minutes old is usually still well within 10% of spot and would otherwise be
-averaged in at full weight. The other four venues (binance, kraken, bitfinex,
-coinbase) do not expose a timestamp at all; there the only freshness bound
-available is the request itself, which is made afresh in every cycle under the
-HTTP client timeout.
+averaged in at full weight. The other venues offer no timestamp the code acts
+on: binance, kraken and coinbase do not expose one at all, and bitfinex's v1
+`pubticker` does publish a `timestamp` field but the code does not consult it.
+There the only freshness bound available is the request itself, which is made
+afresh in every cycle under the HTTP client timeout.
 
 Historical price requests are only ever closed with prices for minutes that
 have **finished**. A request whose window reaches into the minute currently in
@@ -298,6 +303,32 @@ were added to `deployments/db/01-schema.sql` has to be brought up to date, see
 `deployments/db/01-schema.sql` is the schema a *fresh* database is created
 with; there is no migration runner. The statements below bring an existing
 database in line with it.
+
+**`01-schema.sql` is a destructive DROP/CREATE script** -- every table is
+dropped with `CASCADE` and recreated empty. It is only ever meant to run
+against an empty database: docker loads it through
+`/docker-entrypoint-initdb.d` (`deployments/docker/db.yaml`), and postgres runs
+init scripts *only* when the data directory is empty. To guard against a manual
+`psql -f 01-schema.sql` wiping a populated database, the file forces
+`\set ON_ERROR_STOP on` and its first statement **aborts the load when donation
+data is already present** (it is a no-op on a fresh database, where the
+`donation` table does not yet exist). The `\set` is a psql meta-command, so the
+guard aborts however psql is invoked -- with or without an `ON_ERROR_STOP` flag;
+without it a bare `RAISE EXCEPTION` would only print, and psql would run the
+`DROP`s anyway. **Limitation:** the meta-command only helps when the file is fed
+through psql -- a non-psql loader (a migration tool running the SQL directly)
+ignores it, and whether the `RAISE` then aborts the batch is up to that tool.
+The normal dev reset -- `make destroy_db && make run_db` -- discards the volume
+and re-initialises from empty, so it is unaffected. To deliberately wipe and
+reload a populated (dev) database in place, set the override in the same psql
+session:
+
+```sh
+psql ... -c "SET dws.allow_destructive_reload='on'" -f deployments/db/01-schema.sql
+```
+
+The statements in the rest of this section, by contrast, are migrations: they
+bring an existing populated database in line without dropping anything.
 
 **The two `donation` index statements are safe to run at any time**, with any
 version of the binaries running: they add and drop an index and no code path
@@ -382,6 +413,195 @@ need: `GetETHPrice` and `getTokenPrice` both filter by asset and order/bound
 by `created_at`. `persistKline` inserts `ON CONFLICT DO NOTHING` against it,
 so an overlapping kline window yields to the price that is already on record
 instead of failing the whole request.
+
+### wallet_connection / user_data indexes (any time, any binary)
+
+`wallet_connection` gets an index on `(address)` -- `mostRecentWalletConnection`
+looks a connection up by address -- and the redundant `user_data (address)`
+index is dropped: `user_data.address` is `UNIQUE`, so it already has
+`user_data_address_key`, and a second copy of it only costs write time and
+disk (the same redundancy dropped from `donation (tx_hash)`). Neither is
+depended on by any code path, so both are safe at any time, with any version of
+the binaries running.
+
+```sql
+CREATE INDEX CONCURRENTLY IF NOT EXISTS wallet_connection_address_idx ON wallet_connection (address);
+```
+
+```sql
+DROP INDEX CONCURRENTLY IF EXISTS user_data_address_idx;
+```
+
+### donation_stats single-row guard (check first)
+
+`donation_stats` gets a unique index on `((true))` that admits **exactly one
+row**: the writers (`updateDonationStats`, `setCampaignStatus`) never target a
+row by id and the readers take the first row they find, so a second row would
+make them disagree about which is authoritative. The index **will not be
+created while more than one row is on record**. Check first, and reduce to the
+single most recent row (the one the readers already prefer, `ORDER BY
+created_at DESC LIMIT 1`) only if the count is greater than one:
+
+```sql
+SELECT COUNT(*) FROM donation_stats;
+```
+
+```sql
+DELETE FROM donation_stats a USING donation_stats b WHERE a.created_at < b.created_at OR (a.created_at = b.created_at AND a.id < b.id);
+```
+
+```sql
+CREATE UNIQUE INDEX donation_stats_single_row ON donation_stats ((true));
+```
+
+### user_data affiliate_code uniqueness (check first)
+
+`user_data.affiliate_code` gets a `UNIQUE` constraint: an affiliate code
+identifies exactly one user, and `ConnectWallet`/`GenerateAffiliateCode` rely
+on that (the former looks a code up to attach a connection, the latter's
+concurrent-writer handling depends on the unique violation). The constraint
+**will not be created while a code is shared by two rows**. Codes are random,
+so there should be none; a collision is a real conflict that has to be resolved
+by hand (which user keeps the code) before the constraint can be added:
+
+```sql
+SELECT affiliate_code, COUNT(*) FROM user_data WHERE affiliate_code IS NOT NULL GROUP BY affiliate_code HAVING COUNT(*) > 1;
+```
+
+```sql
+ALTER TABLE user_data ADD CONSTRAINT user_data_affiliate_code_key UNIQUE (affiliate_code);
+```
+
+### donation.usd_amount NOT NULL (check first, with the new `buck`)
+
+`donation.usd_amount` becomes `NOT NULL`: the crawler now denominates every
+donation in USD (ethereum at the block's ETH price, stable coins in USD to
+begin with), so the column is never NULL going forward. Older stable-coin rows
+may carry a NULL where the USD amount equals the token `amount`; backfill those
+before tightening the column, or the `ALTER` aborts. Deploy with the new `buck`
+(the one that always writes `usd_amount`) so nothing writes a fresh NULL after
+the constraint is on:
+
+```sql
+SELECT COUNT(*) FROM donation WHERE usd_amount IS NULL;
+```
+
+The current crawler always writes `usd_amount` for **every** asset (`calcTokens` converts an ethereum donation at the block's ETH price and a stable coin donation is already USD), so a database written only by `buck` has no NULL rows and the count above is `0` -- nothing to back fill. NULLs can only come from hand-inserted or imported rows. For a **stable coin** row `amount` is already the USD value, so it can be back filled directly; an **ethereum** row's `amount` is in ETH and its USD value depends on the ETH price at its block, which is not recoverable from the row alone -- do **not** apply `ROUND(amount, 2)` to it. Back fill only the stable-coin rows and resolve any ethereum NULLs by hand before adding the constraint:
+
+```sql
+-- stable-coin rows: amount is already USD
+UPDATE donation SET usd_amount = ROUND(amount, 2)
+WHERE usd_amount IS NULL AND asset IN ('usdc', 'usdt');
+-- any remaining NULLs are ethereum rows; there must be none left before the ALTER:
+SELECT COUNT(*) FROM donation WHERE usd_amount IS NULL;  -- must be 0
+```
+
+```sql
+ALTER TABLE donation ALTER COLUMN usd_amount SET NOT NULL;
+```
+
+### update_user_data() function (with the new `delphi`)
+
+`update_user_data(p_address)` is replaced. The previous version recomputed the
+per-user total only when a confirmed donation's `modified_at` was newer than
+`user_data.modified_at`; since both are transaction-start timestamps, a poll
+that committed after an in-flight confirmation -- or a `user_data` row created
+affiliate-code-first -- left the donor's total permanently short. The new
+version drops that gate, recomputes from the confirmed donations and writes
+only on change. `CREATE OR REPLACE` swaps the body in place; deploy it with the
+new `delphi` that reads through it:
+
+```sql
+CREATE OR REPLACE FUNCTION update_user_data(p_address VARCHAR(42))
+RETURNS TABLE (
+    us_id BIGINT,
+    us_address VARCHAR(42),
+    us_total NUMERIC(12, 2),
+    us_tokens BIGINT,
+    us_staked BIGINT,
+    us_reward BIGINT,
+    us_status user_data_status_enum,
+    us_code VARCHAR(16),
+    us_modified_at TIMESTAMP,
+    us_created_at TIMESTAMP
+)
+AS $$
+DECLARE
+    ds_total NUMERIC(12, 2);
+    ds_tokens BIGINT;
+BEGIN
+    -- Recompute the per-address totals from the confirmed donations. There is
+    -- deliberately no `modified_at` gate: both timestamps are transaction-start
+    -- times, so a poll that commits after an in-flight confirmation would skip
+    -- the donation forever, and a user_data row created affiliate-code-first
+    -- (newer than an already confirmed donation) would read zero forever.
+    --
+    -- The recompute-and-write only runs when there is something to write from
+    -- or to: at least one confirmed donation for the address, OR an existing
+    -- user_data row. The first disjunct keeps /user/data/{arbitrary} -- which
+    -- is unauthenticated and callable at ~50/s -- from inserting a row for an
+    -- address that never donated (a row-creation/enumeration spam vector). The
+    -- second is what still zeroes an existing row when its donations all leave
+    -- 'confirmed' after a re-org: no confirmed donation remains, so the first
+    -- disjunct is false, but the row must be brought to zero all the same.
+    IF EXISTS (
+        SELECT 1
+        FROM donation d
+        WHERE d.address = p_address
+          AND d.status = 'confirmed'
+    ) OR EXISTS (
+        SELECT 1
+        FROM user_data us
+        WHERE us.address = p_address
+    ) THEN
+        -- Get the sum of total and tokens from all confirmed donation records for the specified address
+        SELECT
+            -- `usd_amount` is the donated amount in USD for every asset: the
+            -- crawler converts ethereum donations at the ETH price of the
+            -- block and stable coin donations are denominated in USD already.
+            -- Summing the same column as the campaign totals
+            -- (updateDonationStats) keeps the two aggregates consistent.
+            COALESCE(SUM(dtab.usd_amount), 0),
+            COALESCE(SUM(dtab.tokens), 0)
+        INTO
+            ds_total,
+            ds_tokens
+        FROM donation dtab
+        WHERE dtab.address = p_address
+          AND dtab.status = 'confirmed';
+
+        -- Write the recomputed totals, but only when they actually changed:
+        -- the WHERE on the conflict target leaves the row untouched (it does
+        -- not error) when nothing moved, so `modified_at` -- served to the API
+        -- as `ts` -- is not bumped on every poll.
+        INSERT INTO user_data(address, total, tokens)
+        VALUES(p_address, ds_total, ds_tokens)
+        ON CONFLICT (address)
+        DO UPDATE SET
+            total = ds_total,
+            tokens = ds_tokens
+        WHERE user_data.total IS DISTINCT FROM ds_total
+           OR user_data.tokens IS DISTINCT FROM ds_tokens;
+    END IF;
+
+    -- Return the updated user_data record
+    RETURN QUERY
+    SELECT
+        id,
+        address,
+        total,
+        tokens,
+        staked,
+        reward,
+        status,
+        affiliate_code,
+        modified_at,
+        created_at
+    FROM user_data
+    WHERE user_data.address = p_address;
+END;
+$$ LANGUAGE plpgsql;
+```
 
 ## requirements & rules
 1. all amounts are passed as strings and should be decoded to a `decimal` type to preserve precision

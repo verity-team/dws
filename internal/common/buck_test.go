@@ -111,6 +111,26 @@ func TestUnmarshalMinedTxByHash(t *testing.T) {
 	assert.Equal(t, "0x634f3802299d60d38418bad02789a8b36a3051bc62a293b45deeafe5ec51fa34", tx.BlockHash)
 }
 
+// the stored transaction hash is normalized on decode: confirmSingleTx/failTx
+// match on `tx_hash=$n` exact-case, so a provider that emits a mixed-case hash
+// must not leave the old-unconfirmed crawler unable to confirm or fail the
+// donation.
+func TestUnmarshalTxByHashNormalizesHash(t *testing.T) {
+	const want = "0xad246b9af8a4bfd4043d6b0a700c70f084c79aa22a8677007716fc70ccefc7e7"
+	mixedCase := `{
+		"blockHash": "0x634f3802299d60d38418bad02789a8b36a3051bc62a293b45deeafe5ec51fa34",
+		"blockNumber": "0x119ab54",
+		"from": "0xa0ebed29f62dfd4b3d83af9e79e3c23170d45621",
+		"hash": "0xAD246B9AF8A4BFD4043D6B0A700C70F084C79AA22A8677007716FC70CCEFC7E7",
+		"to": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+		"transactionIndex": "0x14"
+	}`
+	var tx TxByHash
+	err := json.Unmarshal([]byte(mixedCase), &tx)
+	assert.Nil(t, err)
+	assert.Equal(t, want, tx.Hash)
+}
+
 // an invalid (non-empty, non-hex) block number is still an error
 func TestUnmarshalInvalidTxByHash(t *testing.T) {
 	var tx TxByHash
@@ -313,25 +333,40 @@ func TestGetContextInvalidConfig(t *testing.T) {
 			name:  "scale missing",
 			erc20: `[{"asset": "usdt", "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7"}]`,
 			sp:    spJSON,
-			want:  "scale must be greater than zero, got 0",
+			want:  "scale must be between 2 and 18, got 0",
 		},
 		{
 			name:  "scale is zero",
 			erc20: `[{"asset": "usdt", "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "scale": 0}]`,
 			sp:    spJSON,
-			want:  "scale must be greater than zero, got 0",
+			want:  "scale must be between 2 and 18, got 0",
+		},
+		{
+			// scale = 1 for a 6-decimal coin turns a 1 USDC transfer into a
+			// $100,000 credit -- the exact gross misconfiguration the
+			// plausibility bound exists to reject
+			name:  "scale is one (implausibly small)",
+			erc20: `[{"asset": "usdc", "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "scale": 1}]`,
+			sp:    spJSON,
+			want:  "scale must be between 2 and 18, got 1",
 		},
 		{
 			name:  "scale is negative",
 			erc20: `[{"asset": "usdt", "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "scale": -6}]`,
 			sp:    spJSON,
-			want:  "scale must be greater than zero, got -6",
+			want:  "scale must be between 2 and 18, got -6",
+		},
+		{
+			name:  "scale is implausibly large",
+			erc20: `[{"asset": "usdt", "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "scale": 19}]`,
+			sp:    spJSON,
+			want:  "scale must be between 2 and 18, got 19",
 		},
 		{
 			name:  "one of several stable coins has a zero scale",
 			erc20: `[{"asset": "usdc", "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "scale": 6}, {"asset": "usdt", "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "scale": 0}]`,
 			sp:    spJSON,
-			want:  "erc-20 entry 'usdt' (0xdac17f958d2ee523a2206206994597c13d831ec7): scale must be greater than zero",
+			want:  "erc-20 entry 'usdt' (0xdac17f958d2ee523a2206206994597c13d831ec7): scale must be between 2 and 18",
 		},
 		{
 			name:  "contract address is invalid",

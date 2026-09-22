@@ -619,14 +619,15 @@ func FinalizeTx(ctxt c.Context, tx c.TxByHash) (err error) {
 // campaign is closed cannot touch a donation that was credited legitimately
 // earlier.
 //
-// The whole block identity is written, `block_hash` included. The caller only
-// reaches this function for a transaction whose recorded block hash already
-// equals the hash of the finalized block (c.TxByHash.Judge returns TxFinalize
-// for nothing else), so the value does not change today -- but the update is
-// then self-contained: relaxing that check later cannot leave behind a row
-// whose block_number/block_time belong to one block and whose block_hash
-// belongs to another, which is precisely the mismatch the donation(block_hash)
-// index would serve wrong sets from.
+// The whole block identity is written, `block_hash` included. Judge compares
+// the transaction's *current* block hash (from eth_getTransactionByHash)
+// against the finalized block and returns TxFinalize only when the two match --
+// but that block need not be the one the donation was first seen in: a re-org
+// that re-mined the transaction into a different block leaves the recorded
+// block_hash stale, and this update then replaces it. Writing block_number,
+// block_time and block_hash together keeps all three belonging to one and the
+// same block, which is precisely the consistency the donation(block_hash) index
+// relies on -- a row split across two blocks would serve wrong sets from it.
 func confirmSingleTx(dtx *sqlx.Tx, tx c.TxByHash, campaignClosed bool) (decimal.Decimal, decimal.Decimal, error) {
 	q := `
 		UPDATE donation SET

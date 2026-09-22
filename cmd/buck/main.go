@@ -48,6 +48,9 @@ func main() {
 	if !present {
 		log.Fatal("ETH_RPC_URL variable not set")
 	}
+	if err := c.ValidateRPCURL(url); err != nil {
+		log.Fatal(err)
+	}
 	saleParamJSON, present := os.LookupEnv("DWS_SALE_PARAMS")
 	if !present {
 		err := errors.New("DWS_SALE_PARAMS environment variable not set")

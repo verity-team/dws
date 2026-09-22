@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"net"
 	"net/url"
 	"regexp"
 	"strings"
@@ -92,3 +93,44 @@ func RedactURL(rawURL string) string {
 
 // redactedMarker stands in for the part of a URL that was withheld.
 const redactedMarker = "<redacted>"
+
+// ValidateRPCURL refuses a jsonrpc endpoint that buck cannot trust. buck fully
+// trusts whatever this provider returns -- it fabricates and fails donations on
+// its word -- so a plaintext or downgraded endpoint hands an on-path attacker
+// that same power. The scheme must be `https`; plain `http` is allowed only for
+// a loopback host (a local development node such as anvil or geth), which no
+// on-path attacker can reach.
+//
+// The error is redacted: an endpoint URL carries the provider credentials in
+// its path or query string (see RedactURL), so only the scheme and host may
+// appear in a log line.
+func ValidateRPCURL(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("ETH_RPC_URL is not a valid URL (%s)", RedactURL(rawURL))
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "https":
+		return nil
+	case "http":
+		if isLoopbackHost(u.Hostname()) {
+			return nil
+		}
+		return fmt.Errorf(
+			"ETH_RPC_URL must use https for a non-loopback host, got %s", RedactURL(rawURL))
+	default:
+		return fmt.Errorf(
+			"ETH_RPC_URL must use the https scheme, got %s", RedactURL(rawURL))
+	}
+}
+
+// isLoopbackHost reports whether host is a loopback address or `localhost`.
+func isLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
+}

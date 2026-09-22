@@ -210,8 +210,10 @@ func (suite *TxByHashSuite) TestAddFBDataToleratesHashCasing() {
 	txs, err := parseTxByHash([]byte(body), nil)
 	assert.Nil(suite.T(), err)
 	txs = txs[:1]
-	// the value received is stored as is, only comparisons are normalized
-	assert.Equal(suite.T(), strings.ToUpper(txHash), txs[0].Hash)
+	// the tx hash is normalized on decode: confirmSingleTx/failTx match on
+	// `tx_hash=$n` exact-case, so a mixed-case hash from the provider must be
+	// stored the same way filterTransactions writes it -- lower case
+	assert.Equal(suite.T(), txHash, txs[0].Hash)
 
 	addFBData(c.Context{ETHRPCURL: srv.URL, CrawlerType: c.OldUnconfirmed}, txs)
 	assert.True(suite.T(), txs[0].FBDataAvailable)
