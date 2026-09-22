@@ -59,12 +59,20 @@ func ConnectWallet(db *sqlx.DB, req api.ConnectionRequest) error {
 	var q string
 	if req.Code != "none" {
 		// we only want to insert a wallet_connection record if the
-		// affiliate code exists in some user_data record in the database
+		// affiliate code exists in some user_data record in the database and
+		// belongs to a *different* address: a donor must not refer himself.
+		// The `ud.address <> :address` guard lives inside the INSERT ... SELECT
+		// so the check and the write are one statement and cannot be raced --
+		// a check-then-insert could see a third-party owner that a concurrent
+		// affiliate-code change turns into the caller's own between the two.
+		// :address is already lower cased (see above) and every address on
+		// record is stored lower case, so the comparison is exact.
 		q = `
 		INSERT INTO wallet_connection (code, address)
 		SELECT ud.affiliate_code AS code, :address
 		FROM user_data AS ud
 		WHERE ud.affiliate_code = :code
+		  AND ud.address <> :address
 	 `
 	} else {
 		// the user is connecting his wallet without an affiliate code
@@ -83,7 +91,20 @@ func ConnectWallet(db *sqlx.DB, req api.ConnectionRequest) error {
 		return err
 	}
 	if ras == 0 {
-		log.Warnf("wallet connection request with invalid affiliate code: '%s'", req.Code)
+		// the insert matched no row: either the code does not exist, or it
+		// belongs to the connecting address -- a rejected self-referral. One
+		// lookup tells the two apart so the warning is accurate. (The caller
+		// still gets a 200; surfacing a distinct error to the frontend is
+		// tracked for a later release.)
+		var owner string
+		switch lerr := db.Get(&owner, `SELECT address FROM user_data WHERE affiliate_code = $1`, req.Code); {
+		case lerr == nil && owner == req.Address:
+			log.Warnf("rejected self-referral: address '%s' connected with its own affiliate code", req.Address)
+		case errors.Is(lerr, sql.ErrNoRows):
+			log.Warnf("wallet connection request with unknown affiliate code: '%s'", req.Code)
+		default:
+			log.Warnf("wallet connection request with an affiliate code that matched no user (code '%s'): %v", req.Code, lerr)
+		}
 	}
 	return nil
 }

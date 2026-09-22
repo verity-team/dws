@@ -271,6 +271,7 @@ components:
     donation:
       required:
       - amount
+      - usd_amount
       - asset
       - tokens
       - price
@@ -286,7 +287,7 @@ components:
           x-oapi-codegen-extra-tags:
             db: amount
         usd_amount:
-          description: optional USD amount, omitted in case of USD stable coins
+          description: USD amount of the donation; NOT NULL, always returned (the crawler denominates every donation in USD)
           type: string
           example: "2009.82"
           maxLength: 16

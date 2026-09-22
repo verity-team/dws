@@ -83,8 +83,8 @@ type Donation struct {
 	// TxHash transaction hash for the donation in question
 	TxHash string `db:"tx_hash" json:"tx_hash"`
 
-	// UsdAmount optional USD amount, omitted in case of USD stable coins
-	UsdAmount *string `db:"usd_amount" json:"usd_amount,omitempty"`
+	// UsdAmount USD amount of the donation; NOT NULL, always returned (the crawler denominates every donation in USD)
+	UsdAmount string `db:"usd_amount" json:"usd_amount"`
 }
 
 // DonationAsset asset donated

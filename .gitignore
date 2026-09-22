@@ -66,3 +66,6 @@ next-env.d.ts
 
 bin/**
 go.sum
+
+# AI scratch space (red-team notes, assessments -- must never be committed)
+ai/

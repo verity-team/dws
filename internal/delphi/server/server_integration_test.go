@@ -112,17 +112,36 @@ func TestUserDataDonationsIsAlwaysAnArray(t *testing.T) {
 }
 
 // an address with a `user_data` row but no donations on the requested page is
-// the other way to end up with an empty history
+// the other way to end up with an empty history. The user_data total is derived
+// from the confirmed donations (update_user_data), so it must be backed by a
+// real one -- a phantom total that no donation supports is now correctly zeroed.
 func TestUserDataDonationsIsAnArrayWithUserDataPresent(t *testing.T) {
 	dbh := integrationDB(t)
 	resetUserData(t, dbh)
 
-	_, err := dbh.Exec(
-		`INSERT INTO user_data(address, total, tokens) VALUES($1, 100.00, 50000)`,
+	_, err := dbh.Exec(`
+		INSERT INTO donation(
+			address, amount, usd_amount, asset, tokens, price, tx_hash, status,
+			block_number, block_hash, block_time)
+		VALUES(
+			$1, 1.0, 100.00, 'usdt', 50000, 0.001,
+			'0xbbbb222222222222222222222222222222222222222222222222222222222222',
+			'confirmed', 1, '0xblock', timezone('utc', now()))`,
 		integrationAddress)
 	require.NoError(t, err)
 
-	body := userDataBody(t, dbh, integrationAddress)
+	// the donation is on the first page; ask for the second so the history is
+	// empty while the user_data summary still travels with the response
+	offset := 50
+	req := httptest.NewRequest(http.MethodGet, "/user/data/"+integrationAddress+"?offset=50", nil)
+	rec := httptest.NewRecorder()
+	ctx := echo.New().NewContext(req, rec)
+	ctx.SetPath("/user/data/:address")
+
+	s := NewDelphiServer(dbh)
+	require.NoError(t, s.UserData(ctx, integrationAddress, api.UserDataParams{Offset: &offset}))
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
 
 	assert.Contains(t, body, `"donations":[]`)
 	assert.NotContains(t, body, `"donations":null`)

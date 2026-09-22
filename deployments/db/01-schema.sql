@@ -1,3 +1,55 @@
+-- Force error-stop for the whole script. This is a psql meta-command, so it
+-- travels in the file and takes effect however psql is invoked (`psql -f`, or
+-- fed on stdin) -- WITHOUT it the guard below RAISEs but psql, lacking
+-- ON_ERROR_STOP, prints the error and runs the DROPs anyway, wiping the very
+-- data the guard exists to protect. It is idempotent with the docker-init path,
+-- which already runs with ON_ERROR_STOP=1.
+--
+-- LIMITATION: a non-psql loader (a migration tool executing this SQL directly)
+-- ignores this meta-command; there the RAISE EXCEPTION below still fires, but
+-- whether it aborts the batch is up to that tool.
+\set ON_ERROR_STOP on
+
+-- GUARD (must stay the FIRST statement, before any DROP) -----------------
+-- This file is a DESTRUCTIVE DROP/CREATE script: every table below is dropped
+-- with CASCADE and recreated empty. Docker only ever loads it into an *empty*
+-- data directory (deployments/docker/db.yaml mounts it under
+-- /docker-entrypoint-initdb.d, and postgres runs init scripts only when the
+-- datadir is empty), but a manual `psql -f 01-schema.sql` against a populated
+-- database would wipe every donation on record.
+--
+-- So: refuse to run when donation data is already present, unless the operator
+-- deliberately sets the override. The block is a no-op on a fresh database --
+-- `to_regclass` returns NULL for a table that does not exist yet, so a first
+-- install and the docker-init path both fall straight through it.
+--
+-- To wipe and reload a populated (dev) database on purpose, set the override in
+-- the same psql session, e.g.:
+--   psql ... -c "SET dws.allow_destructive_reload='on'" -f deployments/db/01-schema.sql
+-- (see README, "database schema changes").
+DO $$
+DECLARE
+    has_data boolean;
+BEGIN
+    -- a fresh install (and the docker-init path) has no donation table yet:
+    -- fall straight through. A bare `SELECT ... FROM donation` here would fail
+    -- at *plan* time -- plpgsql plans the whole IF expression before it runs,
+    -- so the `to_regclass` short-circuit would not save it -- hence the
+    -- existence check returns early and the row count is read with dynamic SQL,
+    -- which is only planned once we know the table is there.
+    IF to_regclass('public.donation') IS NULL THEN
+        RETURN;
+    END IF;
+    EXECUTE 'SELECT EXISTS (SELECT 1 FROM donation)' INTO has_data;
+    IF has_data
+       AND lower(coalesce(current_setting('dws.allow_destructive_reload', true), 'off'))
+           NOT IN ('on', 'true', '1', 'yes')
+    THEN
+        RAISE EXCEPTION 'refusing to load deployments/db/01-schema.sql: the database already holds donation data and this script DROPs every table. To wipe and reload on purpose, set dws.allow_destructive_reload, e.g. psql -c "SET dws.allow_destructive_reload=''on''" -f deployments/db/01-schema.sql (see README, "database schema changes").';
+    END IF;
+END
+$$;
+
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE OR REPLACE FUNCTION trigger_update_modified_at()
@@ -132,9 +184,9 @@ FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
 
 -- donation_stats holds the campaign totals and the campaign status: exactly
--- one row. The writers (updateDonationStats, closeCampaign) UPDATE without a
--- WHERE clause and the readers take the first row they find -- a second row
--- would make the two disagree about which one is authoritative.
+-- one row. The writers (updateDonationStats, setCampaignStatus) never target a
+-- row by id and the readers take the first row they find -- a second row would
+-- make the two disagree about which one is authoritative.
 CREATE UNIQUE INDEX donation_stats_single_row ON donation_stats ((true));
 
 INSERT INTO donation_stats(total, tokens) VALUES(0, 0);
@@ -162,7 +214,9 @@ CREATE TRIGGER user_data_update_timestamp
 BEFORE UPDATE ON user_data
 FOR EACH ROW
 EXECUTE PROCEDURE trigger_update_modified_at();
-CREATE INDEX ON user_data (address);
+-- NB: no separate index on address -- the UNIQUE constraint above already
+-- creates one (user_data_address_key) and a second copy of it only costs
+-- write time and disk.
 
 --- failed_block ----------------------------------------------------
 DROP TABLE IF EXISTS failed_block;
@@ -235,17 +289,29 @@ DECLARE
     ds_total NUMERIC(12, 2);
     ds_tokens BIGINT;
 BEGIN
-    -- Check if there exists at least one confirmed donation record with a more recent modified_at timestamp
+    -- Recompute the per-address totals from the confirmed donations. There is
+    -- deliberately no `modified_at` gate: both timestamps are transaction-start
+    -- times, so a poll that commits after an in-flight confirmation would skip
+    -- the donation forever, and a user_data row created affiliate-code-first
+    -- (newer than an already confirmed donation) would read zero forever.
+    --
+    -- The recompute-and-write only runs when there is something to write from
+    -- or to: at least one confirmed donation for the address, OR an existing
+    -- user_data row. The first disjunct keeps /user/data/{arbitrary} -- which
+    -- is unauthenticated and callable at ~50/s -- from inserting a row for an
+    -- address that never donated (a row-creation/enumeration spam vector). The
+    -- second is what still zeroes an existing row when its donations all leave
+    -- 'confirmed' after a re-org: no confirmed donation remains, so the first
+    -- disjunct is false, but the row must be brought to zero all the same.
     IF EXISTS (
         SELECT 1
         FROM donation d
         WHERE d.address = p_address
           AND d.status = 'confirmed'
-          AND d.modified_at > (
-            SELECT COALESCE(MAX(us.modified_at), '2000-01-01'::timestamp)
-            FROM user_data us
-            WHERE us.address = p_address
-          )
+    ) OR EXISTS (
+        SELECT 1
+        FROM user_data us
+        WHERE us.address = p_address
     ) THEN
         -- Get the sum of total and tokens from all confirmed donation records for the specified address
         SELECT
@@ -263,15 +329,18 @@ BEGIN
         WHERE dtab.address = p_address
           AND dtab.status = 'confirmed';
 
-        -- Update user_data record with the calculated totals
+        -- Write the recomputed totals, but only when they actually changed:
+        -- the WHERE on the conflict target leaves the row untouched (it does
+        -- not error) when nothing moved, so `modified_at` -- served to the API
+        -- as `ts` -- is not bumped on every poll.
         INSERT INTO user_data(address, total, tokens)
         VALUES(p_address, ds_total, ds_tokens)
         ON CONFLICT (address)
         DO UPDATE SET
             total = ds_total,
-            tokens = ds_tokens,
-            modified_at = NOW()
-        WHERE user_data.address = p_address;
+            tokens = ds_tokens
+        WHERE user_data.total IS DISTINCT FROM ds_total
+           OR user_data.tokens IS DISTINCT FROM ds_tokens;
     END IF;
 
     -- Return the updated user_data record

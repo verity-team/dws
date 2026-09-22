@@ -47,6 +47,23 @@ type ERC20 struct {
 	Scale   int32
 }
 
+// MinStableCoinScale and MaxStableCoinScale bound the erc-20 `scale` (the
+// number of decimals the coin uses, by which the raw base-unit amount is
+// divided in recordedAmount). A USD stable coin in practice uses between 2
+// decimals (Gemini's GUSD) and 18 (DAI and the many 18-decimal coins), so a
+// value outside that range is gross misconfiguration.
+//
+// This is a *plausibility* bound, not a correctness guarantee: buck cannot
+// know a coin's true decimals, so it catches only egregious values. It rejects
+// scale = 1 -- which would turn a 1 USDC transfer (6 decimals) into a $100,000
+// credit -- and every value below 2 or above 18. It does NOT catch a wrong but
+// plausible value, e.g. scale = 5 for a 6-decimal coin (a 10x error): only a
+// per-coin decimals lookup, which buck does not have, could.
+const (
+	MinStableCoinScale int32 = 2
+	MaxStableCoinScale int32 = 18
+)
+
 type Hashable interface {
 	GetHash() string
 }
@@ -395,7 +412,12 @@ func (t *TxByHash) UnmarshalJSON(data []byte) error {
 
 	t.BlockHash = pd.BlockHash
 	t.From = pd.From
-	t.Hash = pd.Hash
+	// normalize the transaction hash the same way filterTransactions does when
+	// it writes the donation row: confirmSingleTx/failTx match on `tx_hash=$n`
+	// exact-case, so a provider that emits a non-lower-case hash here would
+	// otherwise leave the old-unconfirmed crawler unable to confirm or fail the
+	// donation.
+	t.Hash = NormalizeHash(pd.Hash)
 	t.To = pd.To
 
 	// a transaction that is still in the mempool has no block: the jsonrpc
@@ -491,8 +513,10 @@ func validateStableCoins(scs map[string]ERC20, validAssets map[string]abi.ABI) e
 				"erc-20 entry with address '%s': unknown asset '%s', expected one of %v",
 				addr, sc.Asset, sortedKeys(validAssets))
 		}
-		if sc.Scale <= 0 {
-			return fmt.Errorf("erc-20 entry '%s' (%s): scale must be greater than zero, got %d", sc.Asset, addr, sc.Scale)
+		if sc.Scale < MinStableCoinScale || sc.Scale > MaxStableCoinScale {
+			return fmt.Errorf(
+				"erc-20 entry '%s' (%s): scale must be between %d and %d, got %d",
+				sc.Asset, addr, MinStableCoinScale, MaxStableCoinScale, sc.Scale)
 		}
 	}
 	return nil

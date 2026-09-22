@@ -64,6 +64,37 @@ func TestRedactURL(t *testing.T) {
 	}
 }
 
+func TestValidateRPCURL(t *testing.T) {
+	const projectID = "0123456789abcdef0123456789abcdef"
+
+	for _, tc := range []struct {
+		name    string
+		in      string
+		wantErr bool
+	}{
+		{"https provider", "https://sepolia.infura.io/v3/" + projectID, false},
+		{"https host only", "https://api.example.com", false},
+		{"http localhost (local dev node)", "http://localhost:8545", false},
+		{"http 127.0.0.1", "http://127.0.0.1:8545", false},
+		{"http ipv6 loopback", "http://[::1]:8545", false},
+		{"http non-loopback host rejected", "http://rpc.example.com/" + projectID, true},
+		{"http public ip rejected", "http://8.8.8.8:8545", true},
+		{"non-http scheme rejected", "ftp://rpc.example.com", true},
+		{"empty rejected", "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateRPCURL(tc.in)
+			if tc.wantErr {
+				require.Error(t, err)
+				// the provider credentials must never leak into the error
+				assert.NotContains(t, err.Error(), projectID)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestToUint64(t *testing.T) {
 	v, err := ToUint64(decimal.NewFromInt(0), "block number")
 	assert.NoError(t, err)

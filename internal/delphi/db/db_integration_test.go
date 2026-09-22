@@ -211,6 +211,190 @@ func TestGetDonationDataWithETHPrice(t *testing.T) {
 	require.Equal(t, api.DonationDataStatus("open"), dd.Status)
 }
 
+// callUpdateUserData invokes the update_user_data() plpgsql function the way
+// GetUserData does, discarding the returned row.
+func callUpdateUserData(t *testing.T, dbh *sqlx.DB, address string) {
+	t.Helper()
+	_, err := dbh.Exec(`SELECT * FROM update_user_data($1)`, address)
+	require.NoError(t, err)
+}
+
+// insertConfirmedDonation inserts one confirmed donation with an explicit
+// modified_at (so a test can order it relative to a user_data row). The
+// BEFORE UPDATE timestamp trigger fires only on UPDATE, so an explicit
+// modified_at on INSERT survives.
+func insertConfirmedDonation(t *testing.T, dbh *sqlx.DB, address, usd string, tokens int, txHash string, modifiedAgo time.Duration) {
+	t.Helper()
+	q := `
+		INSERT INTO donation(
+			address, amount, usd_amount, asset, tokens, price, tx_hash,
+			status, block_number, block_hash, block_time, modified_at)
+		VALUES(
+			$1, $2, $3, 'usdc', $4, 0.001, $5,
+			'confirmed', 1, '0xblock', timezone('utc', now()),
+			timezone('utc', now()) - make_interval(secs => $6))
+		`
+	_, err := dbh.Exec(q, address, usd, usd, tokens, txHash, modifiedAgo.Seconds())
+	require.NoError(t, err)
+}
+
+func userDataTotals(t *testing.T, dbh *sqlx.DB, address string) (string, int) {
+	t.Helper()
+	var ud struct {
+		Total  string `db:"total"`
+		Tokens int    `db:"tokens"`
+	}
+	require.NoError(t, dbh.Get(&ud, `SELECT total::text AS total, tokens FROM user_data WHERE address=$1`, address))
+	return ud.Total, ud.Tokens
+}
+
+// FIX 1 / trap 1: a never-donated address that is merely *queried* must not get
+// a user_data row. /user/data/{address} is unauthenticated and callable at
+// ~50/s, so an always-upsert would be a row-creation/enumeration spam vector.
+func TestUpdateUserDataDoesNotCreateRowForNonDonor(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+
+	const addr = "0x00000000000000000000000000000000000000aa"
+	callUpdateUserData(t, dbh, addr)
+
+	var n int
+	require.NoError(t, dbh.Get(&n, `SELECT COUNT(*) FROM user_data WHERE address=$1`, addr))
+	require.Equal(t, 0, n, "a never-donated queried address must not get a user_data row")
+}
+
+// FIX 1 / race: a GET /user/data poll that commits inside a finalized-crawler
+// commit window bumps user_data.modified_at past an in-flight donation's
+// modified_at; the gated function then never folds that donation in. Ground
+// truth 600, stuck at 300.
+func TestUpdateUserDataRaceDoesNotLoseDonation(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+
+	const addr = "0x00000000000000000000000000000000000000bb"
+	// two confirmed donations, 300 each, both with an OLDER modified_at
+	insertConfirmedDonation(t, dbh, addr, "300.00", 300000, "0xrace1", 10*time.Minute)
+	insertConfirmedDonation(t, dbh, addr, "300.00", 300000, "0xrace2", 10*time.Minute)
+	// a stale user_data row (only the first donation folded in) whose
+	// modified_at a poll bumped to *after* both donations' modified_at
+	_, err := dbh.Exec(
+		`INSERT INTO user_data(address, total, tokens, modified_at) VALUES($1, 300.00, 300000, timezone('utc', now()))`, addr)
+	require.NoError(t, err)
+
+	callUpdateUserData(t, dbh, addr)
+
+	total, tokens := userDataTotals(t, dbh, addr)
+	require.Equal(t, "600.00", total, "the in-flight donation was lost")
+	require.Equal(t, 600000, tokens)
+}
+
+// FIX 1 / affiliate-first: a donor who calls /affiliate/code before the
+// donation is first materialized inserts a user_data row whose modified_at is
+// permanently newer than the already-confirmed donation; the gated function
+// reads 0 forever.
+func TestUpdateUserDataAffiliateFirstReadsRealTotal(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+
+	const addr = "0x00000000000000000000000000000000000000cc"
+	// an already-confirmed donation, older
+	insertConfirmedDonation(t, dbh, addr, "1500.00", 1500000, "0xaff1", 10*time.Minute)
+	// user_data row created affiliate-code-first: fresh modified_at, zero totals
+	_, err := dbh.Exec(
+		`INSERT INTO user_data(address, affiliate_code, total, tokens, modified_at) VALUES($1, 'affcode0000000cc', 0, 0, timezone('utc', now()))`, addr)
+	require.NoError(t, err)
+
+	callUpdateUserData(t, dbh, addr)
+
+	total, tokens := userDataTotals(t, dbh, addr)
+	require.Equal(t, "1500.00", total, "the confirmed donation was never folded in")
+	require.Equal(t, 1500000, tokens)
+	// the recompute must touch only total/tokens, not the affiliate code
+	var code string
+	require.NoError(t, dbh.Get(&code, `SELECT affiliate_code FROM user_data WHERE address=$1`, addr))
+	require.Equal(t, "affcode0000000cc", code)
+}
+
+// FIX 1 / trap 2: when an address's confirmed donations all leave 'confirmed'
+// (a re-org's confirmed->failed path) the existing user_data row must be
+// zeroed. A gate of merely "EXISTS confirmed donation" would skip it -- no
+// confirmed donation remains -- and leave the stale non-zero total.
+func TestUpdateUserDataZeroesRowWhenDonationsRevert(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+
+	const addr = "0x00000000000000000000000000000000000000dd"
+	insertConfirmedDonation(t, dbh, addr, "500.00", 500000, "0xrev1", 10*time.Minute)
+	callUpdateUserData(t, dbh, addr)
+	total, _ := userDataTotals(t, dbh, addr)
+	require.Equal(t, "500.00", total, "precondition: the donation should be folded in")
+
+	// the donation reverts (confirmed -> failed)
+	_, err := dbh.Exec(`UPDATE donation SET status='failed' WHERE tx_hash='0xrev1'`)
+	require.NoError(t, err)
+
+	callUpdateUserData(t, dbh, addr)
+	total, tokens := userDataTotals(t, dbh, addr)
+	require.Equal(t, "0.00", total, "a reverted donation must zero the stale total")
+	require.Equal(t, 0, tokens)
+}
+
+// FIX 1 / write-on-change: a repeated poll with no change must not bump
+// user_data.modified_at (served to the API as `ts`).
+func TestUpdateUserDataDoesNotBumpTimestampWithoutChange(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+
+	const addr = "0x00000000000000000000000000000000000000ee"
+	insertConfirmedDonation(t, dbh, addr, "42.00", 42000, "0xnb1", time.Minute)
+	callUpdateUserData(t, dbh, addr) // materialize the row
+
+	var ts1 time.Time
+	require.NoError(t, dbh.Get(&ts1, `SELECT modified_at FROM user_data WHERE address=$1`, addr))
+
+	// poll again -- nothing changed
+	callUpdateUserData(t, dbh, addr)
+
+	var ts2 time.Time
+	require.NoError(t, dbh.Get(&ts2, `SELECT modified_at FROM user_data WHERE address=$1`, addr))
+	require.Equal(t, ts1, ts2, "modified_at was bumped on a no-op poll")
+}
+
+// FIX 3a: a donor must not refer himself. The affiliate code's owning address
+// must differ from the connecting address; a genuine third-party referral is
+// still accepted and an unknown code is still rejected.
+func TestConnectWalletRejectsSelfReferral(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+
+	const (
+		owner = testAddress
+		code  = "selfcode00000000"
+	)
+	_, err := dbh.Exec(`INSERT INTO user_data(address, affiliate_code) VALUES($1, $2)`, owner, code)
+	require.NoError(t, err)
+
+	countConn := func(address string) int {
+		var n int
+		require.NoError(t, dbh.Get(&n, `SELECT COUNT(*) FROM wallet_connection WHERE address=$1`, address))
+		return n
+	}
+
+	// self-referral: the code owner connects with his own code -> rejected
+	require.NoError(t, ConnectWallet(dbh, api.ConnectionRequest{Address: owner, Code: code}))
+	require.Equal(t, 0, countConn(owner), "self-referral must not create a wallet_connection")
+
+	// a genuine third-party referral -> accepted
+	const other = "0x00000000000000000000000000000000000000e1"
+	require.NoError(t, ConnectWallet(dbh, api.ConnectionRequest{Address: other, Code: code}))
+	require.Equal(t, 1, countConn(other), "a genuine third-party referral must be accepted")
+
+	// an unknown code -> rejected, as before
+	const third = "0x00000000000000000000000000000000000000e2"
+	require.NoError(t, ConnectWallet(dbh, api.ConnectionRequest{Address: third, Code: "nosuchcode000000"}))
+	require.Equal(t, 0, countConn(third), "an unknown code must be rejected")
+}
+
 // M1: the wallet connection is recorded lower case -- the duplicate detection
 // looks the address up lower case.
 func TestConnectWalletLowercasesAddress(t *testing.T) {
