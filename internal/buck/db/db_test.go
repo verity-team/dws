@@ -46,3 +46,29 @@ func TestCalcTokensBoundsTheUSDAmount(t *testing.T) {
 		})
 	}
 }
+
+// #252: the campaign total is bounded by donation_stats.total NUMERIC(12,2);
+// a sum that does not fit is refused with an error that names the column
+// rather than reaching the UPDATE as a bare `numeric field overflow`
+func TestCheckDonationStatsTotal(t *testing.T) {
+	for _, tc := range []struct {
+		total string
+		fits  bool
+	}{
+		{"0", true},
+		{"9999999999.99", true},
+		{"10000000000.00", false},
+		{"123456789012.34", false},
+	} {
+		t.Run(tc.total, func(t *testing.T) {
+			err := checkDonationStatsTotal(decimal.RequireFromString(tc.total))
+			if tc.fits {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "does not fit donation_stats.total NUMERIC(12,2)")
+			assert.Contains(t, err.Error(), tc.total)
+		})
+	}
+}

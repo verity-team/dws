@@ -137,7 +137,8 @@ func PersistTxs(ctxt c.Context, bn uint64, ethPrice decimal.Decimal, txs []c.Tra
 			// receiving address that cannot be recorded ends up (see
 			// filterTransactions), for an operator to look into.
 			log.Errorf("recording tx '%s' as failed: %v", tx.Hash, calcErr)
-			err = insertFailedTx(dtx, tx.BlockNumber, tx.BlockHash, tx.BlockTime, tx.Hash)
+			bn, bh := blockRef(tx.BlockNumber, tx.BlockHash)
+			err = insertFailedTx(dtx, bn, bh, tx.BlockTime, tx.Hash)
 			if err != nil {
 				return err
 			}
@@ -521,13 +522,22 @@ func InitTokenPrice(ctxt c.Context) (err error) {
 }
 
 func PersistFailedTx(dbh *sqlx.DB, b c.Block, tx c.Transaction) error {
-	return insertFailedTx(dbh, b.Number, b.Hash, b.Timestamp, tx.Hash)
+	bn, bh := blockRef(b.Number, b.Hash)
+	return insertFailedTx(dbh, bn, bh, b.Timestamp, tx.Hash)
+}
+
+// blockRef is the failed_tx block of a transaction whose block is known. The
+// block numbers buck handles are bounded by c.ToUint64 to math.MaxInt64, so
+// the conversion is lossless.
+func blockRef(bn uint64, bh string) (sql.NullInt64, sql.NullString) {
+	return sql.NullInt64{Int64: int64(bn), Valid: true}, sql.NullString{String: bh, Valid: true}
 }
 
 // insertFailedTx records a transaction in failed_tx, on the pool or inside the
 // caller's database transaction. A transaction already on record is left as
-// it is.
-func insertFailedTx(e sqlx.Execer, bn uint64, bh string, bt time.Time, hash string) error {
+// it is. An invalid (NULL) block number and hash record a transaction whose
+// block is unknown, see failTx.
+func insertFailedTx(e sqlx.Execer, bn sql.NullInt64, bh sql.NullString, bt time.Time, hash string) error {
 	q := `
 		INSERT INTO failed_tx(
 			block_number, block_hash, block_time, tx_hash)
@@ -571,7 +581,7 @@ const (
 //   - all donation stats writers acquire the lock in the same order which
 //     rules out deadlocks between them
 //   - since the lock is taken in a separate, earlier statement the subsequent
-//     aggregate UPDATE takes a fresh READ COMMITTED snapshot i.e. it sees the
+//     aggregate SELECT takes a fresh READ COMMITTED snapshot i.e. it sees the
 //     donations committed by the writer we were waiting for. Locking within
 //     the aggregate statement itself would *not* have that effect.
 //   - the token total and the status are read under the same lock and hence
@@ -621,30 +631,45 @@ func campaignIsClosed(tokens decimal.Decimal, ctxt c.Context) bool {
 }
 
 func updateDonationStats(dtx *sqlx.Tx, ctxt c.Context) (decimal.Decimal, decimal.Decimal, decimal.Decimal, error) {
+	// the aggregate is a statement of its own, after lockDonationStats: it
+	// takes a fresh READ COMMITTED snapshot and sees every donation the
+	// donation stats writer we waited for committed. Its result is checked
+	// before it is written, see checkDonationStatsTotal.
 	q1 := `
+		-- COALESCE: SUM() over zero confirmed donations is NULL and
+		-- donation_stats.total/tokens are NOT NULL. This is reachable (fresh
+		-- database, every donation of the first finalized block reverted)
+		-- and would abort the crawler transaction.
+		SELECT
+			 COALESCE(SUM(usd_amount), 0) AS total_usd_amount,
+			 COALESCE(SUM(tokens), 0) AS total_tokens
+		FROM donation
+		WHERE status = 'confirmed'
+		`
+	var sumTotal, sumTokens decimal.Decimal
+	err := dtx.QueryRowx(q1).Scan(&sumTotal, &sumTokens)
+	if err != nil {
+		err = fmt.Errorf("failed to sum the confirmed donations %w", err)
+		log.Error(err)
+		return decimal.Zero, decimal.Zero, decimal.Zero, err
+	}
+	if err = checkDonationStatsTotal(sumTotal); err != nil {
+		log.Error(err)
+		return decimal.Zero, decimal.Zero, decimal.Zero, err
+	}
+
+	q2 := `
 		WITH OldStats AS (
 			 SELECT tokens AS old_tokens
 			 FROM donation_stats
 			 LIMIT 1
-		),
-		DonationSum AS (
-			 -- COALESCE: SUM() over zero confirmed donations is NULL and
-			 -- donation_stats.total/tokens are NOT NULL. This is reachable
-			 -- (fresh database, every donation of the first finalized block
-			 -- reverted) and would abort the crawler transaction.
-			 SELECT
-				  COALESCE(SUM(usd_amount), 0) AS total_usd_amount,
-				  COALESCE(SUM(tokens), 0) AS total_tokens
-			 FROM donation
-			 WHERE status = 'confirmed'
 		)
 		UPDATE donation_stats
-		SET total = (SELECT total_usd_amount FROM DonationSum),
-			 tokens = (SELECT total_tokens FROM DonationSum)
+		SET total = $1, tokens = $2
 		RETURNING total, tokens, (SELECT old_tokens FROM OldStats)
 		`
 	var newTotal, newTokens, oldTokens decimal.Decimal
-	err := dtx.QueryRowx(q1).Scan(&newTotal, &newTokens, &oldTokens)
+	err = dtx.QueryRowx(q2, sumTotal, sumTokens).Scan(&newTotal, &newTokens, &oldTokens)
 	if err != nil {
 		err = fmt.Errorf("failed to update donation stats %w", err)
 		log.Error(err)
@@ -660,6 +685,23 @@ func updateDonationStats(dtx *sqlx.Tx, ctxt c.Context) (decimal.Decimal, decimal
 		return decimal.Zero, decimal.Zero, decimal.Zero, err
 	}
 	return newTotal, newTokens, oldTokens, nil
+}
+
+// checkDonationStatsTotal makes sure the campaign total fits
+// donation_stats.total, NUMERIC(12,2) -- just under 1e10 USD. Every donation
+// fits donation.usd_amount (see calcTokens) but their sum need not, and
+// postgres refuses a larger total with a bare `numeric field overflow` that
+// rolls back the block or confirmation it is part of. There is no row to
+// reject here: the total is the campaign's, so the crawler stops until an
+// operator widens the column (see the README), but with an error that says
+// so.
+func checkDonationStatsTotal(total decimal.Decimal) error {
+	if c.DonationStatsTotalColumn.Fits(total) {
+		return nil
+	}
+	return fmt.Errorf(
+		"the confirmed donations total %s USD, which does not fit donation_stats.total %s: widen the column, see 'donation totals ceiling' in the README",
+		total.StringFixed(2), c.DonationStatsTotalColumn)
 }
 
 // setCampaignStatus keeps the campaign status in sync with the token total
@@ -1050,7 +1092,17 @@ func failTx(dtx *sqlx.Tx, tx c.TxByHash) (bool, error) {
 	if blockTime.IsZero() {
 		blockTime = tx.DBBlockTime
 	}
-	if err = insertFailedTx(dtx, tx.BlockNumber, tx.FBBlockHash, blockTime, tx.Hash); err != nil {
+	// ... and no block number or hash at all: those are recorded as NULL.
+	// Its zero values -- block 0, hash '' -- used to be written instead, and
+	// block 0 is a real block.
+	var (
+		bn sql.NullInt64
+		bh sql.NullString
+	)
+	if !tx.Absent {
+		bn, bh = blockRef(tx.BlockNumber, tx.FBBlockHash)
+	}
+	if err = insertFailedTx(dtx, bn, bh, blockTime, tx.Hash); err != nil {
 		return false, err
 	}
 

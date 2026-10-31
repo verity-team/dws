@@ -41,40 +41,41 @@ func getFinalizedBlockFromCache(ctxt c.Context, bn uint64) ([]byte, error) {
 	return os.ReadFile(fp)
 }
 
-func writeBlockToFile(ctxt c.Context, bn uint64, json []byte) error {
-	var err error
+// writeBlockToFile persists a full block body: the finalized crawler keeps it
+// in the block cache, every other crawler in the debug data store. Both are
+// optional and neither may fail the block -- a full disk or a bad permission
+// on a directory that only saves a jsonrpc request later must not stall the
+// crawler -- so failures are logged as warnings and otherwise ignored.
+func writeBlockToFile(ctxt c.Context, bn uint64, json []byte) {
 	if ctxt.BlockCache != "" && ctxt.CrawlerType == c.Finalized {
-		// write block to finalized block cache
-		// failures are returned as errors
-		err = createDirectoryIfNotExists(ctxt.BlockCache)
-		if err != nil {
-			log.Error(err)
-			return err
+		if err := createDirectoryIfNotExists(ctxt.BlockCache); err != nil {
+			log.Warnf("failed to create the block cache, %v", err)
+			return
 		}
 		fp := filepath.Join(ctxt.BlockCache, fmt.Sprintf("fb-%d.json", bn))
-		err := os.WriteFile(fp, json, 0600)
-		if err != nil {
-			err = fmt.Errorf("failed to write finalized block #%d, %w", bn, err)
-			log.Error(err)
-			return err
+		if err := os.WriteFile(fp, json, 0600); err != nil {
+			log.Warnf("failed to cache finalized block #%d, %v", bn, err)
 		}
-		return nil
+		return
 	}
-	// write block to debug data store, errors are tolerated
-	if ctxt.DebugDataStore != "" {
-		err = createDirectoryIfNotExists(ctxt.DebugDataStore)
-		if err != nil {
-			log.Warn(err)
-			return nil
-		}
-		fp := filepath.Join(ctxt.DebugDataStore, fmt.Sprintf("%s-%d.json", ctxt.CrawlerType, bn))
-		err := os.WriteFile(fp, json, 0600)
-		if err != nil {
-			err = fmt.Errorf("failed to write block #%d, %w", bn, err)
-			log.Warn(err)
-		}
+	writeDebugBlock(ctxt, bn, json)
+}
+
+// writeDebugBlock writes a block response to the debug data store, errors are
+// tolerated.
+func writeDebugBlock(ctxt c.Context, bn uint64, json []byte) {
+	if ctxt.DebugDataStore == "" {
+		return
 	}
-	return nil
+	if err := createDirectoryIfNotExists(ctxt.DebugDataStore); err != nil {
+		log.Warn(err)
+		return
+	}
+	fp := filepath.Join(ctxt.DebugDataStore, fmt.Sprintf("%s-%d.json", ctxt.CrawlerType, bn))
+	if err := os.WriteFile(fp, json, 0600); err != nil {
+		err = fmt.Errorf("failed to write block #%d, %w", bn, err)
+		log.Warn(err)
+	}
 }
 
 func writeTxReceiptsToFile(ctxt c.Context, epoch int64, json []byte) {

@@ -126,16 +126,51 @@ func (txbh TXBHFetcher) Fetch(ctxt c.Context, hs []c.Hashable) ([]c.TxByHash, er
 // spell, ...), so it is not evidence of anything. It yields no element at all
 // and the donation is simply re-examined on the next run -- a fail verdict
 // must rest on positive evidence, and an error object is the absence of it.
+//
+// Every element is attributed to exactly one requested hash, at most once:
+// the caller records one observation per element (RecordAbsence), so a
+// provider that repeats an id would otherwise advance a donation's
+// consecutive-absence counter twice in one run. Only the first element for an
+// id or a hash is used, and a result for a transaction that was not requested
+// is dropped rather than allowed to touch an unrelated donation.
 func parseTxByHash(body []byte, hs []c.Hashable) ([]c.TxByHash, error) {
 	var resp []TxByHashBody
 	err := json.Unmarshal(body, &resp)
 	if err != nil {
 		return nil, err
 	}
-	var res []c.TxByHash
+	requested := make(map[string]bool, len(hs))
+	for _, h := range hs {
+		requested[c.NormalizeHash(h.GetHash())] = true
+	}
+	var (
+		res        []c.TxByHash
+		seenIDs    = make(map[int]bool, len(resp))
+		seenHashes = make(map[string]bool, len(resp))
+	)
+	// add appends tx unless its hash was answered for already
+	add := func(id int, tx c.TxByHash) {
+		hash := c.NormalizeHash(tx.Hash)
+		if seenHashes[hash] {
+			log.Warnf("duplicate tx data for '%s' (jsonrpc id %d), skipping", hash, id)
+			return
+		}
+		seenHashes[hash] = true
+		res = append(res, tx)
+	}
 	for _, d := range resp {
+		if seenIDs[d.ID] {
+			log.Warnf("duplicate jsonrpc id %d in tx by hash response, skipping", d.ID)
+			continue
+		}
+		seenIDs[d.ID] = true
 		if d.Result != nil {
-			res = append(res, *d.Result)
+			// the hash is normalized on decode, see c.TxByHash.UnmarshalJSON
+			if !requested[d.Result.Hash] {
+				log.Warnf("tx data for unrequested tx '%s' (jsonrpc id %d), skipping", d.Result.Hash, d.ID)
+				continue
+			}
+			add(d.ID, *d.Result)
 			continue
 		}
 		// the ids handed to the provider are 1-based indexes into hs; a
@@ -154,7 +189,7 @@ func parseTxByHash(body []byte, hs []c.Hashable) ([]c.TxByHash, error) {
 			continue
 		}
 		log.Warnf("tx '%s' found neither on chain nor in the mempool", hash)
-		res = append(res, c.TxByHash{Hash: hash, Absent: true})
+		add(d.ID, c.TxByHash{Hash: hash, Absent: true})
 	}
 	return res, nil
 }

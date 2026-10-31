@@ -134,6 +134,11 @@ func filterTransactions(ctxt c.Context, b c.Block) ([]c.Transaction, error) {
 	var result []c.Transaction
 	for _, tx := range b.Transactions {
 		var txBelongsToUs bool
+		// nothing in the jsonrpc spec pins the case of hex data (the hashes
+		// and addresses are normalized for the same reason): the plain ETH
+		// and erc-20 selector matches below are lower case, upper or mixed
+		// case calldata would silently not be recognized as a donation
+		tx.Input = strings.ToLower(tx.Input)
 		if tx.Input == "0x" {
 			// plain ETH tx -- only return txs that send ETH to the receiving
 			// address

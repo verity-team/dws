@@ -21,7 +21,7 @@
 -- So: refuse to run when any table already holds operational data -- not only
 -- donations: affiliate codes (user_data), wallet connections, prices, the
 -- crawler positions (last_block), the campaign totals and status
--- (donation_stats), the failed block/tx records and the historical price
+-- (donation_stats), the failed tx records and the historical price
 -- requests -- unless the operator deliberately sets the override. The block
 -- is a no-op on a fresh database -- `to_regclass` returns NULL for a table
 -- that does not exist yet, so a first install and the docker-init path both
@@ -57,7 +57,6 @@ BEGIN
             ('last_block',        'true'),
             ('donation_stats',    'total <> 0 OR tokens <> 0 OR status <> ''open'''),
             ('user_data',         'true'),
-            ('failed_block',      'true'),
             ('failed_tx',         'true'),
             ('price_req',         'true')
         ) AS guarded(tbl, has_data_pred)
@@ -79,8 +78,6 @@ BEGIN
     END IF;
 END
 $$;
-
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE OR REPLACE FUNCTION trigger_update_modified_at()
 RETURNS TRIGGER AS $$
@@ -257,28 +254,15 @@ EXECUTE PROCEDURE trigger_update_modified_at();
 -- creates one (user_data_address_key) and a second copy of it only costs
 -- write time and disk.
 
---- failed_block ----------------------------------------------------
-DROP TABLE IF EXISTS failed_block;
-CREATE TABLE failed_block (
-    id BIGSERIAL PRIMARY KEY,
-    block_number BIGINT NOT NULL UNIQUE,
-    block_hash VARCHAR(66) NOT NULL,
-    block_time TIMESTAMP NOT NULL,
-
-    modified_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
-    created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now())
-);
-CREATE TRIGGER failed_block_update_timestamp
-BEFORE UPDATE ON failed_block
-FOR EACH ROW
-EXECUTE PROCEDURE trigger_update_modified_at();
-
 --- failed_tx ----------------------------------------------------
 DROP TABLE IF EXISTS failed_tx;
 CREATE TABLE failed_tx (
     id BIGSERIAL PRIMARY KEY,
-    block_number BIGINT NOT NULL,
-    block_hash VARCHAR(66) NOT NULL,
+    -- NULL for a transaction whose block is unknown: one that vanished from
+    -- both chain and mempool (a dropped transaction) has none. block 0 is a
+    -- real block and must not stand in for "no block".
+    block_number BIGINT,
+    block_hash VARCHAR(66),
     block_time TIMESTAMP NOT NULL,
     tx_hash VARCHAR(66) NOT NULL UNIQUE,
 

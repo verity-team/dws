@@ -7,6 +7,31 @@ services:
     build:
       context: ./
       dockerfile: ./Dockerfile
+      # Values come from the shell or the .env file next to this file
+      args:
+        - NEXT_PUBLIC_DONATE_PUBKEY
+        - NEXT_PUBLIC_MIN_ETH
+        - NEXT_PUBLIC_MIN_USDT
+        - NEXT_PUBLIC_API_TIMEOUT
+        - NEXT_PUBLIC_LAUNCH_TIME
+        - NEXT_PUBLIC_UDATA_REFRESH_TIME_DEFAULT
+        - NEXT_PUBLIC_UDATA_REFRESH_TIME_UNCONFIRMED
+        - NEXT_PUBLIC_TARGET_NETWORK_ID
+        - NEXT_PUBLIC_TARGET_NETWORK_ALIAS
+        - NEXT_PUBLIC_TARGET_NETWORK_RPC
+        - NEXT_PUBLIC_WC_PROJECT_ID
+        - NEXT_PUBLIC_EMAIL_API_URL
+        - NEXT_PUBLIC_GALACTICA_API_URL
+        - NEXT_PUBLIC_HOST_URL
+        - NEXT_PUBLIC_FILE_MAX
+        - NEXT_PUBLIC_TARGET_SALE
+        - DWS_API_URL
+        - HOST_URL
+        - API_TIMEOUT
     command: /bin/sh -c "node server.js"
+    environment:
+      - DWS_API_URL
+      - HOST_URL
+      - API_TIMEOUT
     ports:
       - 3000:3000

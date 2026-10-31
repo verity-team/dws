@@ -1,7 +1,9 @@
 package ethereum
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"time"
 
 	"github.com/goccy/go-json"
@@ -38,24 +40,13 @@ func fetchBlock(ctxt c.Context, bn uint64) ([]byte, error) {
 }
 
 func GetBlock(ctxt c.Context, bn uint64) (*c.Block, error) {
-	// try getting the finalized block from the cache
-	body, err := getFinalizedBlockFromCache(ctxt, bn)
-	if err != nil {
-		log.Debugf("block %d not in cache", bn)
-	} else if body != nil {
-		log.Infof("****** block %d served from cache", bn)
-		block, perr := parseBlock(body, bn)
-		if perr == nil {
-			return block, nil
-		}
-		// hmm .. maybe the cached copy was corrupted .. fetch again and retry
-		perr = fmt.Errorf("failed to parse cached block #%d, %w", bn, perr)
-		log.Error(perr)
+	if block := getCachedBlock(ctxt, bn); block != nil {
+		return block, nil
 	}
 
 	// not found in cache (or the cached copy is unusable) -- get it from the
 	// ethereum jsonrpc API provider
-	body, err = fetchBlock(ctxt, bn)
+	body, err := fetchBlock(ctxt, bn)
 	if err != nil {
 		return nil, err
 	}
@@ -68,11 +59,76 @@ func GetBlock(ctxt c.Context, bn uint64) (*c.Block, error) {
 
 	// only persist block data that parsed and validated successfully, a bogus
 	// body would poison the cache permanently
-	if err := writeBlockToFile(ctxt, bn, body); err != nil {
-		return nil, err
-	}
+	writeBlockToFile(ctxt, bn, body)
 
 	return block, nil
+}
+
+// getCachedBlock returns the cached copy of block bn, or nil if there is none
+// or it cannot be trusted; the caller then fetches the block from the jsonrpc
+// API provider. The cache only saves bandwidth, so nothing about it -- a read
+// error included -- may fail the block.
+//
+// A cached copy is never used on its own word: the cache directory comes from
+// the environment and anyone able to write to it could otherwise feed
+// fabricated blocks to the crawlers. Its hash, timestamp (it prices the ETH
+// donations) and ordered transaction hashes must match the provider's header
+// of the same block, fetched without the transaction bodies. That rejects a
+// substituted, stale, truncated or corrupted copy and any added, removed or
+// reordered transaction. It does not re-hash the transaction bodies, so a
+// copy whose transaction fields were doctored under their genuine hashes is
+// not caught: the directory must be as well protected as the binary.
+func getCachedBlock(ctxt c.Context, bn uint64) *c.Block {
+	body, err := getFinalizedBlockFromCache(ctxt, bn)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			log.Debugf("block %d not in cache", bn)
+		} else {
+			log.Warnf("failed to read cached block #%d, %v", bn, err)
+		}
+		return nil
+	}
+	if body == nil {
+		return nil
+	}
+	block, err := parseBlock(body, bn)
+	if err != nil {
+		// hmm .. maybe the cached copy was corrupted .. fetch again
+		log.Warnf("failed to parse cached block #%d, %v", bn, err)
+		return nil
+	}
+	header, _, err := fetchFinalizedBlock(ctxt, bn)
+	if err != nil {
+		log.Warnf("failed to fetch the header of cached block #%d, %v", bn, err)
+		return nil
+	}
+	if err = matchHeader(block, header); err != nil {
+		log.Warnf("cached block #%d does not match the provider's, discarding it, %v", bn, err)
+		return nil
+	}
+	log.Infof("****** block %d served from cache", bn)
+	return block
+}
+
+// matchHeader reports how block b differs from the header h the jsonrpc API
+// provider reports for the same block, nil if it does not. The block numbers
+// were validated by the parsers already.
+func matchHeader(b *c.Block, h *c.FinalizedBlock) error {
+	if c.NormalizeHash(b.Hash) != c.NormalizeHash(h.Hash) {
+		return fmt.Errorf("block hash %s, the provider has %s", b.Hash, h.Hash)
+	}
+	if !b.Timestamp.Equal(h.Timestamp) {
+		return fmt.Errorf("block time %v, the provider has %v", b.Timestamp, h.Timestamp)
+	}
+	if len(b.Transactions) != len(h.Transactions) {
+		return fmt.Errorf("%d transactions, the provider has %d", len(b.Transactions), len(h.Transactions))
+	}
+	for i, tx := range b.Transactions {
+		if c.NormalizeHash(tx.Hash) != c.NormalizeHash(h.Transactions[i]) {
+			return fmt.Errorf("transaction #%d is %s, the provider has %s", i, tx.Hash, h.Transactions[i])
+		}
+	}
+	return nil
 }
 
 // parseBlock parses the response to an `eth_getBlockByNumber` request for
@@ -105,7 +161,22 @@ func parseBlock(body []byte, bn uint64) (*c.Block, error) {
 	return &b, nil
 }
 
+// GetFinalizedBlock fetches the header of block blockNumber -- the block data
+// without the transaction bodies, the transactions are listed by hash.
 func GetFinalizedBlock(ctxt c.Context, blockNumber uint64) (*c.FinalizedBlock, error) {
+	fb, body, err := fetchFinalizedBlock(ctxt, blockNumber)
+	if err != nil {
+		return nil, err
+	}
+	// only persist block data that parsed successfully. A header is never
+	// written to the block cache, which serves full blocks (see GetBlock).
+	writeDebugBlock(ctxt, blockNumber, body)
+	return fb, nil
+}
+
+// fetchFinalizedBlock fetches and validates the header of block blockNumber;
+// the raw response is returned as well.
+func fetchFinalizedBlock(ctxt c.Context, blockNumber uint64) (*c.FinalizedBlock, []byte, error) {
 	request := EthGetBlockByNumberRequest{
 		JsonRPC: "2.0",
 		Method:  "eth_getBlockByNumber",
@@ -114,7 +185,7 @@ func GetFinalizedBlock(ctxt c.Context, blockNumber uint64) (*c.FinalizedBlock, e
 	}
 	requestBytes, err := json.Marshal(request)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	params := c.HTTPParams{
@@ -124,26 +195,24 @@ func GetFinalizedBlock(ctxt c.Context, blockNumber uint64) (*c.FinalizedBlock, e
 	}
 	body, err := c.HTTPPost(params)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	fb, err := parseFinalizedBlock(body)
+	fb, err := parseFinalizedBlock(body, blockNumber)
 	if err != nil {
 		err = fmt.Errorf("failed to parse finalized block #%d, %w", blockNumber, err)
 		log.Error(err)
-		return nil, err
+		return nil, nil, err
 	}
-
-	// only persist block data that parsed successfully
-	err = writeBlockToFile(ctxt, blockNumber, body)
-	if err != nil {
-		return nil, err
-	}
-
-	return fb, nil
+	return fb, body, nil
 }
 
-func parseFinalizedBlock(body []byte) (*c.FinalizedBlock, error) {
+// parseFinalizedBlock parses the (header only) response to an
+// `eth_getBlockByNumber` request for block `bn`. It validates the response the
+// way parseBlock does: a `null` result or a response carrying a different
+// block is rejected rather than handed to a caller that may trust the
+// requested block number.
+func parseFinalizedBlock(body []byte, bn uint64) (*c.FinalizedBlock, error) {
 	type fblock struct {
 		c.FinalizedBlock
 		HexSeconds string `json:"timestamp"`
@@ -158,6 +227,9 @@ func parseFinalizedBlock(body []byte) (*c.FinalizedBlock, error) {
 	if err != nil {
 		return nil, err
 	}
+	if resp.Block.Hash == "" {
+		return nil, fmt.Errorf("no data for block #%d", bn)
+	}
 	seconds, err := c.HexStringToDecimal(resp.Block.HexSeconds)
 	if err != nil {
 		err = fmt.Errorf("failed to convert block timestamp, %w", err)
@@ -168,9 +240,12 @@ func parseFinalizedBlock(body []byte) (*c.FinalizedBlock, error) {
 		err = fmt.Errorf("failed to convert block number, %w", err)
 		return nil, err
 	}
-	bn, err := c.ToUint64(number, "block number")
+	rbn, err := c.ToUint64(number, "block number")
 	if err != nil {
 		return nil, err
+	}
+	if rbn != bn {
+		return nil, fmt.Errorf("block number mismatch, wanted #%d, got #%d (%s)", bn, rbn, resp.Block.Hash)
 	}
 	ts := time.Unix(seconds.IntPart(), 0)
 	result := c.FinalizedBlock{
@@ -178,7 +253,7 @@ func parseFinalizedBlock(body []byte) (*c.FinalizedBlock, error) {
 		GasLimit:      resp.Block.GasLimit,
 		GasUsed:       resp.Block.GasUsed,
 		Hash:          resp.Block.Hash,
-		Number:        bn,
+		Number:        rbn,
 		ReceiptsRoot:  resp.Block.ReceiptsRoot,
 		Size:          resp.Block.Size,
 		StateRoot:     resp.Block.StateRoot,

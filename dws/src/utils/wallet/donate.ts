@@ -1,4 +1,3 @@
-import { toWei } from "web3-utils";
 import {
   AvailableToken,
   AvailableWallet,
@@ -22,13 +21,44 @@ import {
   getContract,
   isAddress,
   isHex,
-  parseEther,
   parseUnits,
+  toHex,
 } from "viem";
 import { Maybe } from "@/utils";
 import Decimal from "decimal.js";
 import toast from "react-hot-toast";
 import { NOT_ENOUGH_ERR, NO_BALANCE_ERR } from "../const";
+
+/**
+ * Convert a donation amount to an exact integer amount of the token's base
+ * units (wei for ETH). parseUnits silently rounds extra decimals, so an amount
+ * more precise than the token allows is rejected instead.
+ *
+ * @param amount [number] the amount in whole tokens
+ * @param decimals [number] the token decimals
+ * @returns the base-unit amount, or null (with a toast) if it is not usable
+ */
+const toBaseUnits = (amount: number, decimals: number): Maybe<bigint> => {
+  if (!Number.isFinite(amount)) {
+    toast.error("Invalid amount");
+    return null;
+  }
+
+  // Decimal prints plain notation; Number.toString may use an exponent
+  const value = new Decimal(amount);
+  if (value.decimalPlaces() > decimals) {
+    toast.error(`The amount can have at most ${decimals} decimal places`);
+    return null;
+  }
+
+  const units = parseUnits(value.toFixed(), decimals);
+  if (units <= BigInt(0)) {
+    toast.error("The amount input is too small to make a transaction");
+    return null;
+  }
+
+  return units;
+};
 
 const getContractData = (
   receiver: string,
@@ -48,9 +78,8 @@ const getContractData = (
     type: "function",
   };
 
-  const contractAmount = new Decimal(amount).mul(new Decimal(10).pow(decimals));
-  if (contractAmount.lessThanOrEqualTo(0)) {
-    toast.error("The amount input is too small to make a transaction");
+  const contractAmount = toBaseUnits(amount, decimals);
+  if (contractAmount == null) {
     return null;
   }
 
@@ -163,13 +192,18 @@ export const donateETH = async (
     return null;
   }
 
+  const value = toBaseUnits(amount, 18);
+  if (value == null) {
+    return null;
+  }
+
   return await ethereum.request({
     method: "eth_sendTransaction",
     params: [
       {
         from,
         to: receiver,
-        value: parseInt(toWei(amount, "ether")).toString(16),
+        value: toHex(value),
         // gasLimit: '0x5028', // Customizable by the user during MetaMask confirmation.
         // maxPriorityFeePerGas: '0x3b9aca00', // Customizable by the user during MetaMask confirmation.
         // maxFeePerGas: '0x2540be400', // Customizable by the user during MetaMask confirmation.
@@ -188,11 +222,16 @@ export const donateETHWagmi = async (
     return null;
   }
 
+  const value = toBaseUnits(amount, 18);
+  if (value == null) {
+    return null;
+  }
+
   // with a chainId wagmi refuses to send if the wallet is on another chain
   const txConfig = await prepareSendTransaction({
     chainId,
     to: receiver,
-    value: parseEther(amount.toString()),
+    value,
   });
 
   const { hash } = await sendTransaction(txConfig);
@@ -250,13 +289,18 @@ export const donateERCWagmi = async (
     return null;
   }
 
+  const units = toBaseUnits(amount, tokenInfo.decimals);
+  if (units == null) {
+    return null;
+  }
+
   // with a chainId wagmi refuses to send if the wallet is on another chain
   const { request } = await prepareWriteContract({
     chainId,
     address: tokenInfo.contractAddress as any,
     abi: erc20ABI,
     functionName: "transfer",
-    args: [receiver, parseUnits(amount.toString(), tokenInfo.decimals)],
+    args: [receiver, units],
   });
 
   const { hash } = await writeContract(request);

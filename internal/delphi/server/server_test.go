@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -102,6 +103,68 @@ func TestVerifySigWrongSigner(t *testing.T) {
 	assert.False(t, verifySig(crypto.PubkeyToAddress(other.PublicKey).Hex(), msg, sig))
 	// a valid signature over a different message must not authenticate
 	assert.False(t, verifySig(crypto.PubkeyToAddress(key.PublicKey).Hex(), "affiliate code, 2023-10-23 18:45:19+00:00", sig))
+}
+
+// AUD2-14: (r, N-s) with the recovery id flipped recovers the same address
+// but is not the signature a wallet produces (EIP-2 low s)
+func TestVerifySigRejectsHighS(t *testing.T) {
+	const msg = "wallet connection, 2023-10-23 18:45:19+00:00"
+	key, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	addr := crypto.PubkeyToAddress(key.PublicKey).Hex()
+
+	sig, err := crypto.Sign(accounts.TextHash([]byte(msg)), key)
+	require.NoError(t, err)
+	high := make([]byte, len(sig))
+	copy(high, sig)
+	s := new(big.Int).Sub(crypto.S256().Params().N, new(big.Int).SetBytes(sig[32:64]))
+	s.FillBytes(high[32:64])
+	high[crypto.RecoveryIDOffset] ^= 1
+
+	// the variant is a valid signature of the same address to SigToPub
+	pk, err := crypto.SigToPub(accounts.TextHash([]byte(msg)), high)
+	require.NoError(t, err)
+	require.Equal(t, addr, crypto.PubkeyToAddress(*pk).Hex())
+
+	for _, v := range []byte{0, 27} {
+		low, hi := make([]byte, len(sig)), make([]byte, len(high))
+		copy(low, sig)
+		copy(hi, high)
+		low[crypto.RecoveryIDOffset] += v
+		hi[crypto.RecoveryIDOffset] += v
+		assert.True(t, verifySig(addr, msg, hexutil.Encode(low)), "low s, v offset %d", v)
+		assert.False(t, verifySig(addr, msg, hexutil.Encode(hi)), "high s, v offset %d", v)
+	}
+	// and the fixed wallet vector (v = 27) with its high s variant
+	const (
+		wmsg  = "Join the meme army!!"
+		wsig  = "0xf689927d8f85c4f11b5b7ff62cfe9c8631f1373d3fe74a168031d23a7b7faf6903cfaed61f9fd153c506ffe3e1fd912fb42271859d6307239d36272ed00947da1b"
+		wfrom = "0xb938f65dfe303edf96a511f1e7e3190f69036860"
+	)
+	wb := hexutil.MustDecode(wsig)
+	require.True(t, verifySig(wfrom, wmsg, wsig))
+	new(big.Int).Sub(crypto.S256().Params().N, new(big.Int).SetBytes(wb[32:64])).FillBytes(wb[32:64])
+	wb[crypto.RecoveryIDOffset] ^= 1 // 27 <-> 28
+	assert.False(t, verifySig(wfrom, wmsg, hexutil.Encode(wb)))
+}
+
+// r and s must lie in [1, N)
+func TestVerifySigRejectsOutOfRangeValues(t *testing.T) {
+	const msg = "wallet connection, 2023-10-23 18:45:19+00:00"
+	key, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	addr := crypto.PubkeyToAddress(key.PublicKey).Hex()
+	sig, err := crypto.Sign(accounts.TextHash([]byte(msg)), key)
+	require.NoError(t, err)
+
+	zeroR := make([]byte, len(sig))
+	copy(zeroR, sig)
+	clear(zeroR[:32])
+	assert.False(t, verifySig(addr, msg, hexutil.Encode(zeroR)))
+	badV := make([]byte, len(sig))
+	copy(badV, sig)
+	badV[crypto.RecoveryIDOffset] = 2
+	assert.False(t, verifySig(addr, msg, hexutil.Encode(badV)))
 }
 
 func TestFormMsgWalletConnection(t *testing.T) {
@@ -640,6 +703,34 @@ func TestPageParams(t *testing.T) {
 		_, offset = pageParams(api.UserDataParams{Offset: &bad})
 		assert.Equal(t, 0, offset, "offset %d", bad)
 	}
+}
+
+// AUD2-10: an offset above the cap is rejected before the database is
+// touched (the server has none here)
+func TestUserDataRejectsAnOffsetOverTheCap(t *testing.T) {
+	const addr = "0xDEd1Fe6B3f61c8F1d874bb86F086D10FFc3F0154"
+	req := httptest.NewRequest(http.MethodGet, "/user/data/"+addr, nil)
+	rec := httptest.NewRecorder()
+	ctx := echo.New().NewContext(req, rec)
+
+	over := MaxUserDataOffset + 1
+	require.NoError(t, NewDelphiServer(nil).UserData(ctx, addr, api.UserDataParams{Offset: &over}))
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	var cerr api.Error
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &cerr))
+	assert.Equal(t, api.Error{Code: 118, Message: msgInvalidRequest}, cerr)
+}
+
+// the handler re-applies the offset cap of api/delphi.yaml; the two must not
+// drift
+func TestUserDataOffsetCapMatchesTheSpec(t *testing.T) {
+	swagger, err := api.GetSwagger()
+	require.NoError(t, err)
+	op := swagger.Paths.Find("/user/data/{address}").Get
+	p := op.Parameters.GetByInAndName("query", "offset")
+	require.NotNil(t, p)
+	require.NotNil(t, p.Schema.Value.Max)
+	assert.EqualValues(t, MaxUserDataOffset, *p.Schema.Value.Max)
 }
 
 // the referral code is only handed out over the signature protected

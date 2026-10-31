@@ -181,6 +181,54 @@ func (suite *TxsSuite) TestMixedCaseTxIsNormalized() {
 	assert.True(suite.T(), decimal.RequireFromString("224.990000").Equal(decimal.RequireFromString(txs[1].Value)))
 }
 
+// #248: the erc-20 transfer selector is matched case-insensitively, upper or
+// mixed case calldata is a donation all the same
+func (suite *TxsSuite) TestUpperCaseERC20InputIsRecognized() {
+	const (
+		receiver = "0x4667a044543e7f1b7d3a4b88396e024be0e34f36"
+		contract = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+		// erc-20 transfer of 224.99 USDC to `receiver`
+		input = "0xA9059CBB0000000000000000000000004667A044543E7F1B7D3A4B88396E024BE0E34F36000000000000000000000000000000000000000000000000000000000D691330"
+	)
+	ctxt := c.Context{
+		ABI:           suite.abi,
+		ReceivingAddr: receiver,
+		StableCoins: map[string]c.ERC20{
+			contract: {Asset: "usdc", Address: contract, Scale: 6},
+		},
+	}
+	block := c.Block{
+		Hash:      "0xbbbb111111111111111111111111111111111111111111111111111111111111",
+		Number:    18352138,
+		Timestamp: time.Unix(1697328959, 0).UTC(),
+		Transactions: []c.Transaction{
+			{
+				TXH:   c.TXH{Hash: "0xaaaa222222222222222222222222222222222222222222222222222222222222"},
+				From:  "0xcccc111111111111111111111111111111111111",
+				To:    contract,
+				Value: "0x0",
+				Input: input,
+			},
+			{
+				// a plain ETH transfer with upper case empty calldata
+				TXH:   c.TXH{Hash: "0xaaaa333333333333333333333333333333333333333333333333333333333333"},
+				From:  "0xcccc111111111111111111111111111111111111",
+				To:    receiver,
+				Value: "0x2386f26fc10000",
+				Input: "0X",
+			},
+		},
+	}
+
+	txs, err := filterTransactions(ctxt, block)
+	suite.Require().Nil(err)
+	suite.Require().Equal(2, len(txs))
+	assert.Equal(suite.T(), "usdc", txs[0].Asset)
+	assert.Equal(suite.T(), "224.9900000000", txs[0].Value)
+	assert.Equal(suite.T(), "eth", txs[1].Asset)
+	assert.Equal(suite.T(), "0.01000000", txs[1].Value)
+}
+
 func TestTxsSuite(t *testing.T) {
 	s := new(TxsSuite)
 	s.path = "testdata/18352138.json"

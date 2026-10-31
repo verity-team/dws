@@ -16,6 +16,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"sync"
@@ -27,20 +28,22 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 	c "github.com/verity-team/dws/internal/common"
+	"github.com/verity-team/dws/internal/dbtest"
 )
 
-const defaultTestDSN = "host=localhost port=27501 user=postgres password=postgres dbname=dwsdb sslmode=disable"
+// TestMain serializes this package with the other database integration test
+// packages: they share the database and truncate each other's tables, see
+// dbtest.Run.
+func TestMain(m *testing.M) {
+	os.Exit(dbtest.Run(m))
+}
 
 // testDB connects to the test database and skips the calling test if no
 // database is reachable.
 func testDB(t *testing.T) *sqlx.DB {
 	t.Helper()
 
-	dsn := os.Getenv("DWS_TEST_DB_DSN")
-	if dsn == "" {
-		dsn = defaultTestDSN
-	}
-	dbh, err := sqlx.Open("postgres", dsn)
+	dbh, err := sqlx.Open("postgres", dbtest.DSN())
 	require.NoError(t, err)
 	// the concurrency test needs a connection per writer plus the blocker
 	// and the monitoring queries
@@ -124,6 +127,20 @@ func donationStatus(t *testing.T, dbh *sqlx.DB, hash string) string {
 	require.NoError(t, err)
 
 	return status
+}
+
+// failedTxBlock returns the block number and hash failed_tx holds for hash.
+func failedTxBlock(t *testing.T, dbh *sqlx.DB, hash string) (sql.NullInt64, sql.NullString) {
+	t.Helper()
+
+	var (
+		bn sql.NullInt64
+		bh sql.NullString
+	)
+	err := dbh.QueryRowx(`SELECT block_number, block_hash FROM failed_tx WHERE tx_hash=$1`, hash).Scan(&bn, &bh)
+	require.NoError(t, err)
+
+	return bn, bh
 }
 
 func failedTxCount(t *testing.T, dbh *sqlx.DB, hash string) int {
@@ -297,6 +314,10 @@ func TestFailTxMarksDonationAsFailedAndUpdatesStats(t *testing.T) {
 	// the donation row is retained
 	require.Equal(t, "failed", donationStatus(t, dbh, failedHash))
 	require.Equal(t, 1, failedTxCount(t, dbh, failedHash))
+	// a transaction failed against its finalized block records that block
+	bn, bh := failedTxBlock(t, dbh, failedHash)
+	require.Equal(t, sql.NullInt64{Int64: 1, Valid: true}, bn)
+	require.Equal(t, sql.NullString{String: "0xfinalized", Valid: true}, bh)
 	total, tokens := donationStats(t, dbh)
 	require.Equal(t, "100.00", total)
 	require.EqualValues(t, 1000, tokens)
@@ -684,6 +705,10 @@ func TestFailTxForDroppedTxRecordsDonationBlockTime(t *testing.T) {
 	var ftBT time.Time
 	require.NoError(t, dbh.Get(&ftBT, `SELECT block_time FROM failed_tx WHERE tx_hash=$1`, hash))
 	require.WithinDuration(t, bt, ftBT, time.Second)
+	// #250: ... and no block: NULL, not block 0 (a real block) and hash ''
+	bn, bh := failedTxBlock(t, dbh, hash)
+	require.False(t, bn.Valid, "block_number of a dropped tx must be NULL")
+	require.False(t, bh.Valid, "block_hash of a dropped tx must be NULL")
 
 	// the phantom donation no longer counts towards the campaign totals
 	total, tokens := donationStats(t, dbh)
@@ -1741,4 +1766,41 @@ func TestInitTokenPriceAcceptsATierPrice(t *testing.T) {
 
 	require.NoError(t, InitTokenPrice(ctxt))
 	require.Equal(t, []string{"0.00100", "0.00200"}, tokenPrices(t, dbh))
+}
+
+// #252: a campaign total over donation_stats.total NUMERIC(12,2) stops the
+// statistics write with a clear error and writes nothing; one at the ceiling
+// is written as is
+func TestUpdateDonationStatsBoundsTheTotal(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	ctxt := testContext(dbh)
+
+	update := func() error {
+		dtx, err := dbh.Beginx()
+		require.NoError(t, err)
+		defer dtx.Rollback() // nolint:errcheck
+		if _, _, err = lockDonationStats(dtx); err != nil {
+			return err
+		}
+		if _, _, _, err = updateDonationStats(dtx, ctxt); err != nil {
+			return err
+		}
+		return dtx.Commit()
+	}
+
+	insertDonation(t, dbh, "0xeeee111111111111111111111111111111111111111111111111111111111111", "confirmed", "6000000000.00", 1000)
+	insertDonation(t, dbh, "0xeeee222222222222222222222222222222222222222222222222222222222222", "confirmed", "3999999999.99", 1000)
+	require.NoError(t, update())
+	total, tokens := donationStats(t, dbh)
+	require.Equal(t, "9999999999.99", total)
+	require.EqualValues(t, 2000, tokens)
+
+	insertDonation(t, dbh, "0xeeee333333333333333333333333333333333333333333333333333333333333", "confirmed", "0.01", 10)
+	err := update()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "the confirmed donations total 10000000000.00 USD, which does not fit donation_stats.total NUMERIC(12,2)")
+	total, tokens = donationStats(t, dbh)
+	require.Equal(t, "9999999999.99", total)
+	require.EqualValues(t, 2000, tokens)
 }

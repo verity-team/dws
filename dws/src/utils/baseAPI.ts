@@ -1,7 +1,6 @@
-import { Nullable, Maybe } from "@/utils";
+import { Nullable } from "@/utils";
 import { Revalidator } from "swr";
 import { getExponentialWaitTime } from "./utils";
-import { DWS_AT_KEY } from "./const";
 import { baseNextClientRequest } from "./baseApiV2";
 
 export enum HttpMethod {
@@ -68,45 +67,6 @@ export const baseRequest = async (
   return response;
 };
 
-export const baseFormRequest = async (
-  url: string,
-  config: RequestConfig & { auth: boolean },
-  body: FormData
-): Promise<Maybe<Response>> => {
-  const { host, timeout } = config;
-
-  // Use signal to avoid running the request for too long
-  // Docs for canceling fetch API request
-  // https://javascript.info/fetch-abort
-  const controller = new AbortController();
-  const timerId = setTimeout(() => controller.abort(), timeout);
-
-  const headers = new Headers();
-  if (config.auth) {
-    const accessToken = localStorage.getItem(DWS_AT_KEY);
-    if (accessToken == null) {
-      return null;
-    }
-
-    headers.append("Authorization", "Bearer " + accessToken);
-  }
-
-  const requestConfig = {
-    method: "POST",
-    headers,
-    body,
-    signal: controller.signal,
-  };
-
-  console.log(
-    `Requesting to ${host}${url} with config ${JSON.stringify(requestConfig)}`
-  );
-
-  const response = await fetch(`${host}${url}`, requestConfig);
-  clearTimeout(timerId);
-  return response;
-};
-
 /**
  *
  * @param url
@@ -142,8 +102,7 @@ export const clientBaseRequest = async (
   url: string,
   method: HttpMethod,
   body?: any,
-  host?: string,
-  auth?: boolean
+  host?: string
 ): Promise<Nullable<Response>> => {
   // Read configurations
 
@@ -160,43 +119,7 @@ export const clientBaseRequest = async (
     timeout = 10000;
   }
 
-  if (auth) {
-    const headers = getDefaultHeaders();
-    const accessToken = localStorage.getItem(DWS_AT_KEY);
-    if (!accessToken) {
-      console.log("Cannot send auth request without access token");
-      return null;
-    }
-    headers.append("Authorization", "Bearer " + accessToken);
-    return baseRequest(url, method, { host: apiHost, timeout }, body, headers);
-  }
-
   return baseRequest(url, method, { host: apiHost, timeout }, body);
-};
-
-export const clientFormRequest = async (
-  url: string,
-  body: FormData,
-  host?: string,
-  auth?: boolean
-): Promise<Maybe<Response>> => {
-  const apiHost = host ?? window.location.origin;
-  if (apiHost == null) {
-    console.log("API_URL not set");
-    return null;
-  }
-
-  let timeout: number = Number(process.env.NEXT_PUBLIC_API_TIMEOUT);
-  if (isNaN(timeout)) {
-    console.log("API_TIMEOUT not set. Using fallback value");
-    timeout = 10000;
-  }
-
-  return await baseFormRequest(
-    url,
-    { host: apiHost, timeout, auth: !!auth },
-    body
-  );
 };
 
 export const swrFetcher = async (url: string) => {

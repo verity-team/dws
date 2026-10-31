@@ -19,6 +19,23 @@ export const getDefaultJsonHeaders = (jwt?: string): Headers => {
   return headers;
 };
 
+const SENSITIVE_HEADERS = new Set([
+  "authorization",
+  "delphi-key",
+  "delphi-ts",
+  "delphi-signature",
+]);
+
+const redactHeaders = (headers: Headers): Record<string, string> => {
+  const redacted: Record<string, string> = {};
+  headers.forEach((value, key) => {
+    redacted[key] = SENSITIVE_HEADERS.has(key.toLowerCase())
+      ? "[REDACTED]"
+      : value;
+  });
+  return redacted;
+};
+
 export const baseRequest = async (
   method: HttpMethod,
   { path, headers, payload, json }: RequestConfig
@@ -53,11 +70,13 @@ export const baseRequest = async (
     controller.abort();
   }, timeout);
 
+  // Never log credentials: auth headers are redacted and the body (e.g. the
+  // admin password) is left out
   console.log(
     "Requesting to",
     path,
     "with config",
-    JSON.stringify(requestConfig, null, 2)
+    JSON.stringify({ method, headers: redactHeaders(requestHeaders) }, null, 2)
   );
 
   try {

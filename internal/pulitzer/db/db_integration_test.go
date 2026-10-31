@@ -25,21 +25,23 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 	c "github.com/verity-team/dws/internal/common"
+	"github.com/verity-team/dws/internal/dbtest"
 	"github.com/verity-team/dws/internal/pulitzer/data"
 )
 
-const defaultTestDSN = "host=localhost port=27501 user=postgres password=postgres dbname=dwsdb sslmode=disable"
+// TestMain serializes this package with the other database integration test
+// packages: they share the database and truncate each other's tables, see
+// dbtest.Run.
+func TestMain(m *testing.M) {
+	os.Exit(dbtest.Run(m))
+}
 
 // testDB connects to the test database and skips the calling test if no
 // database is reachable.
 func testDB(t *testing.T) *sqlx.DB {
 	t.Helper()
 
-	dsn := os.Getenv("DWS_TEST_DB_DSN")
-	if dsn == "" {
-		dsn = defaultTestDSN
-	}
-	dbh, err := sqlx.Open("postgres", dsn)
+	dbh, err := sqlx.Open("postgres", dbtest.DSN())
 	require.NoError(t, err)
 	dbh.SetMaxOpenConns(5)
 

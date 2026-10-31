@@ -1,4 +1,4 @@
-import { clientFormRequest, getDefaultHeaders } from "@/utils/baseAPI";
+import { getDefaultHeaders } from "@/utils/baseAPI";
 import { MemeUpload, MemeUploadDTO } from "./meme.type";
 import { Maybe, PaginationRequest, PaginationResponse } from "@/utils";
 import { MemeFilter } from "@/components/galactica/meme/meme.type";

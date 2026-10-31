@@ -358,6 +358,18 @@ func TestGetContextValidConfig(t *testing.T) {
 			sp:    `[{"limit": 1, "price": "0.00100000"}, {"limit": 2, "price": "9999999999.99999"}]`,
 		},
 		{
+			// a flat ladder is not ambiguous: the price simply stays put
+			name:  "equal prices in consecutive tiers",
+			erc20: scJSON,
+			sp:    `[{"limit": 1, "price": "0.001"}, {"limit": 2, "price": "0.001"}, {"limit": 3, "price": "0.002"}]`,
+		},
+		{
+			// getSaleParams sorts the tiers by limit before they are validated
+			name:  "tiers out of order",
+			erc20: scJSON,
+			sp:    `[{"limit": 3, "price": "0.003"}, {"limit": 1, "price": "0.001"}, {"limit": 2, "price": "0.002"}]`,
+		},
+		{
 			name:  "lower case contract address",
 			erc20: `[{"asset": "usdc", "address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "scale": 6}]`,
 			sp:    spJSON,
@@ -394,6 +406,19 @@ func TestGetContextInvalidConfig(t *testing.T) {
 			erc20: scJSON,
 			sp:    `{`,
 			want:  "error decoding sale param JSON data",
+		},
+		{
+			name:  "stable coins share a contract address",
+			erc20: `[{"asset": "usdc", "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "scale": 6}, {"asset": "usdt", "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "scale": 6}]`,
+			sp:    spJSON,
+			want:  "erc-20 entries 'usdc' and 'usdt' share the contract address '0xdac17f958d2ee523a2206206994597c13d831ec7'",
+		},
+		{
+			// the address is compared lower-cased
+			name:  "stable coins share a contract address in different case",
+			erc20: `[{"asset": "usdt", "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "scale": 6}, {"asset": "usdt", "address": "0xdac17f958d2ee523a2206206994597c13d831ec7", "scale": 6}]`,
+			sp:    spJSON,
+			want:  "share the contract address '0xdac17f958d2ee523a2206206994597c13d831ec7'",
 		},
 		{
 			name:  "no stable coins",
@@ -549,6 +574,26 @@ func TestGetContextInvalidConfig(t *testing.T) {
 			erc20: scJSON,
 			sp:    `[{"limit": -1, "price": "0.001"}]`,
 			want:  "token limit must be greater than zero, got -1",
+		},
+		{
+			// a transposed digit: every tier past the first would be sold at
+			// the first tier's price, the ladder never moves down
+			name:  "sale param prices descend",
+			erc20: scJSON,
+			sp:    `[{"limit": 1050000000, "price": "0.002"}, {"limit": 2625000000, "price": "0.001"}]`,
+			want:  "sale parameter #2 (limit 2625000000): token prices must not decrease, got 0.001 after 0.002",
+		},
+		{
+			name:  "sale param prices descend after sorting by limit",
+			erc20: scJSON,
+			sp:    `[{"limit": 2625000000, "price": "0.001"}, {"limit": 1050000000, "price": "0.002"}]`,
+			want:  "token prices must not decrease, got 0.001 after 0.002",
+		},
+		{
+			name:  "sale param limits are duplicated",
+			erc20: scJSON,
+			sp:    `[{"limit": 1050000000, "price": "0.001"}, {"limit": 1050000000, "price": "0.002"}]`,
+			want:  "sale parameter #2: token limits must be strictly ascending, got 1050000000 after 1050000000",
 		},
 	}
 
