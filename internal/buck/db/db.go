@@ -511,7 +511,7 @@ func InitTokenPrice(ctxt c.Context) (err error) {
 	}
 	if !ctxt.IsTierPrice(price) {
 		err = fmt.Errorf(
-			"the token price on record (%s) is not the price of any DWS_SALE_PARAMS tier %v: fix DWS_SALE_PARAMS, or record the price of the current tier -- see 'token price at startup' in the README",
+			"the token price on record (%s) is not the price of any DWS_SALE_PARAMS tier %v: fix DWS_SALE_PARAMS, or record the price of the current tier -- see 'token price at startup' in docs/operations.md",
 			price.StringFixed(5), ctxt.SaleParams)
 		log.Error(err)
 		return err
@@ -693,14 +693,14 @@ func updateDonationStats(dtx *sqlx.Tx, ctxt c.Context) (decimal.Decimal, decimal
 // postgres refuses a larger total with a bare `numeric field overflow` that
 // rolls back the block or confirmation it is part of. There is no row to
 // reject here: the total is the campaign's, so the crawler stops until an
-// operator widens the column (see the README), but with an error that says
+// operator widens the column (see docs/architecture.md), but with an error that says
 // so.
 func checkDonationStatsTotal(total decimal.Decimal) error {
 	if c.DonationStatsTotalColumn.Fits(total) {
 		return nil
 	}
 	return fmt.Errorf(
-		"the confirmed donations total %s USD, which does not fit donation_stats.total %s: widen the column, see 'donation totals ceiling' in the README",
+		"the confirmed donations total %s USD, which does not fit donation_stats.total %s: widen the column, see 'donation totals ceiling' in docs/architecture.md",
 		total.StringFixed(2), c.DonationStatsTotalColumn)
 }
 

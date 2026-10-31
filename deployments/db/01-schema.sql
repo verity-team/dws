@@ -33,7 +33,7 @@
 -- To wipe and reload a populated (dev) database on purpose, set the override in
 -- the same psql session, e.g.:
 --   psql ... -c "SET dws.allow_destructive_reload='on'" -f deployments/db/01-schema.sql
--- (see README, "database schema changes").
+-- (see docs/database-schema-changes.md).
 DO $$
 DECLARE
     tbl text;
@@ -74,7 +74,7 @@ BEGIN
         END IF;
     END LOOP;
     IF cardinality(populated) > 0 THEN
-        RAISE EXCEPTION 'refusing to load deployments/db/01-schema.sql: the database already holds data (%) and this script DROPs every table. To wipe and reload on purpose, set dws.allow_destructive_reload, e.g. psql -c "SET dws.allow_destructive_reload=''on''" -f deployments/db/01-schema.sql (see README, "database schema changes").', array_to_string(populated, ', ');
+        RAISE EXCEPTION 'refusing to load deployments/db/01-schema.sql: the database already holds data (%) and this script DROPs every table. To wipe and reload on purpose, set dws.allow_destructive_reload, e.g. psql -c "SET dws.allow_destructive_reload=''on''" -f deployments/db/01-schema.sql (see docs/database-schema-changes.md).', array_to_string(populated, ', ');
     END IF;
 END
 $$;

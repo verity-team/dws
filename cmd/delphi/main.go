@@ -45,7 +45,7 @@ const (
 	shutdownTimeout = 10 * time.Second
 
 	// Per-IP rate limit. This is an *in-process, per-instance* budget, not a
-	// global one -- see the README. The numbers are deliberately generous: the
+	// global one -- see docs/architecture.md. The numbers are deliberately generous: the
 	// donation web site talks to this API from its own (server side) Next.js
 	// route handlers, so in the normal case every legitimate request arrives
 	// from the handful of frontend egress addresses rather than from the end

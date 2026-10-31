@@ -1746,7 +1746,7 @@ func TestInitTokenPriceRejectsAPriceOffTheLadder(t *testing.T) {
 
 	err := InitTokenPrice(ctxt)
 	require.ErrorContains(t, err, "the token price on record (0.00100) is not the price of any DWS_SALE_PARAMS tier")
-	require.ErrorContains(t, err, "'token price at startup' in the README")
+	require.ErrorContains(t, err, "'token price at startup' in docs/operations.md")
 	require.Equal(t, []string{"0.00100"}, tokenPrices(t, dbh))
 }
 

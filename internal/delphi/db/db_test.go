@@ -96,7 +96,8 @@ func updateUserDataFunc(t *testing.T, s string) string {
 }
 
 // AUD4-25: the per-address lock is taken before anything is read, and the
-// README's migration statement is the function the schema defines
+// migration statement in docs/database-schema-changes.md is the function the
+// schema defines
 func TestUpdateUserDataLocksBeforeSumming(t *testing.T) {
 	schema, _ := schemaGuard(t)
 	f := updateUserDataFunc(t, schema)
@@ -106,7 +107,7 @@ func TestUpdateUserDataLocksBeforeSumming(t *testing.T) {
 	assert.Less(t, lock, strings.Index(f, "IF EXISTS"))
 	assert.Less(t, lock, strings.Index(f, "SUM("))
 
-	readme, err := os.ReadFile("../../../README.md")
+	doc, err := os.ReadFile("../../../docs/database-schema-changes.md")
 	require.NoError(t, err)
-	assert.Equal(t, f, updateUserDataFunc(t, string(readme)), "README.md and 01-schema.sql disagree about update_user_data()")
+	assert.Equal(t, f, updateUserDataFunc(t, string(doc)), "docs/database-schema-changes.md and 01-schema.sql disagree about update_user_data()")
 }
