@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/big"
 	"net/http"
 	"os"
 	"strconv"
@@ -45,6 +46,12 @@ const (
 	// DefaultUserDataLimit is the page size used when the caller does not ask
 	// for one.
 	DefaultUserDataLimit = 50
+	// MaxUserDataOffset caps the `offset` of a /user/data/{address} call.
+	// Postgres reads and sorts offset+limit rows to skip the first offset, so
+	// an unbounded offset lets an unauthenticated caller buy ever more work per
+	// request. 100 pages of the largest size is far beyond the donation count
+	// of any real donor address.
+	MaxUserDataOffset = 10000
 	// MaxAffiliateCodeLength is the `maxLength` of `connection_request.code`
 	// in api/delphi.yaml and the width of wallet_connection.code.
 	MaxAffiliateCodeLength = 16
@@ -282,6 +289,13 @@ func (s *DelphiServer) UserData(ctx echo.Context, address string, params api.Use
 		cerr := api.Error{Code: 103, Message: "invalid ethereum address"}
 		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
+	// the request validator enforces the `maximum` of api/delphi.yaml already;
+	// a page that cannot be served is rejected rather than clamped, since
+	// clamping would silently answer with a different page
+	if params.Offset != nil && *params.Offset > MaxUserDataOffset {
+		cerr := getError(118, msgInvalidRequest, "/user/data offset out of range", fmt.Errorf("offset %d > %d", *params.Offset, MaxUserDataOffset))
+		return ctx.JSON(http.StatusBadRequest, cerr)
+	}
 	limit, offset := pageParams(params)
 	udr, err := s.getUserData(address, limit, offset)
 	if err != nil {
@@ -350,6 +364,15 @@ func verifySig(from, msg, sigHex string) bool {
 	// ethereum "black magic" :(
 	if sig[crypto.RecoveryIDOffset] == 27 || sig[crypto.RecoveryIDOffset] == 28 {
 		sig[crypto.RecoveryIDOffset] -= 27
+	}
+	// SigToPub accepts the upper range of s as well (EIP-2): (r, N-s) with the
+	// recovery id flipped is a second valid signature string for the same
+	// message and address. Wallets produce low-s signatures only.
+	r := new(big.Int).SetBytes(sig[:32])
+	s := new(big.Int).SetBytes(sig[32:64])
+	if !crypto.ValidateSignatureValues(sig[crypto.RecoveryIDOffset], r, s, true) {
+		log.Errorf("invalid sig values (sha256:%s), high s or out of range", sigDigest(sigHex))
+		return false
 	}
 
 	pk, err := crypto.SigToPub(msgHash, sig)

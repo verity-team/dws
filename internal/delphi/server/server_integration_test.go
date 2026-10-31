@@ -36,23 +36,24 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/verity-team/dws/api"
+	"github.com/verity-team/dws/internal/dbtest"
 )
 
-const (
-	integrationTestDSN = "host=localhost port=27501 user=postgres password=postgres dbname=dwsdb sslmode=disable"
-	integrationAddress = "0x00000000000000000000000000000000000000ff"
-)
+const integrationAddress = "0x00000000000000000000000000000000000000ff"
+
+// TestMain serializes this package with the other database integration test
+// packages: they share the database and truncate each other's tables, see
+// dbtest.Run.
+func TestMain(m *testing.M) {
+	os.Exit(dbtest.Run(m))
+}
 
 // integrationDB connects to the test database and skips the calling test if no
 // database is reachable.
 func integrationDB(t *testing.T) *sqlx.DB {
 	t.Helper()
 
-	dsn := os.Getenv("DWS_TEST_DB_DSN")
-	if dsn == "" {
-		dsn = integrationTestDSN
-	}
-	dbh, err := sqlx.Open("postgres", dsn)
+	dbh, err := sqlx.Open("postgres", dbtest.DSN())
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

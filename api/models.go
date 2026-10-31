@@ -209,7 +209,7 @@ type UserDataParams struct {
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 
 	// Offset number of donation records to skip; the records are ordered
-	// oldest first
+	// oldest first. An offset above 10000 is rejected with a 400
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
 

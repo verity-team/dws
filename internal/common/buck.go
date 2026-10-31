@@ -607,6 +607,7 @@ func validateStableCoins(scs map[string]ERC20, validAssets map[string]abi.ABI) e
 
 // validateSaleParams makes sure the token sale parameters describe a usable
 // price ladder; the crawler indexes into this slice and divides by the price.
+// sps must be sorted by limit (getSaleParams does that).
 func validateSaleParams(sps []SaleParam) error {
 	if len(sps) == 0 {
 		return errors.New("no token sale parameters configured")
@@ -638,6 +639,24 @@ func validateSaleParams(sps []SaleParam) error {
 				i+1, sp.Limit, sp.Price.String(), TokenPriceColumn)
 		}
 	}
+	// the ladder only ever moves up: NewTokenPrice reports a new price only
+	// when it is greater than the current one and updateTokenPrice never
+	// lowers it. A descending price (a transposed digit) passes every check
+	// above and then silently sells every later tier at the earlier, higher
+	// tier's price; a duplicate limit makes the ladder ambiguous.
+	for i := 1; i < len(sps); i++ {
+		prev, sp := sps[i-1], sps[i]
+		if sp.Limit <= prev.Limit {
+			return fmt.Errorf(
+				"sale parameter #%d: token limits must be strictly ascending, got %d after %d",
+				i+1, sp.Limit, prev.Limit)
+		}
+		if sp.Price.LessThan(prev.Price) {
+			return fmt.Errorf(
+				"sale parameter #%d (limit %d): token prices must not decrease, got %s after %s",
+				i+1, sp.Limit, sp.Price.String(), prev.Price.String())
+		}
+	}
 	return nil
 }
 
@@ -662,6 +681,16 @@ func getStableCoins(erc20Json string) (map[string]ERC20, error) {
 	result := make(map[string]ERC20, len(scs))
 	for _, sc := range scs {
 		addr := strings.ToLower(sc.Address)
+		// the map is keyed by contract address: a second entry for the same
+		// address (a copy-paste slip) would silently overwrite the first and
+		// leave its asset unprocessable, validateStableCoins cannot notice
+		if prev, ok := result[addr]; ok {
+			err = fmt.Errorf(
+				"erc-20 entries '%s' and '%s' share the contract address '%s'",
+				prev.Asset, sc.Asset, addr)
+			log.Error(err)
+			return nil, err
+		}
 		result[addr] = ERC20{
 			Asset:   sc.Asset,
 			Address: addr,

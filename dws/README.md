@@ -20,15 +20,19 @@ npm run dev
 
 - With Docker
 
+`.env` files are not copied into the image. Pass the variables (see
+[Environment variable setup](#environment-variable-setup)) as build args; the
+private ones are also needed at runtime.
+
 ```bash
 # Build the Docker image
-docker build -t dws .
+docker build -t dws --build-arg NEXT_PUBLIC_DONATE_PUBKEY=0x... --build-arg DWS_API_URL=https://... .
 
 # Run the Docker image
-docker run -p 3000:3000 --name dws dws
+docker run -p 3000:3000 -e DWS_API_URL=https://... -e HOST_URL=https://... -e API_TIMEOUT=10000 --name dws dws
 ```
 
-- With Docker Compose
+- With Docker Compose (reads the variables from the shell or `dws/.env`)
 
 ```bash
 docker compose -p dws up --build

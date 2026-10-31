@@ -241,3 +241,35 @@ func TestUnknownPathIsGeneric(t *testing.T) {
 	testEcho(t).ServeHTTP(rec, req)
 	assertGenericError(t, rec, http.StatusNotFound, 116, "no matching operation")
 }
+
+// echo-middleware >= v1.1 answers a known path with an unknown method with a
+// 405 (it used to be a 404); it still takes the generic path
+func TestUnknownMethodIsGeneric(t *testing.T) {
+	req := httptest.NewRequest(http.MethodDelete, "/donation/data", nil)
+	req.RemoteAddr = "192.0.2.24:54321"
+	rec := httptest.NewRecorder()
+	testEcho(t).ServeHTTP(rec, req)
+	assertGenericError(t, rec, http.StatusMethodNotAllowed, 116, "method")
+}
+
+// AUD2-10: the request validator rejects an offset above the cap; one at the
+// cap passes it and reaches the handler (which rejects the address, code 103)
+func TestUserDataOffsetIsCapped(t *testing.T) {
+	for _, tc := range []struct {
+		offset       int
+		status, code int
+	}{
+		{server.MaxUserDataOffset + 1, http.StatusBadRequest, 116},
+		{server.MaxUserDataOffset, http.StatusBadRequest, 103},
+	} {
+		path := "/user/data/0xnotanaddress?offset=" + strconv.Itoa(tc.offset)
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.RemoteAddr = "192.0.2.25:54321"
+		rec := httptest.NewRecorder()
+		testEcho(t).ServeHTTP(rec, req)
+		assert.Equal(t, tc.status, rec.Code, "offset %d", tc.offset)
+		var cerr api.Error
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &cerr), rec.Body.String())
+		assert.Equal(t, tc.code, cerr.Code, "offset %d", tc.offset)
+	}
+}

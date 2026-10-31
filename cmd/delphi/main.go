@@ -196,7 +196,9 @@ func newEcho(swagger *openapi3.T, si api.ServerInterface) *echo.Echo {
 	// recover from panics in downstream middleware/handlers; must be first so
 	// that it also covers the middleware registered below
 	e.Use(echomiddleware.Recover())
-	e.Use(echomiddleware.Logger())
+	// deprecated since echo v4.14 in favour of the slog based RequestLogger;
+	// kept so that the access log format does not change with the upgrade
+	e.Use(echomiddleware.Logger()) //nolint:staticcheck
 
 	e.Use(echomiddleware.BodyLimitWithConfig(blv))
 	e.Use(echomiddleware.Secure())

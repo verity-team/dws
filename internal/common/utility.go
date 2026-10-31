@@ -72,14 +72,16 @@ type Numeric struct {
 	Scale     int32
 }
 
-// The NUMERIC columns buck writes a donation and a token price to, see
-// deployments/db/01-schema.sql. A value that does not fit one of them is not
-// truncated by postgres, it is refused with `numeric field overflow` -- and
-// that error aborts the whole database transaction it occurs in.
+// The NUMERIC columns buck writes a donation, the campaign total and a token
+// price to, see deployments/db/01-schema.sql. A value that does not fit one of
+// them is not truncated by postgres, it is refused with `numeric field
+// overflow` -- and that error aborts the whole database transaction it occurs
+// in.
 var (
-	DonationAmountColumn    = Numeric{Precision: 20, Scale: 10}
-	DonationUSDAmountColumn = Numeric{Precision: 12, Scale: 2}
-	TokenPriceColumn        = Numeric{Precision: 15, Scale: 5}
+	DonationAmountColumn     = Numeric{Precision: 20, Scale: 10}
+	DonationUSDAmountColumn  = Numeric{Precision: 12, Scale: 2}
+	DonationStatsTotalColumn = Numeric{Precision: 12, Scale: 2}
+	TokenPriceColumn         = Numeric{Precision: 15, Scale: 5}
 )
 
 // Fits reports whether postgres accepts v for the column. postgres first

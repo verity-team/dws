@@ -31,7 +31,7 @@ func (suite *TxByHashSuite) SetupTest() {
 }
 
 func (suite *TxByHashSuite) TestSuccess() {
-	txs, err := parseTxByHash(suite.body, nil)
+	txs, err := parseTxByHash(suite.body, minedBatch())
 	assert.Nil(suite.T(), err)
 	assert.Equal(suite.T(), 2, len(txs))
 	tx := txs[0]
@@ -58,7 +58,7 @@ func (suite *TxByHashSuite) TestPendingTxInBatch() {
 	body, err := os.ReadFile("testdata/txbyhash_pending.json")
 	assert.Nil(suite.T(), err)
 
-	txs, err := parseTxByHash(body, nil)
+	txs, err := parseTxByHash(body, droppedBatch())
 	assert.Nil(suite.T(), err)
 	assert.Equal(suite.T(), 3, len(txs))
 
@@ -132,7 +132,7 @@ func (suite *TxByHashSuite) TestAddFBDataToleratesFailedLookup() {
 
 	body, err := os.ReadFile("testdata/txbyhash_pending.json")
 	assert.Nil(suite.T(), err)
-	txs, err := parseTxByHash(body, nil)
+	txs, err := parseTxByHash(body, droppedBatch())
 	assert.Nil(suite.T(), err)
 	assert.Equal(suite.T(), 3, len(txs))
 
@@ -159,6 +159,32 @@ func (suite *TxByHashSuite) TestAddFBDataToleratesFailedLookup() {
 	assert.Equal(suite.T(), c.TxNoFinalizedBlockData, txs[2].Judge(uint64(18459500)))
 }
 
+// a provider answering with a block other than the one requested yields no
+// finalized block data: the transaction is left unjudged, never judged against
+// the wrong block
+func (suite *TxByHashSuite) TestAddFBDataRejectsMismatchedBlock() {
+	fb, err := os.ReadFile("testdata/fb_18459476.json")
+	assert.Nil(suite.T(), err)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(fb)
+	}))
+	defer srv.Close()
+
+	ctxt := c.Context{ETHRPCURL: srv.URL, CrawlerType: c.OldUnconfirmed}
+	got, err := GetFinalizedBlock(ctxt, 18459264)
+	assert.Nil(suite.T(), got)
+	assert.ErrorContains(suite.T(), err, "block number mismatch, wanted #18459264, got #18459476")
+
+	txs, err := parseTxByHash(suite.body, minedBatch())
+	assert.Nil(suite.T(), err)
+	txs = txs[1:]
+	assert.Equal(suite.T(), uint64(18459264), txs[0].BlockNumber)
+	addFBData(ctxt, txs)
+	assert.False(suite.T(), txs[0].FBDataAvailable)
+	assert.Equal(suite.T(), c.TxNoFinalizedBlockData, txs[0].Judge(uint64(18459500)))
+}
+
 // the finalized block does not carry the transaction => it is failed
 func (suite *TxByHashSuite) TestAddFBDataMissingTxIsFailed() {
 	fb, err := os.ReadFile("testdata/fb_18459476.json")
@@ -174,7 +200,7 @@ func (suite *TxByHashSuite) TestAddFBDataMissingTxIsFailed() {
 	}))
 	defer srv.Close()
 
-	txs, err := parseTxByHash(suite.body, nil)
+	txs, err := parseTxByHash(suite.body, minedBatch())
 	assert.Nil(suite.T(), err)
 	txs = txs[:1]
 
@@ -207,7 +233,7 @@ func (suite *TxByHashSuite) TestAddFBDataToleratesHashCasing() {
 	body = strings.ReplaceAll(body, txHash, strings.ToUpper(txHash))
 	body = strings.ReplaceAll(body, blockHash, strings.ToUpper(blockHash))
 
-	txs, err := parseTxByHash([]byte(body), nil)
+	txs, err := parseTxByHash([]byte(body), minedBatch())
 	assert.Nil(suite.T(), err)
 	txs = txs[:1]
 	// the tx hash is normalized on decode: confirmSingleTx/failTx match on
@@ -228,7 +254,13 @@ const (
 	minedTxHash2  = "0x50ddd63a864794c2375281929e025b56ef9356cd188b3b1299daf15fb0e842ca"
 )
 
-// droppedBatch is the batch the `txbyhash_dropped.json` fixture answers: the
+// minedBatch is the batch the `txbyhash.json` fixture answers
+func minedBatch() []c.Hashable {
+	return c.ToHashable([]c.TXH{{Hash: minedTxHash}, {Hash: minedTxHash2}})
+}
+
+// droppedBatch is the batch the `txbyhash_dropped.json` (and
+// `txbyhash_pending.json`, `txbyhash_error.json`) fixture answers: the
 // jsonrpc ids in the response are 1-based indexes into it
 func droppedBatch() []c.Hashable {
 	return c.ToHashable([]c.TXH{{Hash: minedTxHash}, {Hash: droppedTxHash}, {Hash: minedTxHash2}})
@@ -296,13 +328,11 @@ func (suite *TxByHashSuite) TestDroppedTxWithUnattributableIDIsSkipped() {
 	body, err := os.ReadFile("testdata/txbyhash_dropped.json")
 	assert.Nil(suite.T(), err)
 
-	// the batch the ids are resolved against is unknown
+	// the batch the ids are resolved against is unknown: nothing can be
+	// attributed, not even the results (none of them was requested)
 	txs, err := parseTxByHash(body, nil)
 	assert.Nil(suite.T(), err)
-	assert.Equal(suite.T(), 2, len(txs))
-	for _, tx := range txs {
-		assert.False(suite.T(), tx.Absent)
-	}
+	assert.Equal(suite.T(), 0, len(txs))
 
 	// ... same for an id that is out of range for the batch
 	body = []byte(`[{"jsonrpc":"2.0","id":0,"result":null},{"jsonrpc":"2.0","id":99,"result":null}]`)
@@ -398,4 +428,53 @@ func (suite *TxByHashSuite) TestGenuineNullResultStillAbsent() {
 	txs[0].DBBlockTime = time.Now().UTC().Add(-c.DroppedTxGracePeriod - time.Hour)
 	txs[0].AbsentCount = c.SustainedAbsenceRuns
 	assert.Equal(suite.T(), c.TxDropped, txs[0].Judge(uint64(18459500)))
+}
+
+// #247: a provider that repeats a jsonrpc id must not have its answer counted
+// twice -- the caller records one absence observation per element, so a
+// duplicated `null` would advance absent_count twice in a single run
+func (suite *TxByHashSuite) TestDuplicateIDIsCountedOnce() {
+	body := []byte(`[
+		{"jsonrpc":"2.0","id":2,"result":null},
+		{"jsonrpc":"2.0","id":2,"result":null},
+		{"jsonrpc":"2.0","id":2,"error":{"code":-32603,"message":"internal error"}}
+	]`)
+	txs, err := parseTxByHash(body, droppedBatch())
+	assert.Nil(suite.T(), err)
+	assert.Equal(suite.T(), 1, len(txs))
+	assert.True(suite.T(), txs[0].Absent)
+	assert.Equal(suite.T(), droppedTxHash, txs[0].Hash)
+}
+
+// ... nor may a hash be answered twice under different ids
+func (suite *TxByHashSuite) TestDuplicateHashIsCountedOnce() {
+	body, err := os.ReadFile("testdata/txbyhash.json")
+	assert.Nil(suite.T(), err)
+	// the same transaction once more, under the id of the dropped one
+	var resp []map[string]interface{}
+	assert.Nil(suite.T(), json.Unmarshal(body, &resp))
+	dup := map[string]interface{}{"jsonrpc": "2.0", "id": 3, "result": resp[0]["result"]}
+	body, err = json.Marshal(append(resp, dup))
+	assert.Nil(suite.T(), err)
+
+	txs, err := parseTxByHash(body, droppedBatch())
+	assert.Nil(suite.T(), err)
+	assert.Equal(suite.T(), 2, len(txs))
+	assert.Equal(suite.T(), minedTxHash, txs[0].Hash)
+	assert.Equal(suite.T(), minedTxHash2, txs[1].Hash)
+}
+
+// a result for a transaction that was not requested is dropped: it must not
+// touch an unrelated donation
+func (suite *TxByHashSuite) TestUnrequestedResultIsDropped() {
+	txs, err := parseTxByHash(suite.body, c.ToHashable([]c.TXH{{Hash: minedTxHash2}}))
+	assert.Nil(suite.T(), err)
+	assert.Equal(suite.T(), 1, len(txs))
+	assert.Equal(suite.T(), minedTxHash2, txs[0].Hash)
+
+	// the requested set is compared case-insensitively
+	txs, err = parseTxByHash(suite.body, c.ToHashable([]c.TXH{{Hash: strings.ToUpper(minedTxHash)}}))
+	assert.Nil(suite.T(), err)
+	assert.Equal(suite.T(), 1, len(txs))
+	assert.Equal(suite.T(), minedTxHash, txs[0].Hash)
 }

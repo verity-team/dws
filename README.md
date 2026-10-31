@@ -11,7 +11,7 @@ The backend used by the donation web site frontend is called `delphi` and it wil
 The `dws` backend consists of a `postgres` database and 5 services
 - `buck`: ETH/latest crawler, checks the latest blocks for donation transactions and inserts these into the database (in state `unconfirmed`)
 - `buck`: ETH/finalized crawler, checks the finalized blocks for donation transactions and confrm them, also updates the donation campaign statistics and the token price (if/as needed), see [token sale limit](#token-sale-limit)
-- `buck`: ETH/old-unconfirmed crawler, checks for donations that are older than 30 minutes but still unconfirmed, attempts to fetch the respective finalized blocks and confirm these donation transactions. A transaction its finalized block carries is confirmed only once its receipt from that block reports success: the status on the donation row came from the latest crawler, possibly from a block that was orphaned since, and the transaction may have reverted in the block it was re-mined into. A donation is marked as `failed` if its finalized block was fetched and does *not* carry the transaction, if the receipt from the finalized block reports a revert, or if the transaction is absent from both the chain and the mempool and the block it was originally seen in is more than 24 hours old **and** it has been observed absent on several consecutive runs (it was evicted by a re-org and never re-mined, so no money moved -- the consecutive-run requirement keeps a single transient provider `null` from failing a donation whose money arrived); the donation campaign statistics are then recalculated -- the donation records are retained, they are *not* deleted. Donations whose transaction is still in the mempool, whose block has not been finalized yet, whose finalized block could not be fetched, for which no receipt from the finalized block could be fetched, for which the jsonrpc provider answered with an error object instead of a result (a rate limit or a bad spell is the absence of evidence, not evidence of absence), that are absent from the chain but younger than 24 hours, or whose absence has not yet persisted across enough consecutive runs are left untouched and re-examined on a later run
+- `buck`: ETH/old-unconfirmed crawler, checks for donations that are older than 30 minutes but still unconfirmed, attempts to fetch the respective finalized blocks and confirm these donation transactions. A transaction its finalized block carries is confirmed only once its receipt from that block reports success: the status on the donation row came from the latest crawler, possibly from a block that was orphaned since, and the transaction may have reverted in the block it was re-mined into. A donation is marked as `failed` if its finalized block was fetched and does *not* carry the transaction, if the receipt from the finalized block reports a revert, or if the transaction is absent from both the chain and the mempool and the block it was originally seen in is more than 24 hours old **and** it has been observed absent on several consecutive runs (it was evicted by a re-org and never re-mined, so no money moved -- the consecutive-run requirement keeps a single transient provider `null` from failing a donation whose money arrived; a run counts each transaction at most once: a repeated jsonrpc id or transaction hash in the provider's response is ignored, as is a result for a transaction that was not asked for); the donation campaign statistics are then recalculated -- the donation records are retained, they are *not* deleted. Donations whose transaction is still in the mempool, whose block has not been finalized yet, whose finalized block could not be fetched (an error, a `null` result or a response carrying a different block number), for which no receipt from the finalized block could be fetched, for which the jsonrpc provider answered with an error object instead of a result (a rate limit or a bad spell is the absence of evidence, not evidence of absence), that are absent from the chain but younger than 24 hours, or whose absence has not yet persisted across enough consecutive runs are left untouched and re-examined on a later run
 - `pulitzer`: pulls the ETH price from 6 exchanges and inserts their median price into the database every minute, see [price aggregation](#price-aggregation). It also serves the historical price requests filed by `buck`, with the price of the requested minute only and only once two venues agree on it within 10%, see [price aggregation](#price-aggregation): a request that cannot be fulfilled is marked `failed` and retried a few minutes later, a request is only marked `succeeded` once prices that actually serve it were written, i.e. at least one of them has to fall inside the same ±1.5 minute window the donation crawler searches for a price -- across an exchange data gap the prices returned can be minutes off, and `succeeded` is terminal
 - `delphi`: [REST API](https://app.swaggerhub.com/apis/MUHAREM_1/delphi/) server -- only serves data from the database
 
@@ -45,8 +45,8 @@ All services shut down gracefully on `SIGINT`/`SIGTERM` i.e. they stop accepting
 The services are configured via the environment, see `env.example` for the full set of variables. The donation related configuration is validated at startup: the service logs the offending entry and refuses to start when
 
 - `DWS_DONATION_ADDRESS` (`buck`, `delphi`) is not a well-formed ethereum address
-- `DWS_STABLE_COINS` (`buck`) is empty or one of its entries has an unknown asset (lower case, one of the assets `buck` holds an erc-20 ABI for), an invalid contract address or a scale outside the plausible range for a USD stable coin (2..18 decimals). The scale bound is a plausibility check, not a correctness guarantee: it rejects gross misconfiguration such as a scale of 1 (which would turn a 1 USDC transfer into a $100,000 credit) but cannot catch a wrong-but-plausible value such as 5 for a 6-decimal coin
-- `DWS_SALE_PARAMS` (`buck`) is empty or one of its entries has a token limit or a token price that is not greater than zero, or a token price with more than 5 decimal places or too large for `price.price` (`NUMERIC(15,5)`). The column keeps 5 decimals: `0.0000125` used to be stored -- and sold -- as `0.00001` (~25% more tokens per dollar), and a price below `0.000005` as `0`, on which every crawler run panicked. `buck` also refuses to start when the token price on record is not one of the configured tier prices, see [token price at startup](#token-price-at-startup)
+- `DWS_STABLE_COINS` (`buck`) is empty, has two entries with the same contract address (compared case-insensitively; the later one used to silently replace the earlier one) or one of its entries has an unknown asset (lower case, one of the assets `buck` holds an erc-20 ABI for), an invalid contract address or a scale outside the plausible range for a USD stable coin (2..18 decimals). The scale bound is a plausibility check, not a correctness guarantee: it rejects gross misconfiguration such as a scale of 1 (which would turn a 1 USDC transfer into a $100,000 credit) but cannot catch a wrong-but-plausible value such as 5 for a 6-decimal coin
+- `DWS_SALE_PARAMS` (`buck`) is empty or one of its entries has a token limit or a token price that is not greater than zero, or a token price with more than 5 decimal places or too large for `price.price` (`NUMERIC(15,5)`). Sorted by limit, the tiers must have strictly ascending limits (no duplicates) and non-decreasing prices: the price on record only ever moves up, so a descending price (e.g. a transposed digit) would silently sell every later tier at the earlier, higher price. The column keeps 5 decimals: `0.0000125` used to be stored -- and sold -- as `0.00001` (~25% more tokens per dollar), and a price below `0.000005` as `0`, on which every crawler run panicked. `buck` also refuses to start when the token price on record is not one of the configured tier prices, see [token price at startup](#token-price-at-startup)
 - `ETH_RPC_URL` (`buck`) is not an `https` URL. `buck` trusts its json-rpc provider completely -- a plaintext or downgraded endpoint would let an on-path attacker fabricate or fail donations -- so a non-`https` provider is refused at startup. `http` is permitted only for a loopback host (`localhost`/`127.0.0.0/8`/`[::1]`) to keep local dev nodes working. A redirect from `https` to plain `http` is refused by every HTTP client (json-rpc provider and exchanges alike), so the guarantee holds past the first hop
 
 These values used to be accepted as-is and only did damage once donations were processed e.g. a scale of zero leaves a stable coin donation in its smallest unit and turns a 500 USDT donation into a 500,000,000 USD one.
@@ -125,10 +125,15 @@ them off in production:
   the crawl itself is not affected.
 - `DWS_BLOCK_CACHE` names a directory in which the finalized crawler keeps
   every finalized block it fetched (`fb-<block>.json`) and from which `buck`
-  serves later requests for the same block instead of asking the provider (a
-  cached copy that fails to parse is discarded and fetched again). Unlike the
-  debug store this changes behaviour: a block that cannot be written to the
-  cache is treated as an error and the block is retried on the next run.
+  serves later requests for the same block instead of downloading it again. A
+  cached copy is never trusted on its own: its block hash, timestamp and
+  ordered transaction hashes must match the block header the provider reports
+  (`eth_getBlockByNumber` without the transaction bodies), so the cache saves
+  bandwidth, not requests, and cannot stand in for a provider that is down. A
+  copy that fails to parse or does not match is discarded and the block is
+  fetched again. The transaction bodies are not re-hashed, so the directory
+  must be as well protected as the binary. Like the debug store, read and
+  write failures are logged as warnings and otherwise ignored.
 
 Both directories are created on first use and the files are written `0600`;
 the data is what the provider returned, not secrets, but the volume grows with
@@ -137,7 +142,10 @@ every block.
 ## what counts as a donation
 
 A transfer is recorded as a donation when it reaches the receiving address and
-carries an amount that survives being written down. The amount is rendered at
+carries an amount that survives being written down. A stable coin transfer is
+recognized by its erc-20 `transfer` selector (`0xa9059cbb`); the calldata is
+matched case-insensitively, the jsonrpc spec does not pin the case of hex data.
+The amount is rendered at
 the scale of the `donation.amount` column (`NUMERIC(20,10)`); the scale is
 derived from the column rather than hardcoded, so it cannot drift from it and
 does not depend on the number of decimals the token itself uses. Ethereum
@@ -167,6 +175,12 @@ This is deliberately **not** a minimum donation amount: the only transfers
 turned away are the ones that would have been stored as zero anyway. A dust
 threshold above zero is a separate, commercial decision.
 
+Tokens are rounded **up** (`ceiling`, see the formulas under [donate](#donate)
+below), so a dust donation that records a non-zero amount -- e.g. 1 base unit
+of USDC, $0.000001 -- is issued one whole token. This is intended and there is
+no minimum donation: the gas a transfer costs is orders of magnitude more than
+the token is worth, so dust cannot be farmed for profit (#251).
+
 A transfer whose amount **does not fit the donation columns** is not recorded
 as a donation either: it goes to `failed_tx`, like a transfer whose calldata
 cannot be parsed. `donation.amount` is `NUMERIC(20,10)` and `usd_amount` is
@@ -183,6 +197,35 @@ that cannot be priced is recorded in `failed_tx` in the same database
 transaction as the rest of the block, so the block is still persisted and the
 crawler moves on. No genuine donation comes near 1e10 USD; a `failed_tx` row
 is for an operator to look into.
+
+### donation totals ceiling
+
+The totals are bounded the same way: `donation_stats.total` (the campaign
+total) and `user_data.total` (the total per address) are `NUMERIC(12,2)` as
+well, i.e. at most `9,999,999,999.99` USD. Every single donation fits
+`usd_amount`, but their sum need not, and there is no row to reject: the
+total is the campaign's (or the address'), not the latest donation's.
+
+- `buck` sums the confirmed donations and checks the result against the
+  column before writing it. A campaign total above the ceiling stops the
+  statistics write -- and with it the block or the confirmation it belongs to,
+  on every run -- with `the confirmed donations total ... USD, which does not
+  fit donation_stats.total NUMERIC(12,2)` instead of a bare `numeric field
+  overflow`. Nothing is written and nothing is lost; the crawler resumes once
+  the column is widened, e.g. `ALTER TABLE donation_stats ALTER COLUMN total
+  TYPE NUMERIC(14,2);` (raising the precision of a `NUMERIC` at the same scale
+  rewrites nothing).
+- `update_user_data()` is SQL and has no such check: an address whose confirmed
+  donations exceed the ceiling makes the function fail with `numeric field
+  overflow`, and `delphi` answers that address' `/user/data` request with a
+  generic error. An explicit check would not change that outcome -- the
+  request has to fail either way, and the postgres error already names the
+  cause -- so it is not worth a function migration. Widening it means
+  widening `user_data.total` and the `NUMERIC(12, 2)` declarations in the
+  function (`us_total`, `ds_total`) together.
+
+Reaching either ceiling takes ~1e10 USD of actual donations, so it is not an
+attack, merely a limit to know about.
 
 ## token sale limit
 
@@ -305,10 +348,13 @@ able to exhaust the budget of the node it runs on, and a probe answered with
 from that:
 
 - **the donation history is paginated.** The `limit` (1..100, default 50) and
-  `offset` (>= 0, default 0) query parameters select the page; the records are
-  ordered oldest first. The server caps `limit` at 100 no matter what is
+  `offset` (0..10000, default 0) query parameters select the page; the records
+  are ordered oldest first. The server caps `limit` at 100 no matter what is
   passed, so a single request can no longer turn ~100 bytes of input into
-  megabytes of database read and egress.
+  megabytes of database read and egress. An `offset` above 10000 is rejected
+  with a 400 (code 116 from the request validator, 118 from the handler):
+  postgres reads every skipped row, and 100 full pages is far beyond the
+  donation history of any real donor.
 - **the response no longer carries `affiliate_code`.** Donation addresses are
   public on chain, so anyone could previously walk the donor set into a
   complete off-chain profile *including the referral graph*. The affiliate code
@@ -328,7 +374,8 @@ underlying error -- which names tables, functions and columns and gives away
 the SQL dialect and the driver version -- is logged server side only; quote the
 numeric code when reporting a problem. The same holds for a request that is
 rejected before it reaches a handler: the request validator (code 116, also an
-unknown path, answered with a 404) and the parameter binding of the generated
+unknown path, answered with a 404, and a known path with an unknown method,
+answered with a 405) and the parameter binding of the generated
 server (code 117) name the offending input and the schema it failed, so the
 client gets `invalid request` and the detail is logged.
 
@@ -365,6 +412,10 @@ address (40 hex digits), `delphi-ts` 1 to 12 decimal digits and
 `delphi-signature` `0x` plus 130 hex digits; anything else is a 400 before the
 handler runs. The request line and headers together are capped at 8 KB (the
 `net/http` default is 1 MB).
+
+Only the canonical (EIP-2 low `s`) form of a signature is accepted, with a
+recovery id of 27/28 or 0/1: `(r, N-s)` with the recovery id flipped recovers
+the same address but is answered with a 401. Wallets sign with low `s`.
 
 ## price aggregation
 
@@ -531,7 +582,7 @@ The database integration tests for the `buck` donation statistics, for the `puli
 1. `go test -tags dbtest -count=1 ./internal/pulitzer/db/...`
 1. `go test -tags dbtest -count=1 ./internal/delphi/db/...`
 
-The connection string defaults to the dockerized development database and can be overridden with `DWS_TEST_DB_DSN`. The three packages share the database, run them one after the other (`go test -tags dbtest -count=1 -p 1 ./...`) -- concurrently they truncate each other's tables.
+The connection string defaults to the dockerized development database and can be overridden with `DWS_TEST_DB_DSN`. The packages share the database and truncate each other's tables, so they serialize themselves: each one's `TestMain` holds a session level advisory lock (`pg_advisory_lock`, see `internal/dbtest`) for the whole package run, and the next one waits for it. `go test -tags dbtest -count=1 ./...` is safe with any `-p`; `-p 1` is no longer required.
 
 A database created before the indexes and the `price` uniqueness constraint
 were added to `deployments/db/01-schema.sql` has to be brought up to date, see
@@ -552,7 +603,7 @@ init scripts *only* when the data directory is empty. To guard against a manual
 `\set ON_ERROR_STOP on` and its first statement **aborts the load when any
 table already holds operational data** -- donations, affiliate codes
 (`user_data`), wallet connections, prices, crawler positions (`last_block`),
-the campaign totals/status (`donation_stats`), failed blocks/transactions and
+the campaign totals/status (`donation_stats`), failed transactions and
 price requests -- and names the tables it found populated. The one row the
 script seeds itself (the zero `donation_stats` row) does not count, and on a
 fresh database, where the tables do not yet exist, the
@@ -942,6 +993,52 @@ invalid index that has to be dropped and recreated:
 ```sql
 SELECT indisvalid FROM pg_class c JOIN pg_index i ON i.indexrelid=c.oid WHERE c.relname='price_req_status_modified_at_idx';
 ```
+
+### failed_tx block NULL-able (migrate BEFORE deploying the new `buck`)
+
+`failed_tx.block_number` and `failed_tx.block_hash` may now be `NULL`: a
+transaction that vanished from both chain and mempool (a dropped transaction)
+has no block, and it used to be recorded as `block_number = 0, block_hash = ''`
+-- block 0 is a real block. `DROP NOT NULL` only relaxes a constraint: it is a
+metadata-only change, it rewrites and validates nothing and the old `buck`
+keeps working against it (it still writes `0`/`''`):
+
+```sql
+ALTER TABLE failed_tx ALTER COLUMN block_number DROP NOT NULL, ALTER COLUMN block_hash DROP NOT NULL;
+```
+
+**Apply it before deploying the new `buck`.** The new binary writes `NULL` for
+a dropped transaction; on an un-migrated schema that insert fails with `null
+value in column "block_number" ... violates not-null constraint`, `FailTx`
+rolls back and the old-unconfirmed run stops at that transaction -- on every
+run, until the `ALTER` lands. Nothing is lost or corrupted (the donation stays
+`unconfirmed` and is failed on the first run after the migration), but it is a
+needless stall of the old-unconfirmed path.
+
+Optionally bring the rows already on record in line; `(0, '')` is unambiguous,
+the real block 0 has a hash:
+
+```sql
+UPDATE failed_tx SET block_number = NULL, block_hash = NULL WHERE block_number = 0 AND block_hash = '';
+```
+
+### failed_block and pgcrypto removed (optional, any time, any binary)
+
+`01-schema.sql` no longer creates the `failed_block` table or the `pgcrypto`
+extension. Nothing ever wrote `failed_block` (failed transactions go to
+`failed_tx`) and nothing calls a `pgcrypto` function. An existing database
+does not need to change: no binary refers to either, so leaving them in place
+is harmless. Dropping them is safe at any time, with any version of the
+binaries running:
+
+```sql
+DROP TABLE IF EXISTS failed_block;
+DROP EXTENSION IF EXISTS pgcrypto;
+```
+
+`failed_block` should be empty; check with `SELECT COUNT(*) FROM failed_block;`
+first if in doubt. Without `CASCADE`, `DROP EXTENSION` refuses to run if
+anything else in the database depends on `pgcrypto` -- in that case keep it.
 
 ## requirements & rules
 1. all amounts are passed as strings and should be decoded to a `decimal` type to preserve precision
