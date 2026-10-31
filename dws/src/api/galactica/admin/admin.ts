@@ -16,7 +16,7 @@ const requestChangeMemeStatus = async (
   memeId: string,
   status: MemeUploadStatus
 ): Promise<boolean> => {
-  const path = `/meme/${memeId}/status`;
+  const path = `/meme/${encodeURIComponent(memeId)}/status`;
   const payload: ChangeMemeStatusRequest = {
     status,
   };

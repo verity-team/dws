@@ -115,6 +115,22 @@ func TestFormMsgWalletConnection(t *testing.T) {
 		formMsg("/affiliate/code", addr, ts))
 }
 
+// the /wallet/connection message is the formMsg message followed by the
+// affiliate code exactly as sent; the frontend builds the very same string
+func TestFormConnectionMsg(t *testing.T) {
+	ts := time.Date(2023, 10, 23, 18, 45, 19, 0, time.UTC)
+	const addr = "0xB938F65DfE303EdF96A511F1e7E3190f69036860"
+	assert.Equal(t,
+		"wallet connection, 0xb938f65dfe303edf96a511f1e7e3190f69036860, 2023-10-23 18:45:19+00:00, none",
+		formConnectionMsg("/wallet/connection", addr, ts, "none"))
+	assert.Equal(t,
+		"wallet connection, 0xb938f65dfe303edf96a511f1e7e3190f69036860, 2023-10-23 18:45:19+00:00, 3f1c0a9e5b7d2468",
+		formConnectionMsg("/wallet/connection", addr, ts, "3f1c0a9e5b7d2468"))
+	assert.NotEqual(t,
+		formConnectionMsg("/wallet/connection", addr, ts, "none"),
+		formConnectionMsg("/wallet/connection", addr, ts, "3f1c0a9e5b7d2468"))
+}
+
 // the signed message is bound to the address it is used for
 func TestFormMsgBindsAddress(t *testing.T) {
 	ts := time.Date(2023, 10, 23, 18, 45, 19, 0, time.UTC)
@@ -129,6 +145,13 @@ func signTestMsg(t *testing.T, key *ecdsa.PrivateKey, msg string) string {
 	sig, err := crypto.Sign(accounts.TextHash([]byte(msg)), key)
 	require.NoError(t, err)
 	return hexutil.Encode(sig)
+}
+
+// signConnection signs the /wallet/connection message for the given address,
+// timestamp and affiliate code.
+func signConnection(t *testing.T, key *ecdsa.PrivateKey, addr string, authTS time.Time, code string) string {
+	t.Helper()
+	return signTestMsg(t, key, formConnectionMsg("/wallet/connection", addr, authTS.Truncate(time.Second), code))
 }
 
 // connectWalletCtx builds an echo context for POST /wallet/connection.
@@ -169,7 +192,7 @@ func TestConnectWalletStaleTimestamp(t *testing.T) {
 	err = s.ConnectWallet(ctx, api.ConnectWalletParams{
 		DelphiKey:       addr,
 		DelphiTs:        strconv.FormatInt(authTS.Unix(), 10),
-		DelphiSignature: signTestMsg(t, key, formMsg("/wallet/connection", addr, authTS.Truncate(time.Second))),
+		DelphiSignature: signConnection(t, key, addr, authTS, "none"),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -191,7 +214,7 @@ func TestConnectWalletBadSignature(t *testing.T) {
 	err = s.ConnectWallet(ctx, api.ConnectWalletParams{
 		DelphiKey:       addr,
 		DelphiTs:        strconv.FormatInt(authTS.Unix(), 10),
-		DelphiSignature: signTestMsg(t, other, formMsg("/wallet/connection", addr, authTS.Truncate(time.Second))),
+		DelphiSignature: signConnection(t, other, addr, authTS, "none"),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
@@ -233,10 +256,149 @@ func TestConnectWalletAddressMismatch(t *testing.T) {
 	err = s.ConnectWallet(ctx, api.ConnectWalletParams{
 		DelphiKey:       attacker,
 		DelphiTs:        strconv.FormatInt(authTS.Unix(), 10),
-		DelphiSignature: signTestMsg(t, key, formMsg("/wallet/connection", attacker, authTS.Truncate(time.Second))),
+		DelphiSignature: signConnection(t, key, attacker, authTS, "none"),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+// a signature harvested from a "none" request must not be replayable with an
+// affiliate code of the attacker's choosing
+func TestConnectWalletSignatureIsBoundToTheCode(t *testing.T) {
+	key, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	authTS := time.Now().UTC()
+	addr := crypto.PubkeyToAddress(key.PublicKey).Hex()
+
+	ctx, rec := connectWalletCtx(t, fmt.Sprintf(`{"code":"3f1c0a9e5b7d2468","address":%q}`, addr))
+	s := NewDelphiServer(nil)
+
+	err = s.ConnectWallet(ctx, api.ConnectWalletParams{
+		DelphiKey:       addr,
+		DelphiTs:        strconv.FormatInt(authTS.Unix(), 10),
+		DelphiSignature: signConnection(t, key, addr, authTS, "none"),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+// a signature over the previous message format (no affiliate code) is rejected
+func TestConnectWalletRejectsTheOldMessageFormat(t *testing.T) {
+	key, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	authTS := time.Now().UTC()
+	addr := crypto.PubkeyToAddress(key.PublicKey).Hex()
+
+	ctx, rec := connectWalletCtx(t, fmt.Sprintf(`{"code":"none","address":%q}`, addr))
+	s := NewDelphiServer(nil)
+
+	err = s.ConnectWallet(ctx, api.ConnectWalletParams{
+		DelphiKey:       addr,
+		DelphiTs:        strconv.FormatInt(authTS.Unix(), 10),
+		DelphiSignature: signTestMsg(t, key, formMsg("/wallet/connection", addr, authTS.Truncate(time.Second))),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+// the body is read before the signature is checked: a body that does not bind
+// is a 400, whatever the signature
+func TestConnectWalletUnbindableBody(t *testing.T) {
+	const addr = "0xb938f65dfe303edf96a511f1e7e3190f69036860"
+	ctx, rec := connectWalletCtx(t, `{"code":`)
+	s := NewDelphiServer(nil)
+
+	err := s.ConnectWallet(ctx, api.ConnectWalletParams{
+		DelphiKey:       addr,
+		DelphiTs:        strconv.FormatInt(time.Now().UTC().Unix(), 10),
+		DelphiSignature: "0x00",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	var cerr api.Error
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &cerr))
+	assert.Equal(t, 101, cerr.Code)
+	assert.Equal(t, msgInvalidRequest, cerr.Message)
+}
+
+// encoding/json matches keys case insensitively: `Code` passes the request
+// validator, which only knows `code`, and overrides the value it checked. The
+// handler has to catch the bound value -- before it reaches the signature
+// check, the database or the log.
+func TestConnectWalletRejectsACaseFoldedCode(t *testing.T) {
+	key, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	authTS := time.Now().UTC()
+	addr := crypto.PubkeyToAddress(key.PublicKey).Hex()
+	forged := strings.Repeat("A", 900) + "\nFORGED log line"
+
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
+	ctx, rec := connectWalletCtx(t, fmt.Sprintf(`{"code":"none","address":%q,"Code":%q}`, addr, forged))
+	s := NewDelphiServer(nil)
+	err = s.ConnectWallet(ctx, api.ConnectWalletParams{
+		DelphiKey:       addr,
+		DelphiTs:        strconv.FormatInt(authTS.Unix(), 10),
+		DelphiSignature: signConnection(t, key, addr, authTS, forged),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	var cerr api.Error
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &cerr))
+	assert.Equal(t, 115, cerr.Code)
+	assert.NotContains(t, buf.String(), "FORGED", "the rejected code must not be logged")
+}
+
+// a caller supplied value is logged quoted (%q): an embedded newline or quote
+// cannot forge a log line or a field within one, whatever the log header. The
+// default gommon header JSON-quotes the whole message once more, hence the
+// doubled backslash: '%s' would leave a single one.
+func TestConnectWalletQuotesLoggedValues(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
+	ctx, rec := connectWalletCtx(t, `{"code":"none","address":"0xb938f65dfe303edf96a511f1e7e3190f69036860"}`)
+	s := NewDelphiServer(nil)
+	err := s.ConnectWallet(ctx, api.ConnectWalletParams{
+		DelphiKey:       "0xb938f65dfe303edf96a511f1e7e3190f69036860\nFORGED",
+		DelphiTs:        strconv.FormatInt(time.Now().UTC().Add(-time.Hour).Unix(), 10),
+		DelphiSignature: "0x00",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, buf.String(), `\\nFORGED`)
+	assert.NotContains(t, buf.String(), "\nFORGED")
+}
+
+func TestIsValidAffiliateCode(t *testing.T) {
+	for _, tc := range []struct {
+		code string
+		want bool
+	}{
+		{"none", true},
+		{"0123456789abcdef", true},
+		{strings.Repeat("x", MaxAffiliateCodeLength), true},
+		{strings.Repeat("x", MaxAffiliateCodeLength+1), false},
+		// maxLength counts characters, not bytes
+		{strings.Repeat("ä", MaxAffiliateCodeLength), true},
+		{"", false},
+	} {
+		assert.Equal(t, tc.want, isValidAffiliateCode(tc.code), "%q", tc.code)
+	}
+}
+
+// the handler re-applies the rules of api/delphi.yaml; the two must not drift
+func TestConnectionRequestRulesMatchTheSpec(t *testing.T) {
+	swagger, err := api.GetSwagger()
+	require.NoError(t, err)
+	props := swagger.Components.Schemas["connection_request"].Value.Properties
+	require.NotNil(t, props["code"].Value.MaxLength)
+	assert.EqualValues(t, MaxAffiliateCodeLength, *props["code"].Value.MaxLength)
+	require.NotNil(t, props["address"].Value.MaxLength)
+	assert.EqualValues(t, len("0xb938f65dfe303edf96a511f1e7e3190f69036860"), *props["address"].Value.MaxLength)
 }
 
 func TestConnectWalletInvalidAddress(t *testing.T) {
@@ -252,7 +414,7 @@ func TestConnectWalletInvalidAddress(t *testing.T) {
 	err = s.ConnectWallet(ctx, api.ConnectWalletParams{
 		DelphiKey:       addr,
 		DelphiTs:        strconv.FormatInt(authTS.Unix(), 10),
-		DelphiSignature: signTestMsg(t, key, formMsg("/wallet/connection", addr, authTS.Truncate(time.Second))),
+		DelphiSignature: signConnection(t, key, addr, authTS, "none"),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -383,7 +545,7 @@ func TestConnectWalletFutureTimestamp(t *testing.T) {
 	err = s.ConnectWallet(ctx, api.ConnectWalletParams{
 		DelphiKey:       addr,
 		DelphiTs:        strconv.FormatInt(authTS.Unix(), 10),
-		DelphiSignature: signTestMsg(t, key, formMsg("/wallet/connection", addr, authTS)),
+		DelphiSignature: signConnection(t, key, addr, authTS, "none"),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -587,4 +749,82 @@ func TestVerifySigDoesNotLogTheSignature(t *testing.T) {
 		assert.False(t, verifySig(from, msg, sig))
 		assert.NotContains(t, buf.String(), sig, "the raw signature must not be logged")
 	}
+}
+
+// a caller supplied value is logged quoted and bounded
+func TestLogValue(t *testing.T) {
+	assert.Equal(t, `"0xb938f65dfe303edf96a511f1e7e3190f69036860"`, logValue("0xb938f65dfe303edf96a511f1e7e3190f69036860"))
+	assert.Equal(t, `"a\nb"`, logValue("a\nb"))
+	assert.Equal(t, `""`, logValue(""))
+
+	long := strings.Repeat("x", 1<<20)
+	got := logValue(long)
+	assert.Less(t, len(got), MaxLoggedValueLength+32)
+	assert.True(t, strings.HasPrefix(got, `"`+strings.Repeat("x", MaxLoggedValueLength)+`"`))
+	assert.True(t, strings.HasSuffix(got, "(1048576 bytes)"))
+	// the longest legitimate value is logged in full
+	sig := "0x" + strings.Repeat("ab", crypto.SignatureLength)
+	assert.Equal(t, strconv.Quote(sig), logValue(sig))
+}
+
+// getTS logs the raw header before anything is authenticated
+func TestGetTSBoundsTheLoggedValue(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
+	_, err := getTS(strings.Repeat("9x", 1<<16))
+	require.Error(t, err)
+	assert.Less(t, buf.Len(), 2*MaxLoggedValueLength+256)
+	assert.LessOrEqual(t, len(err.Error()), MaxLoggedValueLength+256)
+}
+
+// a 5xx from the validator is reported as an internal error
+func TestValidationErrorHandlerServerError(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/donation/data", nil)
+	rec := httptest.NewRecorder()
+	ctx := echo.New().NewContext(req, rec)
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
+	herr := echo.NewHTTPError(http.StatusInternalServerError, "error validating route: LEAKME")
+	require.NoError(t, ValidationErrorHandler(ctx, herr))
+	// the detail is logged server side
+	assert.Contains(t, buf.String(), "LEAKME")
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	var cerr api.Error
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &cerr))
+	assert.Equal(t, api.Error{Code: 116, Message: msgInternalError}, cerr)
+}
+
+// only the generated binding's 400s are rewritten; the router, the body and
+// rate limits and a recovered panic answer with a fixed status text already
+func TestHTTPErrorHandler(t *testing.T) {
+	e := echo.New()
+	h := HTTPErrorHandler(e)
+	serve := func(method string, err error) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, "/affiliate/code", nil)
+		rec := httptest.NewRecorder()
+		h(err, e.NewContext(req, rec))
+		return rec
+	}
+
+	rec := serve(http.MethodPost, echo.NewHTTPError(http.StatusBadRequest, "Invalid format for parameter delphi-key: LEAKME"))
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	var cerr api.Error
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &cerr))
+	assert.Equal(t, api.Error{Code: 117, Message: msgInvalidRequest}, cerr)
+
+	rec = serve(http.MethodHead, echo.NewHTTPError(http.StatusBadRequest, "LEAKME"))
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Empty(t, rec.Body.String())
+
+	rec = serve(http.MethodPost, echo.ErrTooManyRequests)
+	assert.Equal(t, http.StatusTooManyRequests, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Too Many Requests")
+
+	rec = serve(http.MethodPost, errors.New("LEAKME: recovered panic"))
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	assert.NotContains(t, rec.Body.String(), "LEAKME")
 }

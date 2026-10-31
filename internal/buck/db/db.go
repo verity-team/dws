@@ -127,7 +127,20 @@ func PersistTxs(ctxt c.Context, bn uint64, ethPrice decimal.Decimal, txs []c.Tra
 		var calcErr error
 		tx.Tokens, tx.USDAmount, calcErr = calcTokens(tx, tokenPrice, ethPrice)
 		if calcErr != nil {
-			log.Warnf("skipping tx %s: %v", tx.Hash, calcErr)
+			// a donation that cannot be priced is recorded in failed_tx, in
+			// this transaction, rather than aborting the block: an error here
+			// is a property of the transaction, so returning it would roll
+			// the block back and retry it on every run -- wedging the crawler
+			// on it for good. It used to be skipped with a warning, which
+			// does not wedge but leaves the transfer in neither `donation`
+			// nor `failed_tx`; failed_tx is where every other transfer to the
+			// receiving address that cannot be recorded ends up (see
+			// filterTransactions), for an operator to look into.
+			log.Errorf("recording tx '%s' as failed: %v", tx.Hash, calcErr)
+			err = insertFailedTx(dtx, tx.BlockNumber, tx.BlockHash, tx.BlockTime, tx.Hash)
+			if err != nil {
+				return err
+			}
 			continue
 		}
 		if campaignClosed && !campaignPaused && ctxt.CrawlerType == c.Finalized {
@@ -371,14 +384,24 @@ func calcTokens(tx c.Transaction, tokenPrice, ethPrice decimal.Decimal) (decimal
 		return decimal.Zero, decimal.Zero, err
 	}
 
+	// amount is already denominated in USD for the stable coins; an ETH
+	// amount is converted at the ETH price of the block
+	usdAmount := amount
 	if tx.Asset == "eth" {
-		// convert ETH amount to USD and then calculate based on the
-		// token price
-		usdAmount := amount.Mul(ethPrice)
-		return usdAmount.Div(tokenPrice).Ceil(), usdAmount, nil
+		usdAmount = amount.Mul(ethPrice)
 	}
-	// amount is already denominated in USD
-	return amount.Div(tokenPrice).Ceil(), amount, nil
+	// filterTransactions bounds the amount, but the usd_amount of an ETH
+	// donation only exists from here on. A value that does not fit the column
+	// would fail the donation upsert with `numeric field overflow` and roll
+	// back the whole block (see amountFits in the ethereum package).
+	if !c.DonationUSDAmountColumn.Fits(usdAmount) {
+		err = fmt.Errorf(
+			"usd amount %s of tx %s (%s %s) does not fit donation.usd_amount %s",
+			usdAmount.String(), tx.Hash, tx.Value, tx.Asset, c.DonationUSDAmountColumn)
+		log.Error(err)
+		return decimal.Zero, decimal.Zero, err
+	}
+	return usdAmount.Div(tokenPrice).Ceil(), usdAmount, nil
 }
 
 // getTokenPrice returns the token price the donations of this transaction are
@@ -425,7 +448,86 @@ func getTokenPrice(dtx *sqlx.Tx, ctxt c.Context) (decimal.Decimal, error) {
 	return result, nil
 }
 
+// InitTokenPrice makes sure that the token price buck prices donations at is
+// one of the configured sale tiers. It is called once, at startup, before any
+// crawler runs.
+//
+//   - A database without a token price row is given the price of the first
+//     sale tier. The schema used to seed `truth = 0.001` instead, so
+//     getTokenPrice's fallback to the first tier never took effect: a ladder
+//     starting at 0.0025 sold all of tier 1 at 0.001, i.e. 2.5x the tokens.
+//     Recording the row (rather than relying on the fallback) is also what
+//     delphi serves as the token price.
+//   - A token price that is not one of the tiers -- the old seed under a
+//     ladder that starts elsewhere, or a DWS_SALE_PARAMS change -- refuses to
+//     start: every donation would be priced at it, and the tier lookup
+//     (NewTokenPrice) would never replace it before the next tier boundary.
+//
+// The donation_stats lock serializes the check with the donation stats
+// writers and with the other buck processes, which start at the same time and
+// would otherwise both find the table empty.
+func InitTokenPrice(ctxt c.Context) (err error) {
+	dtx, err := ctxt.DB.Beginx()
+	if err != nil {
+		err = fmt.Errorf("failed to start the token price check, %w", err)
+		log.Error(err)
+		return err
+	}
+	defer func() {
+		if err != nil {
+			dtx.Rollback() // nolint:errcheck
+			return
+		}
+		if cerr := dtx.Commit(); cerr != nil {
+			err = fmt.Errorf("failed to commit the token price check, %w", cerr)
+			log.Error(err)
+		}
+	}()
+
+	if _, _, err = lockDonationStats(dtx); err != nil {
+		return err
+	}
+	var exists bool
+	err = dtx.Get(&exists, `SELECT EXISTS(SELECT 1 FROM price WHERE asset='truth')`)
+	if err != nil {
+		err = fmt.Errorf("failed to look up the token price, %w", err)
+		log.Error(err)
+		return err
+	}
+	if !exists {
+		tier1 := ctxt.SaleParams[0].Price
+		if err = updateTokenPrice(dtx, tier1); err != nil {
+			return err
+		}
+		log.Infof("no token price on record, recorded the price of the first sale tier: %s", tier1.StringFixed(5))
+		return nil
+	}
+
+	var price decimal.Decimal
+	price, err = getTokenPrice(dtx, ctxt)
+	if err != nil {
+		return err
+	}
+	if !ctxt.IsTierPrice(price) {
+		err = fmt.Errorf(
+			"the token price on record (%s) is not the price of any DWS_SALE_PARAMS tier %v: fix DWS_SALE_PARAMS, or record the price of the current tier -- see 'token price at startup' in the README",
+			price.StringFixed(5), ctxt.SaleParams)
+		log.Error(err)
+		return err
+	}
+	log.Infof("token price on record: %s", price.StringFixed(5))
+
+	return nil
+}
+
 func PersistFailedTx(dbh *sqlx.DB, b c.Block, tx c.Transaction) error {
+	return insertFailedTx(dbh, b.Number, b.Hash, b.Timestamp, tx.Hash)
+}
+
+// insertFailedTx records a transaction in failed_tx, on the pool or inside the
+// caller's database transaction. A transaction already on record is left as
+// it is.
+func insertFailedTx(e sqlx.Execer, bn uint64, bh string, bt time.Time, hash string) error {
 	q := `
 		INSERT INTO failed_tx(
 			block_number, block_hash, block_time, tx_hash)
@@ -433,9 +535,9 @@ func PersistFailedTx(dbh *sqlx.DB, b c.Block, tx c.Transaction) error {
 			$1, $2, $3, $4)
 		ON CONFLICT (tx_hash) DO NOTHING
 		`
-	_, err := dbh.Exec(q, b.Number, b.Hash, b.Timestamp.UTC(), tx.Hash)
+	_, err := e.Exec(q, bn, bh, bt.UTC(), hash)
 	if err != nil {
-		err = fmt.Errorf("failed to insert failed tx '%s', %w", tx.Hash, err)
+		err = fmt.Errorf("failed to insert failed tx '%s', %w", hash, err)
 		log.Error(err)
 		return err
 	}
@@ -909,38 +1011,25 @@ func FailTx(ctxt c.Context, tx c.TxByHash) (err error) {
 	return nil
 }
 
-// failTx records the transaction in the failed_tx table and marks the
-// corresponding donation as 'failed'. The donation row is retained (it is not
-// deleted) so that the aggregates -- which only ever count 'confirmed'
-// donations -- stay consistent and the donation history is preserved.
+// failTx marks the donation as 'failed' and records the transaction in the
+// failed_tx table. The donation row is retained (it is not deleted) so that the
+// aggregates -- which only ever count 'confirmed' donations -- stay consistent
+// and the donation history is preserved.
 // It returns true if the donation actually transitioned from 'unconfirmed' to
 // 'failed'.
+//
+// The conditional UPDATE comes first and the failed_tx row is only written when
+// it matched: when the finalized crawler confirmed the donation while we were
+// talking to the ethereum node, the update matches nothing -- and a failed_tx
+// row written regardless would permanently record a 'confirmed' donation as a
+// failed transaction.
 func failTx(dtx *sqlx.Tx, tx c.TxByHash) (bool, error) {
-	q1 := `
-		INSERT INTO failed_tx(
-			block_number, block_hash, block_time, tx_hash)
-		VALUES(
-			$1, $2, $3, $4)
-		ON CONFLICT (tx_hash) DO NOTHING
-		`
-	// a transaction that vanished from the chain has no finalized block; the
-	// time of the block it was originally seen in is all we can record for it
-	blockTime := tx.FBBlockTime
-	if blockTime.IsZero() {
-		blockTime = tx.DBBlockTime
-	}
-	_, err := dtx.Exec(q1, tx.BlockNumber, tx.FBBlockHash, blockTime.UTC(), tx.Hash)
-	if err != nil {
-		err = fmt.Errorf("failed to insert failed tx '%s', %w", tx.Hash, err)
-		log.Error(err)
-		return false, err
-	}
-	q2 := `
+	q := `
 		UPDATE donation
 		SET status='failed'
 		WHERE tx_hash=$1 AND status='unconfirmed'
 		`
-	res, err := dtx.Exec(q2, tx.Hash)
+	res, err := dtx.Exec(q, tx.Hash)
 	if err != nil {
 		err = fmt.Errorf("failed to mark transaction (%s) as failed, %w", tx.Hash, err)
 		log.Error(err)
@@ -952,6 +1041,18 @@ func failTx(dtx *sqlx.Tx, tx c.TxByHash) (bool, error) {
 		log.Error(err)
 		return false, err
 	}
+	if ra == 0 {
+		return false, nil
+	}
+	// a transaction that vanished from the chain has no finalized block; the
+	// time of the block it was originally seen in is all we can record for it
+	blockTime := tx.FBBlockTime
+	if blockTime.IsZero() {
+		blockTime = tx.DBBlockTime
+	}
+	if err = insertFailedTx(dtx, tx.BlockNumber, tx.FBBlockHash, blockTime, tx.Hash); err != nil {
+		return false, err
+	}
 
-	return ra > 0, nil
+	return true, nil
 }

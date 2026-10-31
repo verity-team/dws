@@ -65,6 +65,35 @@ func ToUint64(d decimal.Decimal, what string) (uint64, error) {
 	return uint64(d.IntPart()), nil
 }
 
+// Numeric describes a postgres NUMERIC(Precision, Scale) column: Precision
+// significant digits in total, Scale of them after the decimal point.
+type Numeric struct {
+	Precision int32
+	Scale     int32
+}
+
+// The NUMERIC columns buck writes a donation and a token price to, see
+// deployments/db/01-schema.sql. A value that does not fit one of them is not
+// truncated by postgres, it is refused with `numeric field overflow` -- and
+// that error aborts the whole database transaction it occurs in.
+var (
+	DonationAmountColumn    = Numeric{Precision: 20, Scale: 10}
+	DonationUSDAmountColumn = Numeric{Precision: 12, Scale: 2}
+	TokenPriceColumn        = Numeric{Precision: 15, Scale: 5}
+)
+
+// Fits reports whether postgres accepts v for the column. postgres first
+// rounds the value to the scale of the column (half away from zero, as
+// decimal.Round does) and only then checks the integral digits, so a value a
+// hair below the bound that rounds up to it is refused as well.
+func (n Numeric) Fits(v decimal.Decimal) bool {
+	return v.Round(n.Scale).Abs().LessThan(decimal.New(1, n.Precision-n.Scale))
+}
+
+func (n Numeric) String() string {
+	return fmt.Sprintf("NUMERIC(%d,%d)", n.Precision, n.Scale)
+}
+
 // RedactURL returns a form of rawURL that is safe to put into a log line or an
 // error message: the scheme and the host, and a fixed marker in place of
 // everything else.

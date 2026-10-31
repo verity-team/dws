@@ -15,8 +15,14 @@ import { createWeb3Modal } from "@web3modal/wagmi/react";
 import { WagmiConfig } from "wagmi";
 import { requestSignature } from "@/utils/wallet/sign";
 import { donate } from "@/utils/wallet/donate";
-import { connect, disconnect, getAccount, signMessage } from "@wagmi/core";
-import { EstimateGasExecutionError } from "viem";
+import {
+  ChainMismatchError,
+  connect,
+  disconnect,
+  getAccount,
+  signMessage,
+} from "@wagmi/core";
+import { Address, EstimateGasExecutionError } from "viem";
 import { wagmiConfig, web3ModalConfig } from "./walletconnect/config";
 import {
   LAST_PROVIDER_KEY,
@@ -40,7 +46,8 @@ interface IWalletUtils {
   disconnect: () => void;
   requestTransaction: (
     amount: number,
-    token: AvailableToken
+    token: AvailableToken,
+    receiver: Address
   ) => Promise<string>;
   requestWalletSignature: (message: string) => Promise<string>;
 }
@@ -158,9 +165,9 @@ const ClientRoot = ({
   }, []);
 
   const requestTransaction = useCallback(
-    async (amount: number, token: AvailableToken) => {
+    async (amount: number, token: AvailableToken, receiver: Address) => {
       try {
-        const txHash = await donate(account, amount, token, provider);
+        const txHash = await donate(account, amount, token, receiver, provider);
 
         if (txHash === NO_BALANCE_ERR) {
           toast.error(`No ${token} balance. Please try again later`);
@@ -180,6 +187,14 @@ const ClientRoot = ({
       } catch (error: any) {
         if (error instanceof EstimateGasExecutionError) {
           toast.error("Insufficient fund");
+        }
+        if (error instanceof ChainMismatchError) {
+          toast.error(
+            `Please switch your wallet to ${
+              process.env.NEXT_PUBLIC_TARGET_NETWORK_ALIAS ??
+              "the target network"
+            }`
+          );
         }
         return "";
       }

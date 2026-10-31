@@ -21,9 +21,9 @@ import (
 // not the retail api.coinbase.com/v2 the live spot client uses -- the latter
 // serves only the current spot price and carries no history at all.
 //
-// The candles are validated against the requested minute by the caller (the
-// same coverage gate CloseRequest applies), so a candle for a different minute
-// is not mistaken for the price of the block that triggered the request.
+// The candles are validated against the requested minute by the caller
+// (db.MinuteKline), so a candle for a different minute is not mistaken for
+// the price of the block that triggered the request.
 func GetHistoricalPriceFromCoinbase(ctx context.Context, ts time.Time) ([]Kline, error) {
 	// the candle endpoint returns the buckets whose start falls in [start,
 	// end]; bracket the requested minute by a minute on either side so the

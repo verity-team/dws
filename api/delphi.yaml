@@ -44,7 +44,7 @@ paths:
                 description: empty object
         "400":
           description: |
-            Bad input parameter; error message provides details.
+            Bad input parameter; the message is generic, the numeric code identifies the problem.
           content:
             application/json:
               schema:
@@ -75,7 +75,7 @@ paths:
                 $ref: '#/components/schemas/donation_data'
         "400":
           description: |
-            Bad input parameter; error message provides details.
+            Bad input parameter; the message is generic, the numeric code identifies the problem.
           content:
             application/json:
               schema:
@@ -137,7 +137,7 @@ paths:
                 $ref: '#/components/schemas/user_data_result'
         "400":
           description: |
-            Bad input parameter; error message provides details.
+            Bad input parameter; the message is generic, the numeric code identifies the problem.
           content:
             application/json:
               schema:
@@ -200,7 +200,7 @@ paths:
                 $ref: '#/components/schemas/affiliate_code'
         "400":
           description: |
-            Bad input parameter; error message provides details.
+            Bad input parameter; the message is generic, the numeric code identifies the problem.
           content:
             application/json:
               schema:
@@ -440,7 +440,9 @@ components:
       - address
       properties:
         code:
-          description: affiliate code, pass `none` if there's no code in the URL
+          description: |
+            affiliate code, pass `none` if there's no code in the URL; it is
+            part of the message signed in `delphi-signature`
           type: string
           example: "none"
           maxLength: 16
@@ -488,6 +490,8 @@ components:
       name: delphi-key
       schema:
         type: string
+        maxLength: 42
+        pattern: '^0x[0-9a-fA-F]{40}$'
       required: true
       description: a key/address (public)
       example: "0xDEd1Fe6B3f61c8F1d874bb86F086D10FFc3F0154"
@@ -496,6 +500,7 @@ components:
       name: delphi-signature
       schema:
         type: string
+        maxLength: 132
         pattern: '^0x[0-9a-fA-F]{130}$'
       required: true
       description: |
@@ -505,11 +510,19 @@ components:
         up the path of the REST API endpoint called, the lower cased address
         in `delphi-key` and the `delphi-ts` timestamp. *Important*: please use
         UTC timestamps only.
+
+        For `/wallet/connection` the affiliate code from the request body is
+        appended, exactly as sent (`none` without one): `wallet connection,
+        0xded1fe6b3f61c8f1d874bb86f086d10ffc3f0154, 2023-10-23
+        18:45:19+00:00, none`. A signature is thus bound to the code it is
+        sent with.
     delphi_ts:
       in: header
       name: delphi-ts
       schema:
         type: string
+        maxLength: 12
+        pattern: '^[0-9]{1,12}$'
       required: true
       description: |
         caller timestamp (number of seconds since Unix epoch) -- included

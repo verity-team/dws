@@ -51,11 +51,16 @@ const LandingClientRoot = ({
       }
 
       // the backend requires proof that the caller owns `address`; the message
-      // is derived from the endpoint path, the address and the timestamp and
-      // must match what the backend rebuilds exactly
+      // is derived from the endpoint path, the address, the timestamp and the
+      // affiliate code sent in the body (so the code cannot be swapped on a
+      // replayed signature) and must match what the backend rebuilds exactly
       const now = new Date();
       const timestamp = Math.floor(now.getTime() / 1000);
-      const message = getDelphiMessage("wallet connection", address, now);
+      const message = `${getDelphiMessage(
+        "wallet connection",
+        address,
+        now
+      )}, ${afc}`;
 
       let signature = "";
       try {

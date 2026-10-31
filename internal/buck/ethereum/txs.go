@@ -57,10 +57,57 @@ const (
 // Note this is not a minimum donation amount: the only transfers turned away
 // are the ones that would have been stored as zero anyway.
 func recordedAmount(raw decimal.Decimal, scale, places int32) (string, bool) {
-	// StringFixed rounds to `places` internally; rounding here first makes
-	// the value that is tested and the value that is stored the same one
-	value := raw.Shift(-scale).Round(places)
+	value := roundedAmount(raw, scale, places)
 	return value.StringFixed(places), value.IsPositive()
+}
+
+// roundedAmount is the value recordedAmount renders. StringFixed rounds to
+// `places` internally; rounding here first makes the value that is tested
+// (recordedAmount, amountFits) and the value that is stored the same one.
+func roundedAmount(raw decimal.Decimal, scale, places int32) decimal.Decimal {
+	return raw.Shift(-scale).Round(places)
+}
+
+// amountFits reports whether a transferred amount can be written to the
+// donation row at all. usd is set for the stable coins: their amount *is* the
+// usd_amount, so it has to fit that (narrower) column as well. The usd_amount
+// of an ethereum donation depends on the ETH price and is checked when it is
+// computed, see calcTokens.
+//
+// Nothing else bounds the amount, and a transfer that does not fit is not a
+// matter of rounding: postgres refuses it with `numeric field overflow`, which
+// rolls back the whole block. The block is retried on every run, by the latest
+// crawler first and then by the finalized one, so a single such transfer
+// wedges both crawlers for good -- and skipping the block drops every
+// legitimate donation in it. For an ERC-20 it does not even take the money: a
+// `transfer(receivingAddr, 1e17)` from an empty account reverts, but it is
+// mined, its calldata is what is parsed here and the reverted transaction is
+// persisted like any other (as 'failed'). Such a transfer is recorded in
+// failed_tx instead, like a transfer whose calldata cannot be parsed: no
+// genuine donation comes anywhere near 1e10 USD.
+func amountFits(raw decimal.Decimal, scale, places int32, usd bool) bool {
+	value := roundedAmount(raw, scale, places)
+	if !c.DonationAmountColumn.Fits(value) {
+		return false
+	}
+	return !usd || c.DonationUSDAmountColumn.Fits(value)
+}
+
+// persistFailedTx records a transaction to the receiving address that cannot
+// be recorded as a donation in failed_tx. cause says why, it is logged.
+//
+// failed txs must be persisted -- otherwise we are losing them altogether: the
+// transaction ends up in neither `donation` nor `failed_tx` while the block is
+// advanced past it. A failed write is hence returned and fails the block.
+func persistFailedTx(ctxt c.Context, b c.Block, tx c.Transaction, cause error) error {
+	log.Error(cause)
+	err := db.PersistFailedTx(ctxt.DB, b, tx)
+	if err != nil {
+		err = fmt.Errorf("failed to persist failed tx '%s', %w", tx.Hash, err)
+		log.Error(err)
+		return err
+	}
+	return nil
 }
 
 func GetTransactions(ctxt c.Context, blockNumber uint64) ([]c.Transaction, error) {
@@ -97,13 +144,7 @@ func filterTransactions(ctxt c.Context, b c.Block) ([]c.Transaction, error) {
 			amount, err := c.HexStringToDecimal(tx.Value)
 			if err != nil {
 				err = fmt.Errorf("failed to process ETH tx '%s', %w", tx.Hash, err)
-				log.Error(err)
-				err = db.PersistFailedTx(ctxt.DB, b, tx)
-				if err != nil {
-					// failed txs must be persisted -- otherwise we are losing
-					// them altogether
-					err = fmt.Errorf("failed to persist failed tx '%s', %w", tx.Hash, err)
-					log.Error(err)
+				if err = persistFailedTx(ctxt, b, tx, err); err != nil {
 					return nil, err
 				}
 				continue
@@ -111,6 +152,15 @@ func filterTransactions(ctxt c.Context, b c.Block) ([]c.Transaction, error) {
 			value, ok := recordedAmount(amount, WeiDecimals, ETHAmountDecimals)
 			if !ok {
 				log.Warnf("skipping ETH tx ('%s') that transfers no recordable amount (%s wei)", tx.Hash, amount.String())
+				continue
+			}
+			if !amountFits(amount, WeiDecimals, ETHAmountDecimals, false) {
+				err = fmt.Errorf(
+					"ETH tx '%s' transfers an amount (%s wei) that does not fit donation.amount %s",
+					tx.Hash, amount.String(), c.DonationAmountColumn)
+				if err = persistFailedTx(ctxt, b, tx, err); err != nil {
+					return nil, err
+				}
 				continue
 			}
 			tx.Value = value
@@ -130,15 +180,7 @@ func filterTransactions(ctxt c.Context, b c.Block) ([]c.Transaction, error) {
 				receiver, amount, err := parseInputData(ctxt.ABI, erc20.Asset, tx.Input)
 				if err != nil {
 					err = fmt.Errorf("failed to process ERC-20 tx '%s', %w", tx.Hash, err)
-					log.Error(err)
-					err = db.PersistFailedTx(ctxt.DB, b, tx)
-					if err != nil {
-						// failed txs must be persisted -- otherwise we are
-						// losing them altogether: the donation ends up in
-						// neither `donation` nor `failed_tx` while the block
-						// is advanced past it
-						err = fmt.Errorf("failed to persist failed tx '%s', %w", tx.Hash, err)
-						log.Error(err)
+					if err = persistFailedTx(ctxt, b, tx, err); err != nil {
 						return nil, err
 					}
 					continue
@@ -150,6 +192,15 @@ func filterTransactions(ctxt c.Context, b c.Block) ([]c.Transaction, error) {
 				value, vok := recordedAmount(amount, erc20.Scale, DonationAmountDecimals)
 				if !vok {
 					log.Warnf("skipping %s tx ('%s') that transfers no recordable amount (%s base units)", erc20.Asset, tx.Hash, amount.String())
+					continue
+				}
+				if !amountFits(amount, erc20.Scale, DonationAmountDecimals, true) {
+					err = fmt.Errorf(
+						"%s tx '%s' transfers an amount (%s base units) that does not fit donation.amount %s / donation.usd_amount %s",
+						erc20.Asset, tx.Hash, amount.String(), c.DonationAmountColumn, c.DonationUSDAmountColumn)
+					if err = persistFailedTx(ctxt, b, tx, err); err != nil {
+						return nil, err
+					}
 					continue
 				}
 				tx.To = ctxt.ReceivingAddr
@@ -182,7 +233,7 @@ func filterTransactions(ctxt c.Context, b c.Block) ([]c.Transaction, error) {
 
 func markFailedTxs(ctxt c.Context, bn uint64, txs []c.Transaction) error {
 	// check whether any of the _filtered_ transactions have failed
-	rcpts, err := GetData[c.TxReceipt](ctxt, c.ToHashable(txs), txrFetcher{})
+	rcpts, err := GetTxReceipts(ctxt, c.ToHashable(txs))
 	if err != nil {
 		err = fmt.Errorf("failed to get tx receipts for block %d, %w", bn, err)
 		log.Error(err)

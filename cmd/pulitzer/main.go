@@ -38,7 +38,10 @@ const (
 )
 
 // maxPriceDeviation is the relative deviation from the median a single source
-// may show before it is dropped from the cycle.
+// may show before it is dropped from the cycle. It also bounds how far apart
+// the accepted sources of a cycle may be (see calculatePrice) and how far a
+// backfilled price may be from the source corroborating it (see
+// selectHistorical).
 var maxPriceDeviation = decimal.NewFromFloat(0.10)
 
 var (
@@ -252,10 +255,25 @@ func rejectOutliers(sorted []sourcePrice) []sourcePrice {
 	return accepted
 }
 
-// calculateAveragePrice turns the prices collected in one cycle into the
-// figure that gets written to the database: the mean of the sources that are
-// within maxPriceDeviation of the median.
-func calculateAveragePrice(prices []sourcePrice) (decimal.Decimal, error) {
+// acceptedSpread returns the distance between the highest and the lowest of the
+// sorted, accepted prices relative to their median.
+func acceptedSpread(sorted []sourcePrice) decimal.Decimal {
+	return sorted[len(sorted)-1].price.Sub(sorted[0].price).Div(medianPrice(sorted))
+}
+
+// calculatePrice turns the prices collected in one cycle into the figure that
+// gets written to the database: the median of the sources that are within
+// maxPriceDeviation of the median of all of them.
+//
+// The per-source gate alone is not enough. With four sources split two and
+// two, [a,a,b,b], the median sits half way between the pairs, so every source
+// passes it for b up to ~1.22a -- a USDT depeg moving both USDT venues by ~18%
+// would then shift the price by ~9%. The round is therefore also refused when
+// the accepted sources are spread wider than maxPriceDeviation of their
+// median: two camps that far apart are a disagreement, not a price. And the
+// median, unlike the mean, is not pulled by a single rogue source that stays
+// just inside the band.
+func calculatePrice(prices []sourcePrice) (decimal.Decimal, error) {
 	usable := make([]sourcePrice, 0, len(prices))
 	for _, sp := range prices {
 		if !sp.price.IsPositive() {
@@ -277,11 +295,15 @@ func calculateAveragePrice(prices []sourcePrice) (decimal.Decimal, error) {
 			maxPriceDeviation.Mul(decimal.NewFromInt(100)).StringFixed(0), minAcceptedPrices)
 	}
 
-	sum := decimal.Zero
-	for _, sp := range accepted {
-		sum = sum.Add(sp.price)
+	// rejectOutliers preserves the order, so accepted is still sorted
+	if spread := acceptedSpread(accepted); spread.GreaterThan(maxPriceDeviation) {
+		return decimal.Zero, fmt.Errorf(
+			"the %d accepted price(s) ($%s .. $%s) are spread %s%% around their median, the limit is %s%%",
+			len(accepted), accepted[0].price.StringFixed(2), accepted[len(accepted)-1].price.StringFixed(2),
+			spread.Mul(decimal.NewFromInt(100)).StringFixed(2),
+			maxPriceDeviation.Mul(decimal.NewFromInt(100)).StringFixed(0))
 	}
-	return sum.Div(decimal.NewFromInt(int64(len(accepted)))), nil
+	return medianPrice(accepted), nil
 }
 
 func servePriceRequests(ctx context.Context) error {
@@ -307,21 +329,24 @@ func servePriceRequests(ctx context.Context) error {
 		now := time.Now().UTC()
 		// a single request that cannot be fulfilled must not block the
 		// remaining (older or newer) requests in the queue
-		klines, source, err := historicalKlines(ctx, rq.Time, now)
+		hp, err := historicalPrice(ctx, rq.Time, now)
 		if err != nil {
 			err = fmt.Errorf("failed to obtain historical prices for %s, %w", rq.Time, err)
 			log.Error(err)
 			failPriceRequest(dbh, rq, now)
 			continue
 		}
-		err = db.CloseRequest(dbh, rq.ID, rq.Time, klines, now)
+		// the requested minute only, see db.MinuteKline
+		err = db.CloseRequest(dbh, rq.ID, rq.Time, []data.Kline{hp.kline}, now)
 		if err != nil {
 			err = fmt.Errorf("failed to persist historical prices for request #%d/%s, %w", rq.ID, rq.Time, err)
 			log.Error(err)
 			failPriceRequest(dbh, rq, now)
 			continue
 		}
-		log.Infof("obtained %d historical price(s) for request #%d/%s from %s", len(klines), rq.ID, rq.Time, source)
+		log.Infof(
+			"obtained the historical price ($%s) for request #%d/%s from %s, corroborated by %s",
+			hp.kline.ClosePrice.StringFixed(2), rq.ID, rq.Time, hp.source, hp.witness)
 	}
 	return nil
 }
@@ -329,15 +354,15 @@ func servePriceRequests(ctx context.Context) error {
 // HistoricalChainBudget bounds the wall-clock time selectHistorical may spend
 // walking the whole fallback chain for one request.
 //
-// The chain fetches from binance, kraken and coinbase in sequence, each with
-// the default 10s common.HTTPGet client timeout, so three hung sources would
-// otherwise take ~30s -- and servePriceRequests is scheduled every 10s and
+// The chain fetches from binance, kraken, coinbase and bitstamp in sequence,
+// each with the default 10s common.HTTPGet client timeout, so four hung
+// sources would otherwise take ~40s -- and servePriceRequests is scheduled every 10s and
 // cannot overlap itself under SingletonModeAll, so a slow run delays every
 // later request. A single 15s deadline over the whole chain caps that: it is
-// generous for a healthy walk (three reachable venues answer in well under a
+// generous for a healthy walk (four reachable venues answer in well under a
 // second combined) yet still lets one genuinely slow-but-working source run out
 // its own 10s client timeout once, while guaranteeing the chain returns in
-// ~15s rather than ~30s. The deadline is threaded into each fetch (see
+// ~15s rather than ~40s. The deadline is threaded into each fetch (see
 // HTTPGetCtx), so a request already in flight when the budget is spent is
 // actually cancelled, not merely prevented from starting the next source.
 const HistoricalChainBudget = 15 * time.Second
@@ -349,27 +374,57 @@ type historicalSource struct {
 }
 
 // historicalSources is the ordered fallback chain the backfill path walks to
-// price a minute. binance is tried first, unchanged; kraken and coinbase back
-// it up so a binance-specific data gap or outage no longer stalls donation
-// finalization the way a single hardcoded source did (see #228). The live
-// price path already fans out to six venues -- this gives the backfill, the
-// path that has to unblock a stalled crawler, source diversity of its own.
+// price a minute. binance is tried first, unchanged; kraken, coinbase and
+// bitstamp back it up so a binance-specific data gap or outage no longer
+// stalls donation finalization the way a single hardcoded source did (see
+// #228), and they corroborate the price of the source that serves it (see
+// selectHistorical). kraken only keeps its latest 720 one-minute candles, so
+// for a minute older than ~12 hours binance, coinbase and bitstamp are the
+// candidates: bitstamp is what keeps that case a 2-of-3 rather than a 2-of-2.
+// The live price path already fans out to six venues -- this gives the
+// backfill, the path that has to unblock a stalled crawler, source diversity
+// of its own.
 var historicalSources = []historicalSource{
 	{"binance", data.GetHistoricalPriceFromBinance},
 	{"kraken", data.GetHistoricalPriceFromKraken},
 	{"coinbase", data.GetHistoricalPriceFromCoinbase},
+	{"bitstamp", data.GetHistoricalPriceFromBitstamp},
 }
 
-// historicalKlines returns the klines from the first configured source that
-// can actually serve the requested minute, together with the name of that
-// source. It is the production entry point; selectHistorical holds the logic so
-// it can be exercised with stub sources and a shorter budget.
-func historicalKlines(ctx context.Context, ts, now time.Time) ([]data.Kline, string, error) {
+// historicalQuote is the price of the requested minute: the kline that gets
+// persisted, the source it came from and the source that corroborated it.
+type historicalQuote struct {
+	kline   data.Kline
+	source  string
+	witness string
+}
+
+// historicalPrice returns the corroborated price of the requested minute. It
+// is the production entry point; selectHistorical holds the logic so it can be
+// exercised with stub sources and a shorter budget.
+func historicalPrice(ctx context.Context, ts, now time.Time) (historicalQuote, error) {
 	return selectHistorical(ctx, historicalSources, ts, now, HistoricalChainBudget)
 }
 
-// selectHistorical walks the sources in order and returns the klines from the
-// first one that can serve the requested minute.
+// pricesAgree reports whether the corroborating price is within
+// maxPriceDeviation of the price that is to be persisted.
+func pricesAgree(persisted, witness decimal.Decimal) bool {
+	return witness.Sub(persisted).Div(persisted).Abs().LessThanOrEqual(maxPriceDeviation)
+}
+
+// selectHistorical walks the sources in order and returns the kline of the
+// requested minute from the first source whose price a later source
+// corroborates.
+//
+// A backfilled price is permanent (persistKline inserts ON CONFLICT DO
+// NOTHING) and is needed exactly when the live quorum failed, so one venue
+// alone must not set it (see #271): a stale or broken kline -- even 15% off --
+// would otherwise price the donations of that minute for good. Every source
+// that serves the minute is therefore checked against the ones that served it
+// before; the first pair that agrees within maxPriceDeviation wins and the
+// earlier source's kline -- the preferred one, the chain order is kept -- is
+// the one persisted. A disagreeing source does not end the walk: the next one
+// may still side with either of the two.
 //
 // The whole walk shares a single budget: ctx is given a deadline of budget and
 // each source's fetch is bound to it, so one hung source cannot make the chain
@@ -378,17 +433,19 @@ func historicalKlines(ctx context.Context, ts, now time.Time) ([]data.Kline, str
 // (the gocron job context), so a shutdown also cancels an in-flight fetch.
 //
 // A source is skipped -- in favour of the next -- when it errors (a cancelled
-// fetch is just another error) or when what it returns does not cover the
-// minute with a final kline (db.ServesMinute, the same gate CloseRequest
-// applies). Only when every source has been tried and none can serve the minute
-// is an error returned, carrying the reason each one gave so a genuine gap --
-// or a spent budget -- is diagnosable; the caller then fails the request and it
-// is retried.
-func selectHistorical(ctx context.Context, sources []historicalSource, ts, now time.Time, budget time.Duration) ([]data.Kline, string, error) {
+// fetch is just another error) or when what it returns has no final kline for
+// the minute (db.MinuteKline). Only when the chain is exhausted without two
+// agreeing sources is an error returned, carrying the reason each one gave so a
+// genuine gap, a disagreement or a spent budget is diagnosable; the caller then
+// fails the request and it is retried.
+func selectHistorical(ctx context.Context, sources []historicalSource, ts, now time.Time, budget time.Duration) (historicalQuote, error) {
 	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 
-	var errs []error
+	var (
+		errs   []error
+		served []historicalQuote
+	)
 	for _, s := range sources {
 		if err := ctx.Err(); err != nil {
 			errs = append(errs, fmt.Errorf("chain budget (%v) spent before %s: %w", budget, s.name, err))
@@ -399,15 +456,26 @@ func selectHistorical(ctx context.Context, sources []historicalSource, ts, now t
 			errs = append(errs, fmt.Errorf("%s: %w", s.name, err))
 			continue
 		}
-		if !db.ServesMinute(ts, now, klines) {
-			errs = append(errs, fmt.Errorf(
-				"%s: no final kline within %v of the requested minute", s.name, common.PriceLookupWindow))
+		kl, err := db.MinuteKline(ts, now, klines)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", s.name, err))
 			continue
 		}
-		return klines, s.name, nil
+		for _, prior := range served {
+			if pricesAgree(prior.kline.ClosePrice, kl.ClosePrice) {
+				prior.witness = s.name
+				return prior, nil
+			}
+			errs = append(errs, fmt.Errorf(
+				"%s ($%s) and %s ($%s) disagree by more than %s%%",
+				prior.source, prior.kline.ClosePrice.StringFixed(2), s.name, kl.ClosePrice.StringFixed(2),
+				maxPriceDeviation.Mul(decimal.NewFromInt(100)).StringFixed(0)))
+		}
+		served = append(served, historicalQuote{kline: kl, source: s.name})
 	}
-	return nil, "", fmt.Errorf(
-		"no historical source could serve %s, %w", ts.UTC().Format(time.RFC3339), errors.Join(errs...))
+	return historicalQuote{}, fmt.Errorf(
+		"no two historical sources could serve and agree on %s (%d served), %w",
+		ts.UTC().Format(time.RFC3339), len(served), errors.Join(errs...))
 }
 
 // failPriceRequest records a price request that could not be served so that the
@@ -443,7 +511,7 @@ func stuckPriceRequestAlert(rq db.PriceReq, now time.Time) (string, bool) {
 		return "", false
 	}
 	return fmt.Sprintf(
-		"price request #%d for %s has been unfulfilled for %v (>= %v): no price source can serve the minute -- needs attention (still retrying every %v)",
+		"price request #%d for %s has been unfulfilled for %v (>= %v): no two price sources can serve and agree on the minute -- needs attention (still retrying every %v)",
 		rq.ID, rq.Time.UTC().Format(time.RFC3339), age.Truncate(time.Second), db.PriceReqAlertAge, db.FailedRetryDelay), true
 }
 
@@ -511,20 +579,20 @@ func getETHPrice(ctx context.Context) (decimal.Decimal, error) {
 		}
 	}
 
-	av, err := calculateAveragePrice(prices)
+	mp, err := calculatePrice(prices)
 	if err != nil {
 		log.Error(err)
 		return decimal.Zero, err
 	}
-	log.Infof("average price: $%s", av.StringFixed(2))
+	log.Infof("median price: $%s", mp.StringFixed(2))
 
-	err = db.PersistETHPrice(dbh, av)
+	err = db.PersistETHPrice(dbh, mp)
 	if err != nil {
 		log.Errorf("failed to persist ETH price, %v", err)
 		return decimal.Zero, err
 	}
 
-	return av, nil
+	return mp, nil
 }
 
 // fetchPrice fetches the ethereum price from a single source and sends it to

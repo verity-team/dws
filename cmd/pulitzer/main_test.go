@@ -66,20 +66,20 @@ func TestMedianPrice(t *testing.T) {
 // the old pairwise gate divided by prices[i] and walked a slice built from a
 // map, so 100 and 111 were 11% apart (reject) or 9.9% apart (accept) depending
 // on the order the sources happened to be collected in
-func TestCalculateAveragePriceIsOrderIndependent(t *testing.T) {
+func TestCalculatePriceIsOrderIndependent(t *testing.T) {
 	prices := []sourcePrice{
 		sp("binance", "2000"), sp("kraken", "2222"),
 		sp("bitfinex", "2000"), sp("coinbase", "2000"),
 		sp("cexio", "2000"), sp("kucoin", "2000"),
 	}
 
-	want, err := calculateAveragePrice(prices)
+	want, err := calculatePrice(prices)
 	require.NoError(t, err)
 
 	// every rotation and the reverse order have to produce the same figure
 	for i := range prices {
 		rotated := append(append([]sourcePrice{}, prices[i:]...), prices[:i]...)
-		got, err := calculateAveragePrice(rotated)
+		got, err := calculatePrice(rotated)
 		require.NoError(t, err)
 		assert.True(t, want.Equal(got), "rotation by %d: %s != %s", i, got, want)
 	}
@@ -87,13 +87,13 @@ func TestCalculateAveragePriceIsOrderIndependent(t *testing.T) {
 	for i := len(prices) - 1; i >= 0; i-- {
 		reversed = append(reversed, prices[i])
 	}
-	got, err := calculateAveragePrice(reversed)
+	got, err := calculatePrice(reversed)
 	require.NoError(t, err)
 	assert.True(t, want.Equal(got))
 }
 
 // a single gross outlier is dropped, it no longer discards the whole cycle
-func TestCalculateAveragePriceDropsOutlier(t *testing.T) {
+func TestCalculatePriceDropsOutlier(t *testing.T) {
 	prices := []sourcePrice{
 		sp("binance", "2000"), sp("kraken", "2010"), sp("bitfinex", "1990"),
 		sp("coinbase", "2000"), sp("cexio", "2005"),
@@ -101,10 +101,59 @@ func TestCalculateAveragePriceDropsOutlier(t *testing.T) {
 		sp("kucoin", "3000"),
 	}
 
-	av, err := calculateAveragePrice(prices)
+	av, err := calculatePrice(prices)
 	require.NoError(t, err)
-	// the mean of the five consistent sources, the outlier is not in it
-	assert.True(t, decimal.RequireFromString("2001").Equal(av), "got %s", av)
+	// the median of the five consistent sources, the outlier is not in it
+	assert.True(t, decimal.RequireFromString("2000").Equal(av), "got %s", av)
+}
+
+// the written price is the median of the accepted sources, not their mean: a
+// rogue source that stays inside the band does not move it
+func TestCalculatePriceIsTheMedianOfTheAccepted(t *testing.T) {
+	av, err := calculatePrice([]sourcePrice{
+		sp("a", "2000"), sp("b", "2000"), sp("c", "2000"), sp("d", "2000"),
+		// 9.5% high, still accepted
+		sp("e", "2190"),
+	})
+	require.NoError(t, err)
+	assert.True(t, decimal.RequireFromString("2000").Equal(av), "got %s", av)
+
+	// an even number of accepted sources: the mean of the two middle values
+	av, err = calculatePrice([]sourcePrice{
+		sp("a", "1990"), sp("b", "2000"), sp("c", "2010"), sp("d", "2020"),
+	})
+	require.NoError(t, err)
+	assert.True(t, decimal.RequireFromString("2005").Equal(av), "got %s", av)
+}
+
+// two camps of two, [a,a,b,b]: the median sits between them, so each source
+// passes the per-source gate up to b = ~1.22a; the round has to be refused on
+// the spread of the accepted sources instead (e.g. a USDT depeg moving both
+// USDT venues by 17.6%)
+func TestCalculatePriceRejectsASplitRound(t *testing.T) {
+	prices := []sourcePrice{
+		sp("binance", "2352"), sp("kucoin", "2352"),
+		sp("kraken", "2000"), sp("coinbase", "2000"),
+	}
+	require.Equal(t, 4, len(rejectOutliers(sortPrices(prices))), "every source passes the per-source gate")
+	_, err := calculatePrice(prices)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "spread")
+}
+
+// a spread of exactly maxPriceDeviation around the median is still accepted,
+// one just beyond it is not
+func TestCalculatePriceSpreadBoundary(t *testing.T) {
+	// median 2000, spread 200 = 10%
+	_, err := calculatePrice([]sourcePrice{
+		sp("a", "1900"), sp("b", "2000"), sp("c", "2000"), sp("d", "2100"),
+	})
+	require.NoError(t, err)
+
+	_, err = calculatePrice([]sourcePrice{
+		sp("a", "1900"), sp("b", "2000"), sp("c", "2000"), sp("d", "2100.01"),
+	})
+	require.Error(t, err)
 }
 
 func TestRejectOutliers(t *testing.T) {
@@ -131,24 +180,24 @@ func TestRejectOutliersBoundary(t *testing.T) {
 	assert.Equal(t, 3, len(accepted))
 }
 
-func TestCalculateAveragePriceQuorum(t *testing.T) {
-	_, err := calculateAveragePrice([]sourcePrice{sp("a", "2000"), sp("b", "2000"), sp("c", "2000")})
+func TestCalculatePriceQuorum(t *testing.T) {
+	_, err := calculatePrice([]sourcePrice{sp("a", "2000"), sp("b", "2000"), sp("c", "2000")})
 	assert.Error(t, err, "three sources are below the quorum")
 
-	av, err := calculateAveragePrice([]sourcePrice{sp("a", "2000"), sp("b", "2000"), sp("c", "2000"), sp("d", "2000")})
+	av, err := calculatePrice([]sourcePrice{sp("a", "2000"), sp("b", "2000"), sp("c", "2000"), sp("d", "2000")})
 	require.NoError(t, err)
 	assert.True(t, decimal.RequireFromString("2000").Equal(av))
 }
 
-// non-positive prices never make it into the average and do not blow up the
+// non-positive prices never make it into the price and do not blow up the
 // median either
-func TestCalculateAveragePriceIgnoresNonPositivePrices(t *testing.T) {
-	_, err := calculateAveragePrice([]sourcePrice{
+func TestCalculatePriceIgnoresNonPositivePrices(t *testing.T) {
+	_, err := calculatePrice([]sourcePrice{
 		sp("a", "2000"), sp("b", "2000"), sp("c", "0"), sp("d", "-1"),
 	})
 	assert.Error(t, err)
 
-	av, err := calculateAveragePrice([]sourcePrice{
+	av, err := calculatePrice([]sourcePrice{
 		sp("a", "2000"), sp("b", "2000"), sp("c", "2000"), sp("d", "2000"), sp("e", "0"),
 	})
 	require.NoError(t, err)
@@ -156,8 +205,8 @@ func TestCalculateAveragePriceIgnoresNonPositivePrices(t *testing.T) {
 }
 
 // too few mutually consistent sources left after the outliers were dropped
-func TestCalculateAveragePriceTooFewAccepted(t *testing.T) {
-	_, err := calculateAveragePrice([]sourcePrice{
+func TestCalculatePriceTooFewAccepted(t *testing.T) {
+	_, err := calculatePrice([]sourcePrice{
 		sp("a", "1000"), sp("b", "2000"), sp("c", "3000"), sp("d", "4000"),
 	})
 	assert.Error(t, err)
@@ -210,16 +259,25 @@ var (
 	fallbackNow = fallbackTS.Add(5 * time.Minute) // the requested minute is long closed
 )
 
-// binance fails to fetch -> the next source's price is used
+// requireQuote asserts which source's kline won, who corroborated it and the
+// price that gets persisted.
+func requireQuote(t *testing.T, q historicalQuote, source, witness, price string) {
+	t.Helper()
+	require.Equal(t, source, q.source)
+	require.Equal(t, witness, q.witness)
+	require.True(t, q.kline.ClosePrice.Equal(decimal.RequireFromString(price)), "got %s", q.kline.ClosePrice)
+}
+
+// binance fails to fetch -> the next two sources serve and corroborate
 func TestSelectHistoricalFallsThroughOnFetchError(t *testing.T) {
 	sources := []historicalSource{
 		stubSource("binance", nil, errors.New("no klines")),
 		stubSource("kraken", covering(fallbackTS, "2000.5"), nil),
+		stubSource("coinbase", covering(fallbackTS, "2001"), nil),
 	}
-	klines, name, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, HistoricalChainBudget)
+	q, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, HistoricalChainBudget)
 	require.NoError(t, err)
-	require.Equal(t, "kraken", name)
-	require.True(t, klines[0].ClosePrice.Equal(decimal.RequireFromString("2000.5")))
+	requireQuote(t, q, "kraken", "coinbase", "2000.5")
 }
 
 // binance returns klines that do not cover the minute (a data gap) -> the
@@ -232,28 +290,142 @@ func TestSelectHistoricalFallsThroughOnAGap(t *testing.T) {
 	}}
 	sources := []historicalSource{
 		stubSource("binance", gap, nil),
-		stubSource("coinbase", covering(fallbackTS, "1999.75"), nil),
+		stubSource("kraken", covering(fallbackTS, "1999.75"), nil),
+		stubSource("coinbase", covering(fallbackTS, "2000"), nil),
 	}
-	klines, name, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, HistoricalChainBudget)
+	q, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, HistoricalChainBudget)
 	require.NoError(t, err)
-	require.Equal(t, "coinbase", name)
-	require.True(t, klines[0].ClosePrice.Equal(decimal.RequireFromString("1999.75")))
+	requireQuote(t, q, "kraken", "coinbase", "1999.75")
 }
 
-// binance serves the minute -> it wins and the fallbacks are not consulted
+// binance serves the minute and kraken corroborates it -> binance's price is
+// persisted and coinbase is not consulted
+// the production chain: binance first, then the three fallbacks in order
+func TestHistoricalSourcesOrder(t *testing.T) {
+	var names []string
+	for _, s := range historicalSources {
+		names = append(names, s.name)
+	}
+	require.Equal(t, []string{"binance", "kraken", "coinbase", "bitstamp"}, names)
+}
+
+// a minute older than kraken's ~12 hour window, with binance geo-blocked:
+// coinbase and bitstamp still serve and agree, so the request succeeds
+func TestSelectHistoricalPastKrakensWindow(t *testing.T) {
+	sources := []historicalSource{
+		stubSource("binance", nil, errors.New("HTTP 451")),
+		stubSource("kraken", covering(fallbackTS.Add(13*time.Hour), "2100"), nil),
+		stubSource("coinbase", covering(fallbackTS, "2000"), nil),
+		stubSource("bitstamp", covering(fallbackTS, "2000.4"), nil),
+	}
+	q, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, HistoricalChainBudget)
+	require.NoError(t, err)
+	requireQuote(t, q, "coinbase", "bitstamp", "2000")
+}
+
 func TestSelectHistoricalPrefersBinance(t *testing.T) {
 	consulted := false
 	sources := []historicalSource{
 		stubSource("binance", covering(fallbackTS, "2000.5"), nil),
-		{name: "kraken", fetch: func(context.Context, time.Time) ([]data.Kline, error) {
+		stubSource("kraken", covering(fallbackTS, "2010"), nil),
+		{name: "coinbase", fetch: func(context.Context, time.Time) ([]data.Kline, error) {
 			consulted = true
 			return nil, errors.New("should not be reached")
 		}},
 	}
-	_, name, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, HistoricalChainBudget)
+	q, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, HistoricalChainBudget)
 	require.NoError(t, err)
-	require.Equal(t, "binance", name)
-	require.False(t, consulted, "a later source must not be consulted once one serves the minute")
+	requireQuote(t, q, "binance", "kraken", "2000.5")
+	require.False(t, consulted, "a later source must not be consulted once two agree")
+}
+
+// a single source serving the minute is not enough (#271): the request must
+// fail -- and be retried -- rather than be priced by one venue for good
+func TestSelectHistoricalRequiresASecondSource(t *testing.T) {
+	sources := []historicalSource{
+		stubSource("binance", covering(fallbackTS, "2000.5"), nil),
+		stubSource("kraken", nil, errors.New("kraken down")),
+		stubSource("coinbase", nil, errors.New("coinbase down")),
+	}
+	_, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, HistoricalChainBudget)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "1 served")
+	require.ErrorContains(t, err, "kraken down")
+	require.ErrorContains(t, err, "coinbase down")
+}
+
+// binance is 15% off: kraken disagrees with it, coinbase sides with kraken ->
+// kraken's price is persisted, binance's never is
+func TestSelectHistoricalOutvotesARogueFirstSource(t *testing.T) {
+	sources := []historicalSource{
+		stubSource("binance", covering(fallbackTS, "2300"), nil),
+		stubSource("kraken", covering(fallbackTS, "2000"), nil),
+		stubSource("coinbase", covering(fallbackTS, "2001"), nil),
+	}
+	q, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, HistoricalChainBudget)
+	require.NoError(t, err)
+	requireQuote(t, q, "kraken", "coinbase", "2000")
+}
+
+// kraken is the rogue one: coinbase sides with binance -> binance's price
+func TestSelectHistoricalOutvotesARogueSecondSource(t *testing.T) {
+	sources := []historicalSource{
+		stubSource("binance", covering(fallbackTS, "2000"), nil),
+		stubSource("kraken", covering(fallbackTS, "1700"), nil),
+		stubSource("coinbase", covering(fallbackTS, "2001"), nil),
+	}
+	q, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, HistoricalChainBudget)
+	require.NoError(t, err)
+	requireQuote(t, q, "binance", "coinbase", "2000")
+}
+
+// no two sources agree -> an error naming the disagreement
+func TestSelectHistoricalAllSourcesDisagree(t *testing.T) {
+	sources := []historicalSource{
+		stubSource("binance", covering(fallbackTS, "1000"), nil),
+		stubSource("kraken", covering(fallbackTS, "2000"), nil),
+		stubSource("coinbase", covering(fallbackTS, "3000"), nil),
+	}
+	_, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, HistoricalChainBudget)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "disagree")
+	require.ErrorContains(t, err, "3 served")
+}
+
+// exactly maxPriceDeviation apart the sources still agree, just beyond it not
+func TestSelectHistoricalAgreementBoundary(t *testing.T) {
+	sources := []historicalSource{
+		stubSource("binance", covering(fallbackTS, "2000"), nil),
+		stubSource("kraken", covering(fallbackTS, "2200"), nil),
+	}
+	q, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, HistoricalChainBudget)
+	require.NoError(t, err)
+	requireQuote(t, q, "binance", "kraken", "2000")
+
+	sources[1] = stubSource("kraken", covering(fallbackTS, "2200.01"), nil)
+	_, err = selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, HistoricalChainBudget)
+	require.Error(t, err)
+}
+
+// only the kline of the requested minute is returned for persistence, and the
+// corroboration is on that minute: the neighbouring minutes binance returns
+// alongside it play no part (#271)
+func TestSelectHistoricalUsesTheRequestedMinuteOnly(t *testing.T) {
+	window := func(prev, req, next string) []data.Kline {
+		return []data.Kline{
+			{ClosePrice: decimal.RequireFromString(prev), CloseTime: fallbackTS.Add(-time.Second)},
+			{ClosePrice: decimal.RequireFromString(req), CloseTime: fallbackTS.Add(59 * time.Second)},
+			{ClosePrice: decimal.RequireFromString(next), CloseTime: fallbackTS.Add(time.Minute + 59*time.Second)},
+		}
+	}
+	sources := []historicalSource{
+		stubSource("binance", window("9000", "2000", "9000"), nil),
+		stubSource("kraken", window("1", "2001", "1"), nil),
+	}
+	q, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, HistoricalChainBudget)
+	require.NoError(t, err)
+	requireQuote(t, q, "binance", "kraken", "2000")
+	require.Equal(t, fallbackTS.Add(59*time.Second), q.kline.CloseTime)
 }
 
 // every source fails to serve the minute -> an error naming each reason, so
@@ -268,7 +440,7 @@ func TestSelectHistoricalAllSourcesFail(t *testing.T) {
 		stubSource("kraken", nil, errors.New("kraken down")),
 		stubSource("coinbase", outOfWindow, nil),
 	}
-	_, _, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, HistoricalChainBudget)
+	_, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, HistoricalChainBudget)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "binance down")
 	require.ErrorContains(t, err, "kraken down")
@@ -294,29 +466,45 @@ func TestSelectHistoricalBudgetCapsAHungChain(t *testing.T) {
 	}
 
 	start := time.Now()
-	_, _, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, budget)
+	_, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, budget)
 	elapsed := time.Since(start)
 
 	require.Error(t, err, "a chain that never serves must fail, so the request is retried")
 	require.Less(t, elapsed, 10*budget, "the chain must be bounded by the budget, not the sources' own timeouts")
 }
 
+// binance serves at once but its witness hangs: the budget still bounds the
+// walk and the uncorroborated price is not used -- the request is retried
+func TestSelectHistoricalBudgetSpentBeforeCorroboration(t *testing.T) {
+	const budget = 100 * time.Millisecond
+	sources := []historicalSource{
+		stubSource("binance", covering(fallbackTS, "2000.5"), nil),
+		sleepySource("kraken", 3*time.Second, covering(fallbackTS, "2000.5")),
+		sleepySource("coinbase", 3*time.Second, covering(fallbackTS, "2000.5")),
+	}
+	start := time.Now()
+	_, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, budget)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "1 served")
+	require.Less(t, time.Since(start), 10*budget)
+}
+
 // a healthy walk completes well under the budget: the fallbacks are reached
-// quickly and the first that serves wins without waiting on any timeout
+// quickly and the first agreeing pair wins without waiting on any timeout
 func TestSelectHistoricalHealthyWalkIsFast(t *testing.T) {
 	const budget = 5 * time.Second
 	sources := []historicalSource{
 		stubSource("binance", nil, errors.New("gap")),
-		stubSource("kraken", nil, errors.New("gap")),
+		sleepySource("kraken", time.Millisecond, covering(fallbackTS, "2000")),
 		sleepySource("coinbase", time.Millisecond, covering(fallbackTS, "1999.75")),
 	}
 
 	start := time.Now()
-	_, name, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, budget)
+	q, err := selectHistorical(context.Background(), sources, fallbackTS, fallbackNow, budget)
 	elapsed := time.Since(start)
 
 	require.NoError(t, err)
-	require.Equal(t, "coinbase", name)
+	requireQuote(t, q, "kraken", "coinbase", "2000")
 	require.Less(t, elapsed, budget, "a healthy three-source walk must finish well inside the budget")
 }
 

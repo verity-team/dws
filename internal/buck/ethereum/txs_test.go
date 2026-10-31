@@ -1,6 +1,7 @@
 package ethereum
 
 import (
+	"fmt"
 	"math/big"
 	"os"
 	"strings"
@@ -518,4 +519,123 @@ func TestZeroValueERC20TransferIsNotADonation(t *testing.T) {
 	txs, err := filterTransactions(ctxt, block)
 	require.NoError(t, err)
 	assert.Empty(t, txs)
+}
+
+// transferInput is the calldata of `transfer(to, value)`.
+func transferInput(to string, value *big.Int) string {
+	return fmt.Sprintf("0xa9059cbb%064s%064x", strings.TrimPrefix(strings.ToLower(to), "0x"), value)
+}
+
+// a power of ten, as base units
+func pow10(n int64) *big.Int {
+	return new(big.Int).Exp(big.NewInt(10), big.NewInt(n), nil)
+}
+
+// the amount is bounded by donation.amount NUMERIC(20,10) and, for a stable
+// coin whose amount is the usd_amount, by usd_amount NUMERIC(12,2)
+func TestAmountFits(t *testing.T) {
+	// 9,999,999,999.99 USDC fits both columns
+	assert.True(t, amountFits(decimal.RequireFromString("9999999999990000"), 6, DonationAmountDecimals, true))
+	// ... half a cent more rounds up to 1e10 in usd_amount
+	assert.False(t, amountFits(decimal.RequireFromString("9999999999995000"), 6, DonationAmountDecimals, true))
+	// ... which donation.amount alone would still hold
+	assert.True(t, amountFits(decimal.RequireFromString("9999999999995000"), 6, DonationAmountDecimals, false))
+	// the 1e17 base unit transfer of the AUD4-1 scenario: 1e11 USDC
+	assert.False(t, amountFits(decimal.NewFromBigInt(pow10(17), 0), 6, DonationAmountDecimals, true))
+	// ETH: 1e10 ETH does not fit donation.amount, just below it does
+	assert.False(t, amountFits(decimal.NewFromBigInt(pow10(28), 0), WeiDecimals, ETHAmountDecimals, false))
+	assert.True(t, amountFits(decimal.RequireFromString("9999999999990000000000000000"), WeiDecimals, ETHAmountDecimals, false))
+}
+
+// AUD4-1: an oversized transfer used to reach PersistTxs and abort the block
+// with `numeric field overflow`, wedging both crawlers. It has to be routed to
+// failed_tx instead -- the closed database handle proves that the failed_tx
+// write was attempted (and that its failure is not swallowed), and no
+// transaction reaches the caller.
+func TestOversizedTransferIsRecordedAsFailedTx(t *testing.T) {
+	const (
+		contract = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+		receiver = "0x4667a044543e7f1b7d3a4b88396e024be0e34f36"
+	)
+	abis, err := InitABI()
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		name string
+		tx   c.Transaction
+	}{
+		{
+			// reverted transfer from an empty account: 1e17 base units, 1e11 USDC
+			name: "erc-20",
+			tx:   c.Transaction{To: contract, Value: "0x0", Input: transferInput(receiver, pow10(17))},
+		},
+		{
+			name: "eth",
+			tx:   c.Transaction{To: receiver, Value: "0x" + pow10(28).Text(16), Input: "0x"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctxt := c.Context{
+				ReceivingAddr: receiver,
+				StableCoins: map[string]c.ERC20{
+					contract: {Asset: "usdc", Address: contract, Scale: 6},
+				},
+				ABI: abis,
+				DB:  closedDB(t),
+			}
+			tx := tc.tx
+			tx.Hash = "0xaaaa333333333333333333333333333333333333333333333333333333333333"
+			tx.From = "0xcccc111111111111111111111111111111111111"
+			block := c.Block{
+				Hash:         "0xbbbb111111111111111111111111111111111111111111111111111111111111",
+				Number:       18_000_000,
+				Timestamp:    time.Unix(1697328959, 0).UTC(),
+				Transactions: []c.Transaction{tx},
+			}
+
+			txs, err := filterTransactions(ctxt, block)
+			require.Error(t, err, "the oversized transfer must be routed to failed_tx")
+			assert.Contains(t, err.Error(), "failed to persist failed tx")
+			assert.Nil(t, txs)
+		})
+	}
+}
+
+// the largest amount the columns hold is still a donation
+func TestLargestFittingTransferIsADonation(t *testing.T) {
+	const (
+		contract = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+		receiver = "0x4667a044543e7f1b7d3a4b88396e024be0e34f36"
+	)
+	abis, err := InitABI()
+	require.NoError(t, err)
+
+	ctxt := c.Context{
+		ReceivingAddr: receiver,
+		StableCoins: map[string]c.ERC20{
+			contract: {Asset: "usdc", Address: contract, Scale: 6},
+		},
+		ABI: abis,
+		// any failed_tx write would fail the call
+		DB: closedDB(t),
+	}
+	value, ok := new(big.Int).SetString("9999999999990000", 10)
+	require.True(t, ok)
+	block := c.Block{
+		Hash:      "0xbbbb111111111111111111111111111111111111111111111111111111111111",
+		Number:    18_000_000,
+		Timestamp: time.Unix(1697328959, 0).UTC(),
+		Transactions: []c.Transaction{{
+			TXH:   c.TXH{Hash: "0xaaaa444444444444444444444444444444444444444444444444444444444444"},
+			From:  "0xcccc111111111111111111111111111111111111",
+			To:    contract,
+			Value: "0x0",
+			Input: transferInput(receiver, value),
+		}},
+	}
+
+	txs, err := filterTransactions(ctxt, block)
+	require.NoError(t, err)
+	require.Len(t, txs, 1)
+	assert.Equal(t, "9999999999.9900000000", txs[0].Value)
 }

@@ -128,3 +128,32 @@ func TestToUint64(t *testing.T) {
 	_, err = ToUint64(huge, "block number")
 	assert.Error(t, err)
 }
+
+// the bounds postgres enforces for the donation and token price columns:
+// below 10^(precision-scale) *after* rounding to the scale of the column
+func TestNumericFits(t *testing.T) {
+	for _, tc := range []struct {
+		col  Numeric
+		v    string
+		want bool
+	}{
+		{DonationAmountColumn, "0", true},
+		{DonationAmountColumn, "9999999999.9999999999", true},
+		{DonationAmountColumn, "-9999999999.9999999999", true},
+		{DonationAmountColumn, "10000000000", false},
+		// rounds up to 1e10 at 10 decimals
+		{DonationAmountColumn, "9999999999.99999999995", false},
+		{DonationUSDAmountColumn, "9999999999.99", true},
+		{DonationUSDAmountColumn, "9999999999.994", true},
+		// rounds up to 1e10 at 2 decimals
+		{DonationUSDAmountColumn, "9999999999.995", false},
+		{DonationUSDAmountColumn, "100000000000", false},
+		{TokenPriceColumn, "9999999999.99999", true},
+		{TokenPriceColumn, "10000000000", false},
+	} {
+		t.Run(tc.col.String()+" "+tc.v, func(t *testing.T) {
+			assert.Equal(t, tc.want, tc.col.Fits(decimal.RequireFromString(tc.v)))
+		})
+	}
+	assert.Equal(t, "NUMERIC(20,10)", DonationAmountColumn.String())
+}

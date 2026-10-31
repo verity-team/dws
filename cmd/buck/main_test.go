@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,6 +36,7 @@ type recorder struct {
 	absences    []string     // "<hash>:<absent>" handed to recordAbsence
 	mrbnCalls   int
 	byHashCalls int
+	rcptReqs    [][]string // hashes handed to getTxReceipts, per call
 }
 
 // stubDeps is an all-successful set of doubles; every test overrides only the
@@ -70,6 +72,18 @@ func stubDeps(r *recorder) buckDeps {
 		getTxsByHash: func(c.Context, []c.Hashable) ([]c.TxByHash, error) {
 			r.byHashCalls++
 			return nil, nil
+		},
+		// by default every receipt asked for reports success in the block the
+		// tests finalize against
+		getTxReceipts: func(_ c.Context, hs []c.Hashable) ([]c.TxReceipt, error) {
+			req := make([]string, 0, len(hs))
+			rcpts := make([]c.TxReceipt, 0, len(hs))
+			for _, h := range hs {
+				req = append(req, h.GetHash())
+				rcpts = append(rcpts, c.TxReceipt{TransactionHash: h.GetHash(), BlockHash: testBlockHash, Status: "0x1"})
+			}
+			r.rcptReqs = append(r.rcptReqs, req)
+			return rcpts, nil
 		},
 		// by default report an absence as already sustained, so the dispatch
 		// tests exercise the verdict->action mapping without threading a run
@@ -587,6 +601,23 @@ func TestMonitorOldUnconfirmedPropagatesErrors(t *testing.T) {
 			tx:     confirming,
 			break_: func(d *buckDeps) { d.finalizeTx = func(c.Context, c.TxByHash) error { return errBoom } },
 		},
+		{
+			name: "receipt lookup fails",
+			tx:   confirming,
+			break_: func(d *buckDeps) {
+				d.getTxReceipts = func(c.Context, []c.Hashable) ([]c.TxReceipt, error) { return nil, errBoom }
+			},
+		},
+		{
+			name: "failing a reverted donation fails",
+			tx:   confirming,
+			break_: func(d *buckDeps) {
+				d.getTxReceipts = func(c.Context, []c.Hashable) ([]c.TxReceipt, error) {
+					return []c.TxReceipt{{TransactionHash: testTxHash, BlockHash: testBlockHash, Status: "0x0"}}, nil
+				}
+				d.failTx = func(c.Context, c.TxByHash) error { return errBoom }
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -598,6 +629,96 @@ func TestMonitorOldUnconfirmedPropagatesErrors(t *testing.T) {
 			assert.ErrorIs(t, monitorOldUnconfirmedWith(buckCtx(c.OldUnconfirmed), deps), errBoom)
 		})
 	}
+}
+
+// finalizedTx is a transaction Judge finds in its finalized block.
+func finalizedTx(hash string) c.TxByHash {
+	return c.TxByHash{
+		Hash: hash, BlockNumber: testMFBN - 1, BlockHash: testBlockHash,
+		FBBlockHash: testBlockHash, FBContainsTx: true, FBDataAvailable: true,
+	}
+}
+
+// AUD4-16: block inclusion alone does not confirm a donation -- the receipt
+// status on the row may stem from a block that was orphaned since, and the
+// transaction may have reverted in the block it was re-mined into. It is
+// confirmed on a success receipt from the finalized block, failed on a revert
+// and left alone when there is no usable receipt.
+func TestMonitorOldUnconfirmedChecksTheReceiptBeforeFinalizing(t *testing.T) {
+	const otherBlock = "0x1111111111111111111111111111111111111111111111111111111111111111"
+	tests := []struct {
+		name         string
+		rcpts        []c.TxReceipt
+		wantFail     bool
+		wantFinalize bool
+	}{
+		{
+			name:         "success",
+			rcpts:        []c.TxReceipt{{TransactionHash: testTxHash, BlockHash: testBlockHash, Status: "0x1"}},
+			wantFinalize: true,
+		},
+		{
+			name:     "reverted in the finalized block",
+			rcpts:    []c.TxReceipt{{TransactionHash: testTxHash, BlockHash: testBlockHash, Status: "0x0"}},
+			wantFail: true,
+		},
+		{
+			name: "no receipt",
+		},
+		{
+			// a null result decodes into a zero value receipt
+			name:  "null receipt",
+			rcpts: []c.TxReceipt{{}},
+		},
+		{
+			name:  "receipt from another block",
+			rcpts: []c.TxReceipt{{TransactionHash: testTxHash, BlockHash: otherBlock, Status: "0x0"}},
+		},
+		{
+			name:         "receipt hash in upper case",
+			rcpts:        []c.TxReceipt{{TransactionHash: strings.ToUpper(testTxHash), BlockHash: testBlockHash, Status: "0x1"}},
+			wantFinalize: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &recorder{}
+			deps := oldUnconfirmedDeps(r,
+				unconfirmed(testTxHash, time.Now().UTC()), []c.TxByHash{finalizedTx(testTxHash)})
+			deps.getTxReceipts = func(_ c.Context, hs []c.Hashable) ([]c.TxReceipt, error) {
+				r.rcptReqs = append(r.rcptReqs, []string{hs[0].GetHash()})
+				return tc.rcpts, nil
+			}
+
+			require.NoError(t, monitorOldUnconfirmedWith(buckCtx(c.OldUnconfirmed), deps))
+			assert.Equal(t, [][]string{{testTxHash}}, r.rcptReqs)
+			assert.Equal(t, tc.wantFail, len(r.failed) == 1, "FailTx calls: %d", len(r.failed))
+			assert.Equal(t, tc.wantFinalize, len(r.finalized) == 1, "FinalizeTx calls: %d", len(r.finalized))
+		})
+	}
+}
+
+// the receipts are fetched in one batch, and only for the transactions that
+// are to be confirmed; a run without any fetches none
+func TestMonitorOldUnconfirmedFetchesReceiptsOnlyForFinalizeCandidates(t *testing.T) {
+	const otherHash = "0x4c8273e0d522380ed5c1caf943ede820251581dc77cc6b80b68a47d926b586cc"
+	failing := finalizedTx(otherHash)
+	failing.FBContainsTx = false
+	pending := c.TxByHash{Hash: otherHash, Pending: true, BlockNumber: c.PendingBlockNumber}
+
+	r := &recorder{}
+	deps := oldUnconfirmedDeps(r,
+		unconfirmed(testTxHash, time.Now().UTC()),
+		[]c.TxByHash{finalizedTx(testTxHash), failing, pending, finalizedTx(otherHash)})
+	require.NoError(t, monitorOldUnconfirmedWith(buckCtx(c.OldUnconfirmed), deps))
+	assert.Equal(t, [][]string{{testTxHash, otherHash}}, r.rcptReqs)
+	assert.Len(t, r.finalized, 2)
+	assert.Len(t, r.failed, 1)
+
+	r = &recorder{}
+	deps = oldUnconfirmedDeps(r, unconfirmed(testTxHash, time.Now().UTC()), []c.TxByHash{failing, pending})
+	require.NoError(t, monitorOldUnconfirmedWith(buckCtx(c.OldUnconfirmed), deps))
+	assert.Empty(t, r.rcptReqs)
 }
 
 // A canceled context stops the verdict loop between transactions and is not a
@@ -677,6 +798,7 @@ func liveWiring() map[string]any {
 		"requestPrice":          db.RequestPrice,
 		"persistTxs":            db.PersistTxs,
 		"getOldUnconfirmed":     db.GetOldUnconfirmed,
+		"getTxReceipts":         eth.GetTxReceipts,
 		"recordAbsence":         db.RecordAbsence,
 		"failTx":                db.FailTx,
 		"finalizeTx":            db.FinalizeTx,
@@ -796,4 +918,23 @@ func TestEntryPointsRejectAnInvalidBuckContext(t *testing.T) {
 	assert.ErrorContains(t, monitorETH(context.Background()), "invalid buck context")
 	assert.ErrorContains(t, monitorOldUnconfirmed(context.Background()),
 		"buck/old-unconfirmed invalid buck context")
+}
+
+// ... and so does the confirmation loop that follows the receipt lookup
+func TestMonitorOldUnconfirmedStopsConfirmingOnContextCancelation(t *testing.T) {
+	r := &recorder{}
+	deps := oldUnconfirmedDeps(r,
+		unconfirmed(testTxHash, time.Now().UTC()),
+		[]c.TxByHash{finalizedTx(testTxHash), finalizedTx(testTxHash)})
+
+	ctx, cancel := context.WithCancel(buckCtx(c.OldUnconfirmed))
+	defer cancel()
+	deps.finalizeTx = func(_ c.Context, tx c.TxByHash) error {
+		r.finalized = append(r.finalized, tx)
+		cancel()
+		return nil
+	}
+
+	assert.NoError(t, monitorOldUnconfirmedWith(ctx, deps))
+	assert.Len(t, r.finalized, 1, "the loop must not continue past cancelation")
 }

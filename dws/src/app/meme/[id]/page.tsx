@@ -7,18 +7,10 @@ import { getTimeElapsedString } from "@/utils/utils";
 import { getWalletShorthand } from "@/utils/wallet/wallet";
 import Avatar from "boring-avatars";
 import Image from "next/image";
-import { ReactElement } from "react";
+import { ReactElement, cache } from "react";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { Metadata } from "next";
 import { Toaster } from "react-hot-toast";
-
-const prepareMetadata: Metadata = {
-  twitter: {
-    card: "summary_large_image",
-    description: "Join the Truthmemes army and deliver the truth to everyone!",
-    images: [],
-  },
-};
 
 interface SingleMemePageProps {
   params: {
@@ -26,23 +18,46 @@ interface SingleMemePageProps {
   };
 }
 
+// One galactica request per page render, shared by the page and its metadata
+const getMeme = cache(getSingleMeme);
+
+const getMemeImageUrl = (fileId: string): string =>
+  `${process.env.NEXT_PUBLIC_GALACTICA_API_URL}/meme/image/${encodeURIComponent(
+    fileId
+  )}`;
+
+// Built per request: a shared metadata object would leak one meme's card into
+// a concurrent request for another
+export const generateMetadata = async ({
+  params,
+}: SingleMemePageProps): Promise<Metadata> => {
+  const memeData = await getMeme(params.id);
+
+  return {
+    twitter: {
+      card: "summary_large_image",
+      description:
+        "Join the Truthmemes army and deliver the truth to everyone!",
+      site: process.env.HOST_URL,
+      ...(memeData != null && {
+        title: memeData.caption,
+        images: [getMemeImageUrl(memeData.fileId)],
+      }),
+    },
+  };
+};
+
 const SingleMemePage = async ({
   params,
 }: SingleMemePageProps): Promise<ReactElement<SingleMemePageProps>> => {
-  const memeData = await getSingleMeme(params.id);
+  const memeData = await getMeme(params.id);
   if (memeData == null) {
     throw new Error("Cannot find meme");
   }
 
   const { fileId, userId, createdAt, caption } = memeData;
 
-  const memeImage = `${process.env.NEXT_PUBLIC_GALACTICA_API_URL}/meme/image/${fileId}`;
-
-  if (prepareMetadata.twitter) {
-    prepareMetadata.twitter.images = [memeImage];
-    prepareMetadata.twitter.title = caption;
-    prepareMetadata.twitter.site = process.env.HOST_URL;
-  }
+  const memeImage = getMemeImageUrl(fileId);
 
   return (
     <div className="grid grid-cols-12 px-8">
@@ -90,5 +105,4 @@ const SingleMemePage = async ({
   );
 };
 
-export const metadata = prepareMetadata;
 export default SingleMemePage;

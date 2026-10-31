@@ -50,6 +50,13 @@ func GetData[R c.Fetchable](ctxt c.Context, hs []c.Hashable, fr c.Fetcher[R]) ([
 	return res, nil
 }
 
+// GetTxReceipts fetches the receipts of the given transactions. A
+// transaction the provider has no receipt for yields a zero value receipt (an
+// empty TransactionHash), the receipts are to be correlated by hash.
+func GetTxReceipts(ctxt c.Context, hs []c.Hashable) ([]c.TxReceipt, error) {
+	return GetData[c.TxReceipt](ctxt, hs, txrFetcher{})
+}
+
 type txrFetcher struct{}
 
 func (txfr txrFetcher) Fetch(ctxt c.Context, hs []c.Hashable) ([]c.TxReceipt, error) {

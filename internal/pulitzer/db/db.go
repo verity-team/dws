@@ -124,6 +124,9 @@ func retryInterval() string {
 // response lands and, under ON CONFLICT DO NOTHING, becoming the permanent
 // record for that minute.
 //
+// servePriceRequests passes the corroborated kline of the requested minute
+// only (see MinuteKline); every kline in kls is persisted.
+//
 // A request is only ever marked succeeded if prices that actually serve it
 // were written: an empty kline set and a kline set that misses the requested
 // minute are both rejected outright, so the function cannot record success for
@@ -249,30 +252,45 @@ func finalKlines(kls []data.Kline, now time.Time) []data.Kline {
 	return result
 }
 
-// ServesMinute reports whether kls would let CloseRequest close a request for
-// the minute ts, judged against the wall clock now: the still open klines are
-// dropped and what remains must be a set CloseRequest would accept -- non
-// empty, every kline positive and timestamped, and at least one within
-// c.PriceLookupWindow of ts. It mirrors CloseRequest's own gate (validateKlines
-// on the finalized set) as a bool so servePriceRequests can pick the first
-// historical source that can actually serve the minute and fall through to the
-// next when one cannot, instead of failing the request on the first source's
-// gap.
-func ServesMinute(ts, now time.Time, kls []data.Kline) bool {
-	final := finalKlines(kls, now)
-	if len(final) == 0 {
-		return false
-	}
-	covered := false
-	for _, kl := range final {
+// MinuteKline returns the kline of the minute ts out of the klines a single
+// historical source answered with, judged against the wall clock now.
+//
+// Only that kline is persisted (see #271): the extra minutes a venue returns
+// alongside it are single-sourced, and a row written for them would shadow the
+// live, quorum-checked price of the same minute in c.GetETHPrice. The kline
+// has to open on the requested minute exactly -- the corroborating source is
+// compared against the same minute, not merely one inside
+// c.PriceLookupWindow -- and has to be final. The rest of the set is still
+// checked: a response carrying a non-positive or untimestamped final kline is
+// broken as a whole and none of it is trusted, and two klines for the
+// requested minute are ambiguous. A kline returned here always passes
+// CloseRequest's own gate for ts: it is final under the same now and closes
+// less than a minute after the start of ts' minute, inside the lookup window.
+func MinuteKline(ts, now time.Time, kls []data.Kline) (data.Kline, error) {
+	minute := ts.UTC().Truncate(time.Minute)
+	var (
+		result data.Kline
+		found  int
+	)
+	for _, kl := range finalKlines(kls, now) {
 		if !kl.ClosePrice.IsPositive() || kl.CloseTime.IsZero() {
-			return false
+			return data.Kline{}, fmt.Errorf(
+				"invalid final kline (close price '%s', close time %s) in the set",
+				kl.ClosePrice.String(), kl.CloseTime.UTC().Format(time.RFC3339))
 		}
-		if kl.CloseTime.Sub(ts).Abs() <= c.PriceLookupWindow {
-			covered = true
+		if kl.CloseTime.UTC().Truncate(time.Minute).Equal(minute) {
+			result = kl
+			found++
 		}
 	}
-	return covered
+	switch found {
+	case 0:
+		return data.Kline{}, fmt.Errorf("no final kline for the minute %s", minute.Format(time.RFC3339))
+	case 1:
+		return result, nil
+	default:
+		return data.Kline{}, fmt.Errorf("%d klines for the minute %s", found, minute.Format(time.RFC3339))
+	}
 }
 
 // validateKlines rejects kline sets that must not be persisted. An empty set
@@ -335,16 +353,17 @@ func validateKlines(rid uint64, ts time.Time, kls []data.Kline) error {
 
 // persistKline records the price of a single minute.
 //
-// GetHistoricalPriceFromBinance returns the ten klines that start at the
-// minute a request asks for, so the windows of two requests a few minutes
-// apart overlap and a minute that is already on record is offered again. The
-// UNIQUE(asset, created_at) constraint turns that into a conflict, and
-// skipping the insert is correct *because* the caller has already dropped the
-// klines whose minute is still open (see finalKlines): what is offered here
-// is a closed kline, which no longer moves, so the row already stored holds
-// the same price. Failing instead would fail the whole CloseRequest
-// transaction, and the request would keep failing on every retry for as long
-// as the overlapping minute is on record, i.e. forever.
+// The backfill used to persist every kline a venue returned -- binance answers
+// with the ten that start at the requested minute -- so the windows of two
+// requests a few minutes apart overlapped and a minute already on record was
+// offered again. It now persists the requested minute only (see MinuteKline),
+// but a minute can still be on record already, e.g. written by an older
+// binary. The UNIQUE(asset, created_at) constraint turns that into a conflict,
+// and skipping the insert is correct *because* the caller has already dropped
+// the klines whose minute is still open (see finalKlines): what is offered
+// here is a closed kline, which no longer moves. Failing instead would fail the
+// whole CloseRequest transaction, and the request would keep failing on every
+// retry for as long as the minute is on record, i.e. forever.
 func persistKline(dbt *sqlx.Tx, asset string, kl data.Kline) error {
 	q := `
 		INSERT INTO price(asset, price, created_at)

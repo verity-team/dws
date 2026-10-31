@@ -126,7 +126,7 @@ export const getPreviewMeme = async (): Promise<
 };
 
 export const getSingleMeme = async (id: string): Promise<Maybe<MemeUpload>> => {
-  const path = `/meme/${id}`;
+  const path = `/meme/${encodeURIComponent(id)}`;
 
   const response = await safeFetch(() => baseGalacticaRequest("GET", { path }));
   if (response == null) {
@@ -145,7 +145,7 @@ export const getSingleMeme = async (id: string): Promise<Maybe<MemeUpload>> => {
 };
 
 export const getMemeImage = async (id: string): Promise<Maybe<Blob>> => {
-  const path = `/meme/image/${id}`;
+  const path = `/meme/image/${encodeURIComponent(id)}`;
 
   const response = await safeFetch(() => baseGalacticaRequest("GET", { path }));
   if (response == null) {

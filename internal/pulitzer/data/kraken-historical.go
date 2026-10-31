@@ -28,9 +28,9 @@ type KrakenOHLCResponse struct {
 // It is a fallback historical source: the backfill path used to be
 // single-sourced to binance, so a binance-specific data gap or outage stalled
 // donation finalization even though five other live feeds were healthy. The
-// candles are validated against the requested minute by the caller (the same
-// coverage gate CloseRequest applies), so a candle for a different minute is
-// not mistaken for the price of the block that triggered the request.
+// candles are validated against the requested minute by the caller
+// (db.MinuteKline), so a candle for a different minute is not mistaken for
+// the price of the block that triggered the request.
 func GetHistoricalPriceFromKraken(ctx context.Context, ts time.Time) ([]Kline, error) {
 	// OHLC returns the candles at or after `since`; ask from one minute before
 	// the requested minute so the candle that opens on it is included even at

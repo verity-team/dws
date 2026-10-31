@@ -40,6 +40,22 @@ const validateUploadFile = (file: File): FileStatus => {
   return "OK";
 };
 
+// Validate a picked or dropped file, telling the user why it was refused
+const isUploadFileAccepted = (file: File): boolean => {
+  const validationResult = validateUploadFile(file);
+  if (validationResult === "TOO_BIG") {
+    toast.error("Your meme is too big.\nBest we can do is 1MB");
+    return false;
+  }
+
+  if (validationResult === "INVALID_MIME") {
+    toast.error("Meme should be an image.\nWe support PNG, JPG, and GIF");
+    return false;
+  }
+
+  return true;
+};
+
 const MemeDropArea = ({
   onMemeChange,
   children,
@@ -64,10 +80,13 @@ const MemeDropArea = ({
 
     setDragActive(false);
 
-    if (event.dataTransfer.files && event.dataTransfer.files[0]) {
-      // use callback to add file to state and to preview file
-      onMemeChange(event.dataTransfer.files[0]);
+    const droppedFile = event.dataTransfer.files?.[0];
+    if (!droppedFile || !isUploadFileAccepted(droppedFile)) {
+      return;
     }
+
+    // use callback to add file to state and to preview file
+    onMemeChange(droppedFile);
   };
 
   const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -76,20 +95,12 @@ const MemeDropArea = ({
     }
 
     const uploadedFile = event.target.files[0];
-    const validationResult = validateUploadFile(uploadedFile);
-    if (validationResult === "TOO_BIG") {
-      toast.error("Your meme is too big.\nBest we can do is 1MB");
+    if (!isUploadFileAccepted(uploadedFile)) {
       event.target.value = "";
       return;
     }
 
-    if (validationResult === "INVALID_MIME") {
-      toast.error("Meme should be an image.\nWe support PNG, JPG, and GIF");
-      event.target.value = "";
-      return;
-    }
-
-    onMemeChange(event.target.files[0]);
+    onMemeChange(uploadedFile);
   };
 
   const overlayStyle = useMemo(() => {

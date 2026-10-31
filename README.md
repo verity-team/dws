@@ -11,8 +11,8 @@ The backend used by the donation web site frontend is called `delphi` and it wil
 The `dws` backend consists of a `postgres` database and 5 services
 - `buck`: ETH/latest crawler, checks the latest blocks for donation transactions and inserts these into the database (in state `unconfirmed`)
 - `buck`: ETH/finalized crawler, checks the finalized blocks for donation transactions and confrm them, also updates the donation campaign statistics and the token price (if/as needed), see [token sale limit](#token-sale-limit)
-- `buck`: ETH/old-unconfirmed crawler, checks for donations that are older than 30 minutes but still unconfirmed, attempts to fetch the respective finalized blocks and confirm these donation transactions. A donation is marked as `failed` if its finalized block was fetched and does *not* carry the transaction, or if the transaction is absent from both the chain and the mempool and the block it was originally seen in is more than 24 hours old **and** it has been observed absent on several consecutive runs (it was evicted by a re-org and never re-mined, so no money moved -- the consecutive-run requirement keeps a single transient provider `null` from failing a donation whose money arrived); the donation campaign statistics are then recalculated -- the donation records are retained, they are *not* deleted. Donations whose transaction is still in the mempool, whose block has not been finalized yet, whose finalized block could not be fetched, for which the jsonrpc provider answered with an error object instead of a result (a rate limit or a bad spell is the absence of evidence, not evidence of absence), that are absent from the chain but younger than 24 hours, or whose absence has not yet persisted across enough consecutive runs are left untouched and re-examined on a later run
-- `pulitzer`: pulls the ETH price from 6 exchanges and inserts an average price into the database every minute, see [price aggregation](#price-aggregation). It also serves the historical price requests filed by `buck`: a request that cannot be fulfilled is marked `failed` and retried a few minutes later, a request is only marked `succeeded` once prices that actually serve it were written, i.e. at least one of them has to fall inside the same ±1.5 minute window the donation crawler searches for a price -- across an exchange data gap the prices returned can be minutes off, and `succeeded` is terminal
+- `buck`: ETH/old-unconfirmed crawler, checks for donations that are older than 30 minutes but still unconfirmed, attempts to fetch the respective finalized blocks and confirm these donation transactions. A transaction its finalized block carries is confirmed only once its receipt from that block reports success: the status on the donation row came from the latest crawler, possibly from a block that was orphaned since, and the transaction may have reverted in the block it was re-mined into. A donation is marked as `failed` if its finalized block was fetched and does *not* carry the transaction, if the receipt from the finalized block reports a revert, or if the transaction is absent from both the chain and the mempool and the block it was originally seen in is more than 24 hours old **and** it has been observed absent on several consecutive runs (it was evicted by a re-org and never re-mined, so no money moved -- the consecutive-run requirement keeps a single transient provider `null` from failing a donation whose money arrived); the donation campaign statistics are then recalculated -- the donation records are retained, they are *not* deleted. Donations whose transaction is still in the mempool, whose block has not been finalized yet, whose finalized block could not be fetched, for which no receipt from the finalized block could be fetched, for which the jsonrpc provider answered with an error object instead of a result (a rate limit or a bad spell is the absence of evidence, not evidence of absence), that are absent from the chain but younger than 24 hours, or whose absence has not yet persisted across enough consecutive runs are left untouched and re-examined on a later run
+- `pulitzer`: pulls the ETH price from 6 exchanges and inserts their median price into the database every minute, see [price aggregation](#price-aggregation). It also serves the historical price requests filed by `buck`, with the price of the requested minute only and only once two venues agree on it within 10%, see [price aggregation](#price-aggregation): a request that cannot be fulfilled is marked `failed` and retried a few minutes later, a request is only marked `succeeded` once prices that actually serve it were written, i.e. at least one of them has to fall inside the same ±1.5 minute window the donation crawler searches for a price -- across an exchange data gap the prices returned can be minutes off, and `succeeded` is terminal
 - `delphi`: [REST API](https://app.swaggerhub.com/apis/MUHAREM_1/delphi/) server -- only serves data from the database
 
 The backend services are written in `go` -- you will thus need `go` on your development system. For testing purposes the `postgres` database can be run in a docker container i.e. you will need docker as well.
@@ -46,8 +46,8 @@ The services are configured via the environment, see `env.example` for the full 
 
 - `DWS_DONATION_ADDRESS` (`buck`, `delphi`) is not a well-formed ethereum address
 - `DWS_STABLE_COINS` (`buck`) is empty or one of its entries has an unknown asset (lower case, one of the assets `buck` holds an erc-20 ABI for), an invalid contract address or a scale outside the plausible range for a USD stable coin (2..18 decimals). The scale bound is a plausibility check, not a correctness guarantee: it rejects gross misconfiguration such as a scale of 1 (which would turn a 1 USDC transfer into a $100,000 credit) but cannot catch a wrong-but-plausible value such as 5 for a 6-decimal coin
-- `DWS_SALE_PARAMS` (`buck`) is empty or one of its entries has a token limit or a token price that is not greater than zero
-- `ETH_RPC_URL` (`buck`) is not an `https` URL. `buck` trusts its json-rpc provider completely -- a plaintext or downgraded endpoint would let an on-path attacker fabricate or fail donations -- so a non-`https` provider is refused at startup. `http` is permitted only for a loopback host (`localhost`/`127.0.0.0/8`/`[::1]`) to keep local dev nodes working
+- `DWS_SALE_PARAMS` (`buck`) is empty or one of its entries has a token limit or a token price that is not greater than zero, or a token price with more than 5 decimal places or too large for `price.price` (`NUMERIC(15,5)`). The column keeps 5 decimals: `0.0000125` used to be stored -- and sold -- as `0.00001` (~25% more tokens per dollar), and a price below `0.000005` as `0`, on which every crawler run panicked. `buck` also refuses to start when the token price on record is not one of the configured tier prices, see [token price at startup](#token-price-at-startup)
+- `ETH_RPC_URL` (`buck`) is not an `https` URL. `buck` trusts its json-rpc provider completely -- a plaintext or downgraded endpoint would let an on-path attacker fabricate or fail donations -- so a non-`https` provider is refused at startup. `http` is permitted only for a loopback host (`localhost`/`127.0.0.0/8`/`[::1]`) to keep local dev nodes working. A redirect from `https` to plain `http` is refused by every HTTP client (json-rpc provider and exchanges alike), so the guarantee holds past the first hop
 
 These values used to be accepted as-is and only did damage once donations were processed e.g. a scale of zero leaves a stable coin donation in its smallest unit and turns a 500 USDT donation into a 500,000,000 USD one.
 
@@ -153,15 +153,89 @@ costs the same 21000 gas and is written down as zero just the same, so the
 test is applied after the conversion, to ethereum and stable coin transfers
 alike.
 
+Only **top-level transactions** are seen: an ethereum transaction whose `to`
+is the receiving address, or a direct `transfer()` call on a configured stable
+coin contract whose calldata names the receiving address. A donation made from
+a **contract wallet** -- a Safe, an ERC-4337 account, a multicall or any other
+contract that forwards the money -- reaches the receiving address as an
+internal call, and buck records it **nowhere**: there is neither a `donation`
+nor a `failed_tx` row for it. Contract wallet donors are not a supported use
+case (WalletConnect will still let such a wallet donate); the money arrives
+and a donation like that needs handling out of band.
+
 This is deliberately **not** a minimum donation amount: the only transfers
 turned away are the ones that would have been stored as zero anyway. A dust
 threshold above zero is a separate, commercial decision.
+
+A transfer whose amount **does not fit the donation columns** is not recorded
+as a donation either: it goes to `failed_tx`, like a transfer whose calldata
+cannot be parsed. `donation.amount` is `NUMERIC(20,10)` and `usd_amount` is
+`NUMERIC(12,2)`, so both hold less than 1e10. postgres does not truncate a
+larger value, it refuses it with `numeric field overflow`, and that rolled back
+the whole block -- on every run, the latest crawler first and then the
+finalized one. For an ERC-20 this costs only gas: `transfer(receivingAddr,
+1e17)` from an account with no balance reverts, but it is mined and is
+persisted like any other transaction (as `failed`). The amount is checked when
+the transaction is filtered (stable coins against both columns, since their
+amount *is* the USD amount; ethereum against `amount`), and the USD amount of
+an ethereum donation when it is priced at the block's ETH price. A donation
+that cannot be priced is recorded in `failed_tx` in the same database
+transaction as the rest of the block, so the block is still persisted and the
+crawler moves on. No genuine donation comes near 1e10 USD; a `failed_tx` row
+is for an operator to look into.
 
 ## token sale limit
 
 Whether the sale can still deliver tokens is derived, on every write, from the confirmed token total read under the `donation_stats` lock compared against `DWS_SALE_PARAMS`' token limit -- *not* from the stored `donation_stats.status`, which only records what the previous statistics write concluded and goes stale the moment the configured limit changes. `donation_stats.status` follows that same comparison, so the campaign is `closed` once the confirmed tokens reach the limit and `open` again when they no longer do. Two things reopen it: the limit is raised, or a finalized re-crawl whose receipt reports an already `confirmed` donation as reverted -- that donation becomes `failed` and drops out of the total. (The old-unconfirmed crawler marking a vanished transaction `failed` does *not*: it only ever transitions `unconfirmed` rows, which were never in the total to begin with.) `paused` is the operator's manual lever and is never touched by a crawler.
 
 While the sale is closed donations are still recorded -- the money arrived and is refundable -- but they issue **0 tokens**. The rule is applied when a donation *enters* the `confirmed` state, not when it is first inserted: the latest crawler runs ~13 minutes ahead of the finalized one, so the donations mined in that window are inserted while the total is still under the limit. Accordingly the latest crawler, which inserts `unconfirmed` rows, never zeroes them -- those rows are not counted towards the campaign anyway, and zeroing them would strand the donation at 0 tokens if the sale reopened before it was confirmed. A donation that is *already* `confirmed` keeps its tokens no matter how often its block is crawled again -- applying the rule is a state transition, not a re-pricing. That cuts both ways: a donation confirmed at 0 tokens while the sale was closed keeps 0 even if the limit is later raised and the sale reopens. Reopening credits the donations confirmed *after* it, not the ones already settled, so raising the limit is not a way to retroactively compensate donors who were mined during the closed window -- they need handling out of band.
+
+### token price at startup
+
+Donations are priced at the token price on record (the newest `truth` row in
+`price`, see `getTokenPrice`), and the crawlers only ever replace it when the
+confirmed total crosses into the next tier. When `buck` starts it therefore
+makes sure that price is one of the tiers configured in `DWS_SALE_PARAMS`:
+
+- **no token price on record** (a fresh database): the price of the first tier
+  is recorded. The schema used to seed `truth = 0.001` instead, so a ladder
+  starting at, say, `0.0025` sold all of tier 1 at `0.001` -- 2.5x the tokens
+  -- and nothing noticed;
+- **a token price that is not a tier price**: `buck` refuses to start with
+
+  ```
+  the token price on record (0.00100) is not the price of any DWS_SALE_PARAMS tier [...]: fix DWS_SALE_PARAMS, or record the price of the current tier -- see 'token price at startup' in the README
+  ```
+
+  Either `DWS_SALE_PARAMS` is wrong -- fix it and restart -- or the price on
+  record is (the old seed under a different ladder, a ladder changed
+  mid-sale). Then:
+
+  - **no donation has been priced yet** (`SELECT COUNT(*) FROM donation;` is
+    0): delete the token price rows and restart `buck`, which records the
+    first tier's price:
+
+    ```sql
+    DELETE FROM price WHERE asset='truth';
+    ```
+
+  - **donations exist**: record the price of the tier the confirmed total
+    (`SELECT tokens FROM donation_stats;`) falls in -- the first tier whose
+    `limit` is greater than it, the last tier if none is -- and restart
+    `buck` **after two minutes**: with more than one token price row on
+    record a new one only takes effect once it is two minutes old, and until
+    then `buck` still reads the old one and refuses to start.
+
+    ```sql
+    INSERT INTO price(asset, price) VALUES('truth', <TIER PRICE>);
+    ```
+
+    The donations already priced at the wrong price keep it; they need
+    handling out of band.
+
+`delphi` serves the newest `truth` row as the token price; on a fresh database
+`/donation/data` fails (`no TRUTH price on record`) until `buck` has started
+once.
 
 ### pausing the sale (manual kill switch)
 
@@ -185,13 +259,15 @@ The resume recipe re-derives rather than bluntly setting `open` on purpose. Issu
 While `status='paused'`:
 
 - the finalized crawler records a freshly seen donation as `unconfirmed` instead of `confirmed`, and `FinalizeTx` (the old-unconfirmed crawler's confirmation path) does not confirm. `updateDonationStats` sums only `confirmed` rows, so `donation_stats` freezes -- **nothing is credited** -- with no special-casing;
-- the donation is still **recorded** with its real token count and stays visible to the frontend (delphi serves `donation_stats.status`, so `paused` surfaces to users), and `last_block` keeps advancing, so there is no backlog and no re-crawl storm on resume;
+- the donation is still **recorded** with its real token count and stays visible to the frontend (delphi serves `donation_stats.status`; the donate form shows `paused`/`closed` to users and refuses to start a donation unless the status is `open`), and `last_block` keeps advancing, so there is no backlog and no re-crawl storm on resume;
 - a pause **cannot un-credit a donation**: a re-crawl of an already-`confirmed` donation keeps it `confirmed` (a genuine revert still fails it, exactly as while the sale is open);
 - a pause is **not failed by a single transient response, but a sustained absence past the grace period still fails**. A donation parked `unconfirmed` is subject to the old-unconfirmed `Judge`, and its block time keeps ageing during the pause. A donation whose money arrived is not dropped by one stray `null` from a lagging provider node: a transaction is only declared dropped after it has aged past the 24h grace period **and** been observed absent on `SustainedAbsenceRuns` (3) consecutive runs (~45 min). A genuinely dropped transaction -- absent on every poll -- still fails; a transient blip resets the counter and never does.
 
 On resume, the donations parked `unconfirmed` during the pause are credited through the **normal** path: the old-unconfirmed crawler picks them up and `FinalizeTx` confirms them against the campaign state that holds *then* (still subject to the closed-campaign rule above). There is no backfill and no retroactive logic. A pause is a hold, not a cap: donors who paid during it get their tokens when it resumes.
 
 **Token price on resume.** The confirmed total is frozen during a pause, so the token-price tier does not advance while paused. A donation held across a tier boundary therefore confirms on resume at the tier that was in effect **when the pause began** (the cheaper one), not the tier its confirmation time would fall in. This is the same effect as the ~13-minute latest-vs-finalized crawler lag, stretched to the length of the pause; it is intended -- the backlog is sold at the pause-time tier -- and is not re-priced.
+
+**Token price within a block.** The same holds at a smaller scale outside a pause. `PersistTxs` reads the token price once per block and prices every donation in that block with it; the tier only moves afterwards, when the finalized crawler recalculates the donation statistics at the end of the block. A donation -- or a block of donations -- that crosses a tier boundary is therefore priced **entirely at the cheaper tier**; the next tier applies to later blocks only (and only once its price row is two minutes old, see `getTokenPrice`). This is intended and is not re-priced.
 
 **Resume lag.** A donation confirms only once it is older than 30 minutes *and* the old-unconfirmed crawler's next run (every 15 minutes) comes round, so expect a lag of up to ~45 minutes after unpausing before the queued donations are credited. That is acceptable for an emergency lever but worth knowing mid-incident. Each run confirms at most `oldUnconfirmedBatchLimit` (500) donations, oldest first, so that no single `eth_getTransactionByHash` batch grows unbounded and wedges the resume (the [#201](https://github.com/verity-team/dws/issues/201) provider-batch-limit failure mode). A backlog larger than that -- a long pause on a busy campaign -- therefore drains over several runs and takes proportionally longer to credit in full; it always drains, and the oldest donors are credited first.
 
@@ -250,7 +326,11 @@ declares.
 Error responses carry the numeric error code and a fixed, generic message. The
 underlying error -- which names tables, functions and columns and gives away
 the SQL dialect and the driver version -- is logged server side only; quote the
-numeric code when reporting a problem.
+numeric code when reporting a problem. The same holds for a request that is
+rejected before it reaches a handler: the request validator (code 116, also an
+unknown path, answered with a 404) and the parameter binding of the generated
+server (code 117) name the offending input and the schema it failed, so the
+client gets `invalid request` and the detail is logged.
 
 The signature in `delphi-signature` is taken over a message built from the
 words of the endpoint path, the lower cased address in `delphi-key` and the
@@ -260,11 +340,31 @@ words of the endpoint path, the lower cased address in `delphi-key` and the
 affiliate code, 0xded1fe6b3f61c8f1d874bb86f086d10ffc3f0154, 2023-10-23 18:45:19+00:00
 ```
 
+`POST /wallet/connection` appends the affiliate code from the request body,
+exactly as sent (`none` without one):
+
+```
+wallet connection, 0xded1fe6b3f61c8f1d874bb86f086d10ffc3f0154, 2023-10-23 18:45:19+00:00, none
+```
+
 The address is part of the signed message, so a signature is bound to the
-account it is used for. `POST /wallet/connection` additionally rejects a *self-referral*: an address cannot connect with an affiliate code that belongs to itself (attaching another wallet's code to your own address is the normal referral and is allowed; the signature already prevents attaching a code to an address you do not control). **This changed the message format**: the backend and
+account it is used for; on `/wallet/connection` it is bound to the affiliate
+code as well, so a harvested signature cannot be replayed within the
+`delphi-ts` window with somebody else's code. **Appending the code changed the
+`/wallet/connection` message format** (the `/affiliate/code` message is
+unchanged): deploy `delphi` and the frontend together -- a frontend that signs
+the old message is rejected with a 401 by the new `delphi`, and vice versa.
+
+`POST /wallet/connection` additionally rejects a *self-referral*: an address cannot connect with an affiliate code that belongs to itself (attaching another wallet's code to your own address is the normal referral and is allowed; the signature already prevents attaching a code to an address you do not control). **Binding the address in changed the message format**: the backend and
 the frontend have to be rolled out together, a new frontend talking to an old
 backend (or the other way round) will see every signed request rejected with a
 401.
+
+The authentication headers are bounded by the spec: `delphi-key` is a `0x`
+address (40 hex digits), `delphi-ts` 1 to 12 decimal digits and
+`delphi-signature` `0x` plus 130 hex digits; anything else is a 400 before the
+handler runs. The request line and headers together are capped at 8 KB (the
+`net/http` default is 1 MB).
 
 ## price aggregation
 
@@ -285,7 +385,13 @@ as follows:
    discards five mutually consistent prices;
 1. at least **3** sources have to survive that step, otherwise the cycle
    writes nothing;
-1. the price written to the database is the mean of the survivors.
+1. the survivors must not be spread wider than **10%** of their own median
+   (highest minus lowest), otherwise the cycle writes nothing. The per-source
+   gate alone lets two camps through: with four sources split two and two the
+   median sits half way between them, so both pass up to ~22% apart -- a USDT
+   depeg moving both USDT venues would shift the price by half of that;
+1. the price written to the database is the **median** of the survivors, so a
+   single source that stays just inside the band does not move it.
 
 Every venue contributes a **spot** quote. binance used to contribute
 `weightedAvgPrice`, the volume weighted average over the trailing one minute
@@ -327,6 +433,27 @@ request is not served and the existing retry path asks again a few minutes
 later, by which time the minute has closed -- a price recorded a few minutes
 late is worth more than one recorded wrong, because the USD amount a donation
 is credited with is never rewritten.
+
+A historical price is permanent and is needed exactly when the live quorum
+failed, so a single venue does not set it. The sources (binance, then kraken,
+then coinbase, then bitstamp) are walked in order under one 15 second budget;
+kraken only ever returns its latest 720 one-minute candles, so for a minute
+older than ~12 hours it cannot answer and binance, coinbase and bitstamp are
+the candidates -- bitstamp, with deep history, is what keeps that case from
+needing *both* binance and coinbase (binance answers some regions with HTTP
+451). Each source that
+has a final kline for the requested minute is compared with the ones that had
+it before, and the first two that agree within **10%** win -- the earlier
+source's price is written, for the requested minute only (the neighbouring
+minutes a venue returns alongside it are single-sourced and would shadow the
+live price of their minute). A venue that disagrees does not end the walk, the
+next one may side with either. If no two sources serve and agree, the request
+is failed and retried like any other unfulfilled request. The cost is
+availability: with only one historical venue reachable a backfill no longer
+succeeds, and every backfilled minute now needs its own request.
+
+`delphi` reports the newest ETH price by `created_at`, not the last row
+inserted: a backfill writes a past minute after the live price.
 
 `pulitzer`'s `/ready` probe depends on the database and on nothing else. It
 deliberately does not call out to an exchange: a third party being slow, or
@@ -422,9 +549,14 @@ against an empty database: docker loads it through
 `/docker-entrypoint-initdb.d` (`deployments/docker/db.yaml`), and postgres runs
 init scripts *only* when the data directory is empty. To guard against a manual
 `psql -f 01-schema.sql` wiping a populated database, the file forces
-`\set ON_ERROR_STOP on` and its first statement **aborts the load when donation
-data is already present** (it is a no-op on a fresh database, where the
-`donation` table does not yet exist). The `\set` is a psql meta-command, so the
+`\set ON_ERROR_STOP on` and its first statement **aborts the load when any
+table already holds operational data** -- donations, affiliate codes
+(`user_data`), wallet connections, prices, crawler positions (`last_block`),
+the campaign totals/status (`donation_stats`), failed blocks/transactions and
+price requests -- and names the tables it found populated. The one row the
+script seeds itself (the zero `donation_stats` row) does not count, and on a
+fresh database, where the tables do not yet exist, the
+guard is a no-op. The `\set` is a psql meta-command, so the
 guard aborts however psql is invoked -- with or without an `ON_ERROR_STOP` flag;
 without it a bare `RAISE EXCEPTION` would only print, and psql would run the
 `DROP`s anyway. **Limitation:** the meta-command only helps when the file is fed
@@ -503,7 +635,7 @@ DROP INDEX CONCURRENTLY IF EXISTS donation_tx_hash_idx;
 
 `price` gets `UNIQUE(asset, created_at)`. **It will not be created while
 duplicates are on record**, and there will be some: the historical price
-requests are served with the ten klines starting at the minute asked for, so
+requests used to be served with the ten klines starting at the minute asked for, so
 two requests a few minutes apart used to insert the same minutes twice. Check
 first, and only then delete the duplicates -- the values of a duplicated
 minute are identical, so keeping the lowest `id` of each group loses nothing:
@@ -642,6 +774,18 @@ DECLARE
     ds_total NUMERIC(12, 2);
     ds_tokens BIGINT;
 BEGIN
+    -- Serialize the recompute per address. Under READ COMMITTED a reader
+    -- whose SUM ran before a confirmation committed could block on the row
+    -- lock of a faster reader that already saw it, re-check its stale total
+    -- against the newer row, overwrite it and return the stale total. With
+    -- the lock taken before anything is read, the later reader sums later:
+    -- every statement below takes a fresh snapshot (the function is
+    -- VOLATILE), which sees what the previous lock holder committed. The lock
+    -- is transaction scoped: delphi calls the function in an autocommit
+    -- statement, so it is released when that statement commits. The two-key
+    -- form namespaces it; it cannot collide with a single-key advisory lock.
+    PERFORM pg_advisory_xact_lock(hashtext('update_user_data'), hashtext(p_address));
+
     -- Recompute the per-address totals from the confirmed donations. There is
     -- deliberately no `modified_at` gate: both timestamps are transaction-start
     -- times, so a poll that commits after an in-flight confirmation would skip
@@ -715,6 +859,24 @@ END;
 $$ LANGUAGE plpgsql;
 ```
 
+### update_user_data() per-address lock (any time, any binary)
+
+`update_user_data(p_address)` now takes a transaction scoped advisory lock on
+the address (`pg_advisory_xact_lock`) before it reads anything. Two concurrent
+`/user/data/{address}` reads of the same address used to be able to race under
+READ COMMITTED: the one whose `SUM` ran before a confirmation committed could
+overwrite the newer total written by the other and return the stale one (it
+healed on the next read). The lock serializes the recompute per address, so
+the later reader always sums later. Readers of different addresses only wait
+for each other on a (rare) hash collision, and the lock is released when the calling statement
+commits.
+
+Apply it by running the `CREATE OR REPLACE FUNCTION` statement from
+[update_user_data() function](#update_user_data-function-with-the-new-delphi)
+above -- it is the current definition, lock included. It is safe at any time,
+with any version of the binaries running: the signature and the result are
+unchanged, and `CREATE OR REPLACE` swaps the body in place.
+
 ### donation.absent_count (migrate BEFORE deploying the new `buck`)
 
 `donation` gains `absent_count`, the number of consecutive old-unconfirmed runs a transaction has been observed absent from both chain and mempool. It is what keeps a single transient provider `null` from failing a donation whose money arrived: a donation is dropped only after it has aged past the 24h grace period **and** been absent on `SustainedAbsenceRuns` (3) consecutive runs. The column is additive and has a constant default, so `ADD COLUMN` is a metadata-only change on PostgreSQL 11+ (no table rewrite). Existing rows backfill to `0`, which simply means "not yet observed absent":
@@ -726,6 +888,25 @@ ALTER TABLE donation ADD COLUMN absent_count INTEGER NOT NULL DEFAULT 0;
 **Apply this migration before deploying the new `buck`.** The new binary's old-unconfirmed crawler calls `RecordAbsence` -- which reads and writes `absent_count` -- for **every** polled transaction on **every** run, before it judges any of them, and a failure there aborts the whole run. So a new `buck` on an un-migrated schema fails with `pq: column "absent_count" does not exist` on the first transaction of every run: no donation is confirmed or failed until the `ALTER` lands. It is loud in the logs and self-heals the moment the column exists (no corruption, no lost donations -- the finalized crawler is unaffected and `last_block` keeps advancing), but it is a needless outage of the old-unconfirmed path. Migrate first.
 
 Migrate-**before**-deploy is safe with the old `buck` still running: it never reads or writes `absent_count` (every `donation` insert is column-listed, there is no `SELECT *`/`RETURNING *`), so the column is simply ignored until the new binary starts. On that first run the new binary starts counting from `0`, so a transaction already long dropped at migration time takes up to `SustainedAbsenceRuns` more runs (~45 min) to fail -- an additive, safe delay.
+
+### token price seed removed (check BEFORE deploying the new `buck`)
+
+`01-schema.sql` no longer seeds `INSERT INTO price(asset, price)
+VALUES('truth', 0.001)`; `buck` records the first tier's price itself, see
+[token price at startup](#token-price-at-startup). There is nothing to
+migrate, but an existing database still carries the seeded row (or the tier
+rows written since), and the new `buck` refuses to start if the price on
+record is not one of the `DWS_SALE_PARAMS` tier prices. Check before deploying:
+
+```sql
+SELECT price, created_at FROM price WHERE asset='truth' ORDER BY created_at DESC LIMIT 1;
+```
+
+If that is one of the configured tier prices -- `0.00100` with the first tier
+at `0.001`, as in `env.example` -- nothing needs to be done. Otherwise follow
+the runbook in [token price at startup](#token-price-at-startup) *before*
+starting the new `buck`: the old `buck` has been pricing donations at that
+price all along.
 
 ### price_req poll index (v2.0.1, any time, any binary)
 

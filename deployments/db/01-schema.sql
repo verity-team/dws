@@ -18,10 +18,17 @@
 -- datadir is empty), but a manual `psql -f 01-schema.sql` against a populated
 -- database would wipe every donation on record.
 --
--- So: refuse to run when donation data is already present, unless the operator
--- deliberately sets the override. The block is a no-op on a fresh database --
--- `to_regclass` returns NULL for a table that does not exist yet, so a first
--- install and the docker-init path both fall straight through it.
+-- So: refuse to run when any table already holds operational data -- not only
+-- donations: affiliate codes (user_data), wallet connections, prices, the
+-- crawler positions (last_block), the campaign totals and status
+-- (donation_stats), the failed block/tx records and the historical price
+-- requests -- unless the operator deliberately sets the override. The block
+-- is a no-op on a fresh database -- `to_regclass` returns NULL for a table
+-- that does not exist yet, so a first install and the docker-init path both
+-- fall straight through it. `donation_stats` is seeded by this very script;
+-- its seed row alone does not count as data, so a database that was loaded but
+-- never used can still be reloaded. `price` has no seed row (see the NB at the
+-- price table): any price row is data.
 --
 -- To wipe and reload a populated (dev) database on purpose, set the override in
 -- the same psql session, e.g.:
@@ -29,23 +36,46 @@
 -- (see README, "database schema changes").
 DO $$
 DECLARE
+    tbl text;
+    has_data_pred text;
     has_data boolean;
+    populated text[] := '{}';
 BEGIN
-    -- a fresh install (and the docker-init path) has no donation table yet:
-    -- fall straight through. A bare `SELECT ... FROM donation` here would fail
-    -- at *plan* time -- plpgsql plans the whole IF expression before it runs,
-    -- so the `to_regclass` short-circuit would not save it -- hence the
-    -- existence check returns early and the row count is read with dynamic SQL,
-    -- which is only planned once we know the table is there.
-    IF to_regclass('public.donation') IS NULL THEN
+    IF lower(coalesce(current_setting('dws.allow_destructive_reload', true), 'off'))
+       IN ('on', 'true', '1', 'yes')
+    THEN
         RETURN;
     END IF;
-    EXECUTE 'SELECT EXISTS (SELECT 1 FROM donation)' INTO has_data;
-    IF has_data
-       AND lower(coalesce(current_setting('dws.allow_destructive_reload', true), 'off'))
-           NOT IN ('on', 'true', '1', 'yes')
-    THEN
-        RAISE EXCEPTION 'refusing to load deployments/db/01-schema.sql: the database already holds donation data and this script DROPs every table. To wipe and reload on purpose, set dws.allow_destructive_reload, e.g. psql -c "SET dws.allow_destructive_reload=''on''" -f deployments/db/01-schema.sql (see README, "database schema changes").';
+    -- every table this script DROPs, with the predicate that tells its
+    -- operational data apart from the rows the script seeds. Keep the list in
+    -- step with the CREATE TABLEs below.
+    FOR tbl, has_data_pred IN
+        SELECT * FROM (VALUES
+            ('wallet_connection', 'true'),
+            ('donation',          'true'),
+            ('price',             'true'),
+            ('last_block',        'true'),
+            ('donation_stats',    'total <> 0 OR tokens <> 0 OR status <> ''open'''),
+            ('user_data',         'true'),
+            ('failed_block',      'true'),
+            ('failed_tx',         'true'),
+            ('price_req',         'true')
+        ) AS guarded(tbl, has_data_pred)
+    LOOP
+        -- a table that does not exist yet holds nothing. A static
+        -- `SELECT ... FROM <table>` here would fail at *plan* time -- plpgsql
+        -- plans a statement before it runs it, so a `to_regclass`
+        -- short-circuit would not save it -- hence the existence check comes
+        -- first and the row check is dynamic SQL, which is only planned once
+        -- we know the table is there.
+        CONTINUE WHEN to_regclass('public.' || tbl) IS NULL;
+        EXECUTE format('SELECT EXISTS (SELECT 1 FROM public.%I WHERE %s)', tbl, has_data_pred) INTO has_data;
+        IF has_data THEN
+            populated := populated || tbl;
+        END IF;
+    END LOOP;
+    IF cardinality(populated) > 0 THEN
+        RAISE EXCEPTION 'refusing to load deployments/db/01-schema.sql: the database already holds data (%) and this script DROPs every table. To wipe and reload on purpose, set dws.allow_destructive_reload, e.g. psql -c "SET dws.allow_destructive_reload=''on''" -f deployments/db/01-schema.sql (see README, "database schema changes").', array_to_string(populated, ', ');
     END IF;
 END
 $$;
@@ -138,9 +168,9 @@ CREATE TABLE price (
     created_at TIMESTAMP NOT NULL DEFAULT timezone('utc', now()),
 
     -- one price per asset and point in time. The historical price requests
-    -- filed by `buck` are served with the ten klines that start at the minute
-    -- asked for, so two requests a few minutes apart return overlapping
-    -- windows and used to insert the same minute twice: identical values, so
+    -- filed by `buck` used to be served with the ten klines that start at the
+    -- minute asked for, so two requests a few minutes apart returned
+    -- overlapping windows and inserted the same minute twice: identical values, so
     -- reads were unaffected, but the table grows without bound and the
     -- `ORDER BY created_at DESC LIMIT 1` reads resolve the tie arbitrarily.
     -- pulitzer's persistKline inserts ON CONFLICT DO NOTHING against this
@@ -151,7 +181,9 @@ CREATE TABLE price (
 );
 CREATE INDEX ON price (created_at);
 
-INSERT INTO price(asset, price) VALUES('truth', 0.001);
+-- NB: no `truth` (token price) row is seeded. buck records the price of the
+-- first DWS_SALE_PARAMS tier when it starts on a database without one (see
+-- db.InitTokenPrice); a seeded price would override the configured ladder.
 
 --- last_block ----------------------------------------------------
 DROP TABLE IF EXISTS last_block;
@@ -304,6 +336,18 @@ DECLARE
     ds_total NUMERIC(12, 2);
     ds_tokens BIGINT;
 BEGIN
+    -- Serialize the recompute per address. Under READ COMMITTED a reader
+    -- whose SUM ran before a confirmation committed could block on the row
+    -- lock of a faster reader that already saw it, re-check its stale total
+    -- against the newer row, overwrite it and return the stale total. With
+    -- the lock taken before anything is read, the later reader sums later:
+    -- every statement below takes a fresh snapshot (the function is
+    -- VOLATILE), which sees what the previous lock holder committed. The lock
+    -- is transaction scoped: delphi calls the function in an autocommit
+    -- statement, so it is released when that statement commits. The two-key
+    -- form namespaces it; it cannot collide with a single-key advisory lock.
+    PERFORM pg_advisory_xact_lock(hashtext('update_user_data'), hashtext(p_address));
+
     -- Recompute the per-address totals from the confirmed donations. There is
     -- deliberately no `modified_at` gate: both timestamps are transaction-start
     -- times, so a poll that commits after an in-flight confirmation would skip

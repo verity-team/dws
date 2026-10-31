@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -170,4 +171,95 @@ func TestHTTPGetCtxSuccessAndRedaction(t *testing.T) {
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), apiKey)
 	assert.Contains(t, err.Error(), "403")
+}
+
+// an https endpoint redirecting to http must not move the request onto
+// plaintext; the plaintext target is never contacted (#288)
+func TestRedirectFromHTTPSToHTTPIsRefused(t *testing.T) {
+	var hit atomic.Bool
+	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hit.Store(true)
+		_, _ = fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer plain.Close()
+	secure := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, plain.URL+"/v3/"+apiKey, http.StatusFound)
+	}))
+	defer secure.Close()
+
+	// the production client, trusting the test server's certificate
+	client := newClient(HTTPParams{})
+	client.Transport = secure.Client().Transport
+	_, err := client.Get(secure.URL)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errSchemeDowngrade)
+	assert.False(t, hit.Load(), "the plaintext target must not be contacted")
+	assert.NotContains(t, redactTransportError(err).Error(), apiKey)
+}
+
+// the other redirects keep working: https to https ...
+func TestRedirectFromHTTPSToHTTPSIsFollowed(t *testing.T) {
+	var srv *httptest.Server
+	srv = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/moved" {
+			http.Redirect(w, r, srv.URL+"/here", http.StatusMovedPermanently)
+			return
+		}
+		_, _ = fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer srv.Close()
+
+	client := newClient(HTTPParams{})
+	client.Transport = srv.Client().Transport
+	resp, err := client.Get(srv.URL + "/moved")
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "/here", resp.Request.URL.Path)
+}
+
+// ... and http to http (the loopback dev nodes), through the exported helpers
+func TestRedirectFromHTTPToHTTPIsFollowed(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer target.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusTemporaryRedirect)
+	}))
+	defer srv.Close()
+
+	body, err := HTTPGet(HTTPParams{URL: srv.URL})
+	require.NoError(t, err)
+	assert.Equal(t, `{"ok":true}`, string(body))
+	body, err = HTTPGetCtx(context.Background(), HTTPParams{URL: srv.URL})
+	require.NoError(t, err)
+	assert.Equal(t, `{"ok":true}`, string(body))
+	body, err = HTTPPost(HTTPParams{URL: srv.URL, RequestBody: []byte(`{}`)})
+	require.NoError(t, err)
+	assert.Equal(t, `{"ok":true}`, string(body))
+}
+
+// the policy itself: a downgrade is refused at any hop, and net/http's
+// default redirect limit still applies
+func TestRefuseSchemeDowngrade(t *testing.T) {
+	req := func(raw string) *http.Request {
+		r, err := http.NewRequest("GET", raw, nil)
+		require.NoError(t, err)
+		return r
+	}
+	https, plain := req("https://a.example/"), req("http://b.example/")
+
+	assert.NoError(t, refuseSchemeDowngrade(https, nil))
+	assert.NoError(t, refuseSchemeDowngrade(https, []*http.Request{plain}))
+	assert.NoError(t, refuseSchemeDowngrade(plain, []*http.Request{plain}))
+	assert.ErrorIs(t, refuseSchemeDowngrade(plain, []*http.Request{https}), errSchemeDowngrade)
+	assert.ErrorIs(t, refuseSchemeDowngrade(plain, []*http.Request{plain, https}), errSchemeDowngrade)
+
+	via := make([]*http.Request, maxRedirects)
+	for i := range via {
+		via[i] = https
+	}
+	assert.Error(t, refuseSchemeDowngrade(https, via))
+	assert.NoError(t, refuseSchemeDowngrade(https, via[:maxRedirects-1]))
 }

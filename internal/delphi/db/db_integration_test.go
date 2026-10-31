@@ -211,6 +211,22 @@ func TestGetDonationDataWithETHPrice(t *testing.T) {
 	require.Equal(t, api.DonationDataStatus("open"), dd.Status)
 }
 
+// AUD4-4: a backfilled kline is inserted after the live price but carries an
+// older created_at; the current price is the newest one, not the last insert.
+func TestGetDonationDataServesTheNewestETHPrice(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	insertPrice(t, dbh, "truth", "0.00100", time.Minute)
+	insertPrice(t, dbh, "eth", "1800.00", 10*time.Second)
+	insertPrice(t, dbh, "eth", "1700.00", 90*time.Second)
+
+	dd, err := GetDonationData(dbh)
+	require.NoError(t, err)
+	eth := priceFor(dd, api.PriceAssetEth)
+	require.NotNil(t, eth)
+	require.Equal(t, "1800.00000", eth.Price)
+}
+
 // callUpdateUserData invokes the update_user_data() plpgsql function the way
 // GetUserData does, discarding the returned row.
 func callUpdateUserData(t *testing.T, dbh *sqlx.DB, address string) {
@@ -464,4 +480,126 @@ func TestGetUserDonationDataOrdersByBlockTime(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, page1, 1)
 	require.Equal(t, "0xnewer", page1[0].TxHash, "second page must be the newer donation")
+}
+
+// AUD4-5: the schema no longer seeds a token price; until buck has recorded
+// the first tier's there is none to serve, and the error says why.
+func TestGetDonationDataWithoutTokenPrice(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	insertPrice(t, dbh, "eth", "1798.12", 30*time.Second)
+
+	dd, err := GetDonationData(dbh)
+	require.Nil(t, dd)
+	require.ErrorContains(t, err, "no TRUTH price on record, has buck been started?")
+}
+
+// AUD4-24: the destructive-reload guard of 01-schema.sql refuses to run once
+// any table holds operational data -- not only `donation` -- and lets a
+// database through that holds nothing but the rows the script seeds.
+func TestSchemaGuardRefusesAPopulatedDatabase(t *testing.T) {
+	dbh := testDB(t)
+	_, guard := schemaGuard(t)
+
+	// one session, so that the override and its RESET apply to the guard
+	conn, err := dbh.Connx(context.Background())
+	require.NoError(t, err)
+	defer conn.Close() // nolint:errcheck
+	runGuard := func() error {
+		_, err := conn.ExecContext(context.Background(), guard)
+		return err
+	}
+	_, err = conn.ExecContext(context.Background(), `RESET dws.allow_destructive_reload`)
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		table, insert string
+	}{
+		{"user_data", `INSERT INTO user_data(address, affiliate_code) VALUES('0x00000000000000000000000000000000000000a1', '00000000000000a1')`},
+		{"wallet_connection", `INSERT INTO wallet_connection(code, address) VALUES('none', '0x00000000000000000000000000000000000000a2')`},
+		{"price", `INSERT INTO price(asset, price) VALUES('eth', 1800)`},
+		{"donation_stats", `UPDATE donation_stats SET status = 'paused'`},
+	} {
+		t.Run(tc.table, func(t *testing.T) {
+			resetDB(t, dbh)
+			// resetDB leaves the crawler and price request tables alone, and
+			// the buck and pulitzer packages fill them on the shared database
+			_, err := dbh.Exec(`TRUNCATE last_block, failed_block, failed_tx, price_req RESTART IDENTITY`)
+			require.NoError(t, err)
+			// what a freshly loaded database holds: the donation_stats seed row
+			require.NoError(t, runGuard(), "the seed row alone must not block a reload")
+
+			_, err = dbh.Exec(tc.insert)
+			require.NoError(t, err)
+			err = runGuard()
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tc.table)
+
+			// the override still works
+			_, err = conn.ExecContext(context.Background(), `SET dws.allow_destructive_reload = 'on'`)
+			require.NoError(t, err)
+			require.NoError(t, runGuard())
+			_, err = conn.ExecContext(context.Background(), `RESET dws.allow_destructive_reload`)
+			require.NoError(t, err)
+		})
+	}
+	resetDB(t, dbh)
+}
+
+// AUD4-25: update_user_data() takes the per-address lock before it sums. A
+// reader that has to wait for the lock sums *after* the holder committed: it
+// returns the confirmation the holder committed and not the total it would
+// have read had it not waited.
+func TestUpdateUserDataWaitsForTheAddressLock(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+
+	const addr = "0x00000000000000000000000000000000000000a5"
+	insertConfirmedDonation(t, dbh, addr, "300.00", 300000, "0xlock1", time.Minute)
+	callUpdateUserData(t, dbh, addr)
+
+	// hold the lock update_user_data() takes, and confirm a second donation
+	// under it
+	tx, err := dbh.Beginx()
+	require.NoError(t, err)
+	defer tx.Rollback() // nolint:errcheck
+	_, err = tx.Exec(`SELECT pg_advisory_xact_lock(hashtext('update_user_data'), hashtext($1))`, addr)
+	require.NoError(t, err)
+	_, err = tx.Exec(`
+		INSERT INTO donation(
+			address, amount, usd_amount, asset, tokens, price, tx_hash,
+			status, block_number, block_hash, block_time)
+		VALUES($1, 300, 300, 'usdc', 300000, 0.001, '0xlock2', 'confirmed', 2, '0xblock', timezone('utc', now()))`, addr)
+	require.NoError(t, err)
+
+	type result struct {
+		ud  *api.UserData
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		ud, err := GetUserData(dbh, addr)
+		done <- result{ud, err}
+	}()
+
+	// the reader has to block on the advisory lock
+	require.Eventually(t, func() bool {
+		var n int
+		require.NoError(t, dbh.Get(&n, `SELECT COUNT(*) FROM pg_locks WHERE locktype = 'advisory' AND NOT granted`))
+		return n > 0
+	}, 5*time.Second, 10*time.Millisecond, "update_user_data() did not wait for the address lock")
+	select {
+	case <-done:
+		t.Fatal("update_user_data() returned while the address lock was held")
+	default:
+	}
+
+	require.NoError(t, tx.Commit())
+	res := <-done
+	require.NoError(t, res.err)
+	require.NotNil(t, res.ud)
+	require.Equal(t, "600.00", res.ud.Total, "the reader summed before it had the lock")
+	total, tokens := userDataTotals(t, dbh, addr)
+	require.Equal(t, "600.00", total)
+	require.Equal(t, 600000, tokens)
 }

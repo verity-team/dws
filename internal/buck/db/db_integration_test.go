@@ -332,8 +332,10 @@ func TestFailTxLeavesConfirmedDonationAlone(t *testing.T) {
 	require.NoError(t, FailTx(ctxt, txByHash(hash)))
 
 	require.Equal(t, "confirmed", donationStatus(t, dbh, hash))
-	// the failed_tx record is kept as evidence of the race
-	require.Equal(t, 1, failedTxCount(t, dbh, hash))
+	// AUD4-15: no failed_tx row for a donation that was not failed -- it used
+	// to be written before the conditional update and left a permanent
+	// failed_tx row for a 'confirmed' donation
+	require.Equal(t, 0, failedTxCount(t, dbh, hash))
 	total, tokens := donationStats(t, dbh)
 	require.Equal(t, "999.99", total, "donation stats must not be touched")
 	require.EqualValues(t, 9999, tokens, "donation stats must not be touched")
@@ -341,6 +343,26 @@ func TestFailTxLeavesConfirmedDonationAlone(t *testing.T) {
 	var n int
 	require.NoError(t, dbh.Get(&n, `SELECT COUNT(*) FROM donation WHERE tx_hash=$1`, hash))
 	require.Equal(t, 1, n, fmt.Sprintf("confirmed donation %s was deleted", hash))
+}
+
+// AUD4-15: failing a transaction that has no 'unconfirmed' donation -- here
+// one that is already 'failed' by the finalized crawler's receipt, and one
+// that is not on record at all -- writes no failed_tx row.
+func TestFailTxWritesNoFailedTxWithoutAnUnconfirmedDonation(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	ctxt := testContext(dbh)
+
+	failedHash := "0x7777888888888888888888888888888888888888888888888888888888888888"
+	unknownHash := "0x7777999999999999999999999999999999999999999999999999999999999999"
+	insertDonation(t, dbh, failedHash, "failed", "100.00", 1000)
+
+	require.NoError(t, FailTx(ctxt, txByHash(failedHash)))
+	require.NoError(t, FailTx(ctxt, txByHash(unknownHash)))
+
+	require.Equal(t, "failed", donationStatus(t, dbh, failedHash))
+	require.Equal(t, 0, failedTxCount(t, dbh, failedHash))
+	require.Equal(t, 0, failedTxCount(t, dbh, unknownHash))
 }
 
 // resetPrices empties the price table; the token price rows the test needs
@@ -418,9 +440,59 @@ func TestPersistTxsWithoutConfirmedDonations(t *testing.T) {
 	var n int
 	require.NoError(t, dbh.Get(&n, `SELECT COUNT(*) FROM donation`))
 	require.Equal(t, 0, n, "the donation should have been skipped")
+	// ... but not lost: it is on record in failed_tx
+	require.Equal(t, 1, failedTxCount(t, dbh, hash))
 	total, tokens := donationStats(t, dbh)
 	require.Equal(t, "0.00", total)
 	require.EqualValues(t, 0, tokens)
+}
+
+// AUD4-1: an ETH donation whose usd_amount does not fit NUMERIC(12,2) used to
+// fail the upsert with `numeric field overflow` and roll back the block -- the
+// legitimate donation next to it included -- on every run. It is recorded in
+// failed_tx instead, and the rest of the block is persisted and the cursor
+// advanced.
+func TestPersistTxsRecordsUSDAmountOverflowAsFailedTx(t *testing.T) {
+	for _, ct := range []c.CrawlerType{c.Latest, c.Finalized} {
+		t.Run(ct.String(), func(t *testing.T) {
+			dbh := testDB(t)
+			resetDB(t, dbh)
+			resetPrices(t, dbh)
+			insertPrice(t, dbh, "truth", "0.00100", 5*time.Minute)
+			_, err := dbh.Exec(`DELETE FROM last_block WHERE chain='eth'`)
+			require.NoError(t, err)
+			ctxt := testContext(dbh)
+			ctxt.CrawlerType = ct
+			ctxt.UpdateLastBlock = true
+
+			const (
+				hugeHash = "0xaaaa555555555555555555555555555555555555555555555555555555555555"
+				goodHash = "0xaaaa666666666666666666666666666666666666666666666666666666666666"
+			)
+			// 5e6 ETH at 2000 USD: 1e10 USD
+			huge := donationTx(hugeHash, "5000000.00000000")
+			huge.Asset = "eth"
+			good := donationTx(goodHash, "200")
+			for _, tx := range []*c.Transaction{&huge, &good} {
+				tx.Status = "unconfirmed"
+				if ct == c.Finalized {
+					tx.Status = "confirmed"
+				}
+			}
+
+			require.NoError(t, PersistTxs(ctxt, 42, decimal.NewFromInt(2000), []c.Transaction{huge, good}))
+
+			require.Equal(t, 1, failedTxCount(t, dbh, hugeHash))
+			var n int
+			require.NoError(t, dbh.Get(&n, `SELECT COUNT(*) FROM donation WHERE tx_hash=$1`, hugeHash))
+			require.Equal(t, 0, n, "the oversized donation must not reach the donation table")
+			usdAmount, _ := donationTokens(t, dbh, goodHash)
+			require.Equal(t, "200.00", usdAmount)
+			lbn, err := GetLastBlock(dbh, "eth", ct.String())
+			require.NoError(t, err)
+			require.EqualValues(t, 42, lbn)
+		})
+	}
 }
 
 // M3: donation_stats is the single row every writer updates without a WHERE
@@ -1594,4 +1666,79 @@ func TestFinalizedUpsertResetsAbsentCount(t *testing.T) {
 
 	require.Equal(t, "unconfirmed", donationStatus(t, dbh, hash), "the paused finalized upsert resurrects the failed row")
 	require.Equal(t, 0, donationAbsentCount(t, dbh, hash), "a finalized re-observation must clear the absence streak")
+}
+
+func tokenPrices(t *testing.T, dbh *sqlx.DB) []string {
+	t.Helper()
+
+	var prices []decimal.Decimal
+	require.NoError(t, dbh.Select(&prices, `SELECT price FROM price WHERE asset='truth' ORDER BY id`))
+	result := make([]string, 0, len(prices))
+	for _, p := range prices {
+		result = append(result, p.StringFixed(5))
+	}
+	return result
+}
+
+// AUD4-5: a database without a token price is given the first tier's -- the
+// schema used to seed 0.001, which a ladder starting at 0.0025 then sold all
+// of tier 1 at -- and a second start leaves it alone.
+func TestInitTokenPriceRecordsTheFirstTier(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	resetPrices(t, dbh)
+	insertPrice(t, dbh, "eth", "1799.34", 0)
+	ctxt := testContext(dbh)
+	ctxt.SaleParams = []c.SaleParam{
+		{Limit: 1000, Price: decimal.RequireFromString("0.0025")},
+		{Limit: saleLimit, Price: decimal.RequireFromString("0.005")},
+	}
+
+	require.NoError(t, InitTokenPrice(ctxt))
+	require.Equal(t, []string{"0.00250"}, tokenPrices(t, dbh))
+
+	require.NoError(t, InitTokenPrice(ctxt))
+	require.Equal(t, []string{"0.00250"}, tokenPrices(t, dbh))
+
+	dtx, err := dbh.Beginx()
+	require.NoError(t, err)
+	defer dtx.Rollback() // nolint:errcheck
+	price, err := getTokenPrice(dtx, ctxt)
+	require.NoError(t, err)
+	require.Equal(t, "0.00250", price.StringFixed(5))
+}
+
+// AUD4-5: a token price on record that is not one of the configured tiers --
+// the old seed under a ladder that starts elsewhere -- refuses to start, and
+// leaves the price table alone.
+func TestInitTokenPriceRejectsAPriceOffTheLadder(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	resetPrices(t, dbh)
+	insertPrice(t, dbh, "truth", "0.00100", 5*time.Minute)
+	ctxt := testContext(dbh)
+	ctxt.SaleParams = []c.SaleParam{{Limit: saleLimit, Price: decimal.RequireFromString("0.0025")}}
+
+	err := InitTokenPrice(ctxt)
+	require.ErrorContains(t, err, "the token price on record (0.00100) is not the price of any DWS_SALE_PARAMS tier")
+	require.ErrorContains(t, err, "'token price at startup' in the README")
+	require.Equal(t, []string{"0.00100"}, tokenPrices(t, dbh))
+}
+
+// a token price on record that is one of the tiers -- not necessarily the
+// first -- is accepted as is
+func TestInitTokenPriceAcceptsATierPrice(t *testing.T) {
+	dbh := testDB(t)
+	resetDB(t, dbh)
+	resetPrices(t, dbh)
+	insertPrice(t, dbh, "truth", "0.00100", 10*time.Minute)
+	insertPrice(t, dbh, "truth", "0.00200", 5*time.Minute)
+	ctxt := testContext(dbh)
+	ctxt.SaleParams = []c.SaleParam{
+		{Limit: 1000, Price: decimal.RequireFromString("0.001")},
+		{Limit: saleLimit, Price: decimal.RequireFromString("0.002")},
+	}
+
+	require.NoError(t, InitTokenPrice(ctxt))
+	require.Equal(t, []string{"0.00100", "0.00200"}, tokenPrices(t, dbh))
 }

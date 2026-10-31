@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -44,6 +45,12 @@ const (
 	// DefaultUserDataLimit is the page size used when the caller does not ask
 	// for one.
 	DefaultUserDataLimit = 50
+	// MaxAffiliateCodeLength is the `maxLength` of `connection_request.code`
+	// in api/delphi.yaml and the width of wallet_connection.code.
+	MaxAffiliateCodeLength = 16
+	// MaxLoggedValueLength bounds a caller supplied value in a log line. The
+	// longest legitimate one, a `delphi-signature`, is 132 characters.
+	MaxLoggedValueLength = 256
 )
 
 // The messages handed to the caller are deliberately generic: the wrapped
@@ -95,6 +102,44 @@ func getError(code int, publicMsg, context string, err error) api.Error {
 	}
 }
 
+// ValidationErrorHandler answers a request the oapi request validator rejected.
+// The validator's own error carries the offending input and the schema it
+// failed (patterns, lengths, parameter names); like every other error it is
+// logged here and the client gets the numeric code and a generic message.
+func ValidationErrorHandler(ctx echo.Context, herr *echo.HTTPError) error {
+	publicMsg := msgInvalidRequest
+	if herr.Code >= http.StatusInternalServerError {
+		publicMsg = msgInternalError
+	}
+	cerr := getError(116, publicMsg, fmt.Sprintf("request validation failed (%d)", herr.Code), errors.New(logValue(fmt.Sprint(herr.Message))))
+	return ctx.JSON(herr.Code, cerr)
+}
+
+// HTTPErrorHandler wraps the echo default error handler. The generated
+// parameter binding (api.ServerInterfaceWrapper) rejects a request with a 400
+// whose message repeats the input and the binding error ("Invalid format for
+// parameter ..."); that message is logged and the client gets the generic
+// one. Every other error -- the router, the body and rate limits, a recovered
+// panic -- carries a fixed status text already and is left to the default.
+func HTTPErrorHandler(e *echo.Echo) echo.HTTPErrorHandler {
+	return func(err error, ctx echo.Context) {
+		var herr *echo.HTTPError
+		if ctx.Response().Committed || !errors.As(err, &herr) || herr.Code != http.StatusBadRequest {
+			e.DefaultHTTPErrorHandler(err, ctx)
+			return
+		}
+		cerr := getError(117, msgInvalidRequest, "failed to bind the request parameters", errors.New(logValue(fmt.Sprint(herr.Message))))
+		if ctx.Request().Method == http.MethodHead {
+			err = ctx.NoContent(herr.Code)
+		} else {
+			err = ctx.JSON(herr.Code, cerr)
+		}
+		if err != nil {
+			log.Errorf("failed to send the error response, %v", err)
+		}
+	}
+}
+
 func (s *DelphiServer) ConnectWallet(ctx echo.Context, params api.ConnectWalletParams) error {
 	authTS, err := getTS(params.DelphiTs)
 	if err != nil {
@@ -102,7 +147,7 @@ func (s *DelphiServer) ConnectWallet(ctx echo.Context, params api.ConnectWalletP
 		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
 	if authTSOutOfWindow(authTS) {
-		err = fmt.Errorf("/wallet/connection delphi-ts ('%s') is outside the accepted window for address '%s'", params.DelphiTs, params.DelphiKey)
+		err = fmt.Errorf("/wallet/connection delphi-ts (%s) is outside the accepted window for address %s", logValue(params.DelphiTs), logValue(params.DelphiKey))
 		log.Error(err)
 		cerr := api.Error{
 			Code:    114,
@@ -111,25 +156,38 @@ func (s *DelphiServer) ConnectWallet(ctx echo.Context, params api.ConnectWalletP
 		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
 
-	authOK := verifySig(params.DelphiKey, formMsg(ctx.Path(), params.DelphiKey, authTS), params.DelphiSignature)
-	if !authOK {
-		return ctx.NoContent(http.StatusUnauthorized)
-	}
-	log.Infof("auth OK for /wallet/connection request, address '%s'", params.DelphiKey)
-
+	// the affiliate code is part of the signed message (see formConnectionMsg)
+	// i.e. the body has to be read before the signature can be checked
 	var cr api.ConnectionRequest
 	err = ctx.Bind(&cr)
 	if err != nil {
 		cerr := getError(101, msgInvalidRequest, "failed to bind POST param (ConnectionRequest)", err)
 		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
+
+	// The request validator checked the body against api/delphi.yaml, but
+	// echo binds with encoding/json, which matches keys case insensitively:
+	// `{"code":"none","Code":"<anything>"}` passes the validator and binds
+	// the second value. Hence the bound values are checked again here.
+	if !isValidAffiliateCode(cr.Code) {
+		log.Errorf("/wallet/connection invalid affiliate code (%d bytes), delphi-key %s", len(cr.Code), logValue(params.DelphiKey))
+		cerr := api.Error{Code: 115, Message: "invalid affiliate code"}
+		return ctx.JSON(http.StatusBadRequest, cerr)
+	}
 	if !common.IsValidETHAddress(cr.Address) {
 		cerr := api.Error{Code: 102, Message: "invalid ethereum address"}
 		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
+
+	authOK := verifySig(params.DelphiKey, formConnectionMsg(ctx.Path(), params.DelphiKey, authTS, cr.Code), params.DelphiSignature)
+	if !authOK {
+		return ctx.NoContent(http.StatusUnauthorized)
+	}
+	log.Infof("auth OK for /wallet/connection request, address %q", params.DelphiKey)
+
 	// the caller may only connect the wallet it has proven ownership of
 	if !strings.EqualFold(cr.Address, params.DelphiKey) {
-		log.Errorf("/wallet/connection address mismatch, delphi-key '%s'", params.DelphiKey)
+		log.Errorf("/wallet/connection address mismatch, delphi-key %q", params.DelphiKey)
 		return ctx.NoContent(http.StatusUnauthorized)
 	}
 	// every read path lowercases the address; do the same before writing so
@@ -140,6 +198,14 @@ func (s *DelphiServer) ConnectWallet(ctx echo.Context, params api.ConnectWalletP
 		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}
 	return ctx.JSON(http.StatusOK, struct{}{})
+}
+
+// isValidAffiliateCode applies the `connection_request.code` rules of
+// api/delphi.yaml to a bound value: a code (or `none`) of at most
+// MaxAffiliateCodeLength characters -- the width of the database columns it
+// is compared with and written to.
+func isValidAffiliateCode(code string) bool {
+	return code != "" && utf8.RuneCountInString(code) <= MaxAffiliateCodeLength
 }
 
 // defaultUserData is what an address without a `user_data` row is reported
@@ -241,6 +307,17 @@ func (s *DelphiServer) Version(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, map[string]string{"version": versionString()})
 }
 
+// logValue renders a caller supplied value for a log line: quoted, so that it
+// cannot forge a line or a field, and bounded, so that a request cannot turn a
+// header of up to MaxHeaderBytes into as many bytes of log. api/delphi.yaml
+// bounds the authentication headers already; this holds whatever the caller.
+func logValue(v string) string {
+	if len(v) <= MaxLoggedValueLength {
+		return strconv.Quote(v)
+	}
+	return fmt.Sprintf("%q...(%d bytes)", v[:MaxLoggedValueLength], len(v))
+}
+
 // sigDigest identifies a signature in a log line without reproducing it.
 //
 // Inside the `delphi-ts` replay window the signature *is* the credential:
@@ -289,7 +366,12 @@ func verifySig(from, msg, sigHex string) bool {
 func getTS(tss string) (time.Time, error) {
 	seconds, err := strconv.Atoi(tss)
 	if err != nil {
-		err = fmt.Errorf("failed to parse string with seconds since epoch ('%s'), %w", tss, err)
+		// strconv's error repeats the input in full; logValue bounds it
+		var nerr *strconv.NumError
+		if errors.As(err, &nerr) {
+			err = nerr.Err
+		}
+		err = fmt.Errorf("failed to parse string with seconds since epoch (%s), %w", logValue(tss), err)
 		log.Error(err)
 		return time.Unix(0, 0), err
 	}
@@ -346,6 +428,16 @@ func formMsg(urlPath, address string, authTS time.Time) string {
 	return fmt.Sprintf("%s, %s, %s", path, strings.ToLower(address), authTS.Format("2006-01-02 15:04:05-07:00"))
 }
 
+// formConnectionMsg builds the message the caller of /wallet/connection has to
+// sign: the formMsg message followed by the affiliate code exactly as it is
+// sent in the request body ("none" without one). The code travels in the body,
+// which the signature does not otherwise cover: without it anyone who sees a
+// fresh signature -- in a proxy, a log -- could replay it within the
+// `delphi-ts` window with an affiliate code of his own choosing.
+func formConnectionMsg(urlPath, address string, authTS time.Time, code string) string {
+	return formMsg(urlPath, address, authTS) + ", " + code
+}
+
 func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodeParams) error {
 	authTS, err := getTS(params.DelphiTs)
 	if err != nil {
@@ -353,7 +445,7 @@ func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodePar
 		return ctx.JSON(http.StatusBadRequest, cerr)
 	}
 	if authTSOutOfWindow(authTS) {
-		err = fmt.Errorf("/affiliate/code delphi-ts ('%s') is outside the accepted window for address '%s'", params.DelphiTs, params.DelphiKey)
+		err = fmt.Errorf("/affiliate/code delphi-ts (%s) is outside the accepted window for address %s", logValue(params.DelphiTs), logValue(params.DelphiKey))
 		log.Error(err)
 		cerr := api.Error{
 			Code:    108,
@@ -366,7 +458,7 @@ func (s *DelphiServer) GenerateCode(ctx echo.Context, params api.GenerateCodePar
 	if !authOK {
 		return ctx.NoContent(http.StatusUnauthorized)
 	}
-	log.Infof("auth OK for /affiliate/code request, address '%s'", params.DelphiKey)
+	log.Infof("auth OK for /affiliate/code request, address %q", params.DelphiKey)
 	afc, err := db.GetAffiliateCode(s.db, strings.ToLower(params.DelphiKey))
 	if err != nil {
 		cerr := getError(109, msgInternalError, "failed to fetch the affiliate code", err)
