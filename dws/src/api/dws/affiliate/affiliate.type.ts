@@ -12,6 +12,15 @@ export interface WalletAffiliateRequest {
   signature: string;
 }
 
+// Outcome of a /wallet/connection request. delphi turns an affiliate code down
+// with a 422 that says why: error code 119 (unknown code) or 120 (the caller's
+// own code); nothing is recorded in either case.
+export type WalletConnectionResult =
+  | "connected"
+  | "unknown_code"
+  | "self_referral"
+  | "failed";
+
 export interface WalletAffiliateResponse {
   data: Maybe<UserDonationData>;
   error: Maybe<CustomError>;

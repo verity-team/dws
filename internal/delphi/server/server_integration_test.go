@@ -236,3 +236,43 @@ func TestConnectWalletRecordsTheSignedCode(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 	assert.Equal(t, []string{signed}, codes(), "a replayed signature must not record another code")
 }
+
+// #233: a correctly signed connection whose affiliate code is turned down gets
+// a 422 that says why -- an unknown code (119) or the caller's own code (120)
+// -- and records nothing.
+func TestConnectWalletReportsARejectedCode(t *testing.T) {
+	dbh := integrationDB(t)
+	_, err := dbh.Exec(`TRUNCATE user_data, wallet_connection RESTART IDENTITY`)
+	require.NoError(t, err)
+
+	key, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	addr := crypto.PubkeyToAddress(key.PublicKey).Hex()
+	const own = "00000000000000c1"
+	_, err = dbh.Exec(`INSERT INTO user_data(address, affiliate_code) VALUES($1, $2)`, strings.ToLower(addr), own)
+	require.NoError(t, err)
+	s := NewDelphiServer(dbh)
+
+	for _, tc := range []struct {
+		code    string
+		errCode int
+	}{
+		{"nosuchcode000000", 119},
+		{own, 120},
+	} {
+		authTS := time.Now().UTC()
+		params := api.ConnectWalletParams{
+			DelphiKey:       addr,
+			DelphiTs:        strconv.FormatInt(authTS.Unix(), 10),
+			DelphiSignature: signConnection(t, key, addr, authTS, tc.code),
+		}
+		ctx, rec := connectWalletCtx(t, fmt.Sprintf(`{"code":%q,"address":%q}`, tc.code, addr))
+		require.NoError(t, s.ConnectWallet(ctx, params))
+		require.Equal(t, http.StatusUnprocessableEntity, rec.Code, tc.code)
+		assert.Contains(t, rec.Body.String(), fmt.Sprintf(`"code":%d`, tc.errCode), tc.code)
+	}
+
+	var n int
+	require.NoError(t, dbh.Get(&n, `SELECT COUNT(*) FROM wallet_connection`))
+	assert.Zero(t, n, "a turned down code must not be recorded")
+}

@@ -44,6 +44,16 @@ func mostRecentWalletConnection(db *sqlx.DB, address string) (*walletConnection,
 	return &result, nil
 }
 
+// The two ways ConnectWallet turns an affiliate code down. Both leave the
+// database untouched; the caller reports them to the client (see #233) so the
+// frontend can tell the user why the referral did not take.
+var (
+	// ErrUnknownAffiliateCode: no user owns the code
+	ErrUnknownAffiliateCode = errors.New("unknown affiliate code")
+	// ErrSelfReferral: the code belongs to the connecting address
+	ErrSelfReferral = errors.New("an affiliate code cannot refer its owner")
+)
+
 func ConnectWallet(db *sqlx.DB, req api.ConnectionRequest) error {
 	// every read path lowercases the address -> normalize once, before the
 	// lookup *and* the insert below, so that the two cannot disagree
@@ -93,17 +103,26 @@ func ConnectWallet(db *sqlx.DB, req api.ConnectionRequest) error {
 	if ras == 0 {
 		// the insert matched no row: either the code does not exist, or it
 		// belongs to the connecting address -- a rejected self-referral. One
-		// lookup tells the two apart so the warning is accurate. (The caller
-		// still gets a 200; surfacing a distinct error to the frontend is
-		// tracked for a later release.)
+		// lookup tells the two apart.
 		var owner string
 		switch lerr := db.Get(&owner, `SELECT address FROM user_data WHERE affiliate_code = $1`, req.Code); {
 		case lerr == nil && owner == req.Address:
 			log.Warnf("rejected self-referral: address %q connected with its own affiliate code", req.Address)
+			return ErrSelfReferral
 		case errors.Is(lerr, sql.ErrNoRows):
 			log.Warnf("wallet connection request with unknown affiliate code: %q", req.Code)
+			return ErrUnknownAffiliateCode
+		case lerr == nil:
+			// the code has a third-party owner now, but matched no row when
+			// the insert ran: it was (re)assigned in between. Not the
+			// caller's fault and not final -- an error the client retries.
+			err = fmt.Errorf("affiliate code %q matched no user on insert but is owned by %q now", req.Code, owner)
+			log.Error(err)
+			return err
 		default:
-			log.Warnf("wallet connection request with an affiliate code that matched no user (code %q): %v", req.Code, lerr)
+			err = fmt.Errorf("failed to look up the owner of affiliate code %q, %w", req.Code, lerr)
+			log.Error(err)
+			return err
 		}
 	}
 	return nil

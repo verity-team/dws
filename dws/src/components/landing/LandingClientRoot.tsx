@@ -11,12 +11,17 @@ import {
 } from "react";
 import { connectWalletWithAffiliate } from "@/api/dws/affiliate/affiliate";
 import { Maybe } from "@/utils";
-import { LAST_PROVIDER_KEY, LAST_WALLET_KEY } from "@/utils/const";
+import {
+  LAST_PROVIDER_KEY,
+  LAST_WALLET_KEY,
+  MAX_AFFILIATE_CODE_LENGTH,
+} from "@/utils/const";
 import { getDelphiMessage } from "@/utils/utils";
 import { AvailableWallet } from "@/utils/wallet/token";
 import { CircularProgress } from "@mui/material";
 import { useSearchParams } from "next/navigation";
 import { useAffiliateCode } from "@/hooks/useAffiliateCode";
+import toast from "react-hot-toast";
 
 interface LandingClientRootProps {
   children: ReactNode;
@@ -50,6 +55,16 @@ const LandingClientRoot = ({
         return;
       }
 
+      // a code longer than delphi accepts can only come from a broken or
+      // tampered link; delphi would reject it with a generic validation error,
+      // so tell the user here instead of asking for a signature first. The
+      // length is counted in code points, like the spec's maxLength.
+      if (afc !== "none" && [...afc].length > MAX_AFFILIATE_CODE_LENGTH) {
+        toast.error("Affiliate code not found, no referral was recorded");
+        setAffiliateCodeConnected(true);
+        return;
+      }
+
       // the backend requires proof that the caller owns `address`; the message
       // is derived from the endpoint path, the address, the timestamp and the
       // affiliate code sent in the body (so the code cannot be swapped on a
@@ -74,12 +89,17 @@ const LandingClientRoot = ({
         return;
       }
 
-      await connectWalletWithAffiliate({
+      const result = await connectWalletWithAffiliate({
         address,
         code: afc,
         timestamp,
         signature,
       });
+      if (result === "unknown_code") {
+        toast.error("Affiliate code not found, no referral was recorded");
+      } else if (result === "self_referral") {
+        toast.error("You cannot use your own affiliate code");
+      }
       setAffiliateCodeConnected(true);
     },
     [affiliateCode, affiliateCodeConnected]

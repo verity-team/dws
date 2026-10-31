@@ -52,6 +52,16 @@ paths:
         "401":
           description: |
             Client lacks valid authentication credentials
+        "422":
+          description: |
+            The affiliate code was turned down and nothing was recorded:
+            code 119 -- no user owns the code; code 120 -- the code belongs
+            to the connecting address (no self-referral). Retrying the same
+            request does not help.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
         "5XX":
           description: |
             Servers are not working as expected. The request is probably valid
