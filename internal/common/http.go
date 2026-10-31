@@ -43,10 +43,43 @@ func timeout(params HTTPParams) time.Duration {
 	return time.Duration(params.MaxWaitInSeconds) * time.Second
 }
 
-func HTTPGet(params HTTPParams) ([]byte, error) {
-	client := &http.Client{
-		Timeout: timeout(params),
+// maxRedirects is net/http's own default limit, which a client with a
+// CheckRedirect of its own no longer gets.
+const maxRedirects = 10
+
+// errSchemeDowngrade is returned for a redirect from https to a non-https URL.
+var errSchemeDowngrade = errors.New("refusing to follow a redirect that downgrades https")
+
+// refuseSchemeDowngrade is the redirect policy of every client built here.
+//
+// ValidateRPCURL insists on https for the json-rpc provider and the exchange
+// endpoints are https URLs, but net/http follows a redirect to any scheme: an
+// https endpoint answering with a redirect to http would move the request --
+// and its answer -- onto plaintext, where it can be read and tampered with on
+// path. Such a redirect is refused; every other one (https to https, or http
+// to anything for the loopback dev nodes) is still followed. The error names
+// no URL: a redirect target may carry credentials just like the original.
+func refuseSchemeDowngrade(req *http.Request, via []*http.Request) error {
+	if len(via) >= maxRedirects {
+		return fmt.Errorf("stopped after %d redirects", maxRedirects)
 	}
+	if len(via) > 0 && via[len(via)-1].URL.Scheme == "https" && req.URL.Scheme != "https" {
+		return errSchemeDowngrade
+	}
+	return nil
+}
+
+// newClient returns an HTTP client with the timeout of params and the
+// redirect policy above.
+func newClient(params HTTPParams) *http.Client {
+	return &http.Client{
+		Timeout:       timeout(params),
+		CheckRedirect: refuseSchemeDowngrade,
+	}
+}
+
+func HTTPGet(params HTTPParams) ([]byte, error) {
+	client := newClient(params)
 
 	req, err := http.NewRequest("GET", params.URL, nil)
 	if err != nil {
@@ -80,9 +113,7 @@ func HTTPGet(params HTTPParams) ([]byte, error) {
 // (context.Canceled / context.DeadlineExceeded, with the URL redacted), which
 // the chain treats like any other failed source.
 func HTTPGetCtx(ctx context.Context, params HTTPParams) ([]byte, error) {
-	client := &http.Client{
-		Timeout: timeout(params),
-	}
+	client := newClient(params)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", params.URL, nil)
 	if err != nil {
@@ -103,9 +134,7 @@ func HTTPGetCtx(ctx context.Context, params HTTPParams) ([]byte, error) {
 }
 
 func HTTPPost(params HTTPParams) ([]byte, error) {
-	client := &http.Client{
-		Timeout: timeout(params),
-	}
+	client := newClient(params)
 	response, err := client.Post(params.URL, "application/json", bytes.NewBuffer(params.RequestBody))
 	if err != nil {
 		err = fmt.Errorf("post request for url ('%s') failed, %w", RedactURL(params.URL), redactTransportError(err))

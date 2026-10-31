@@ -1,6 +1,6 @@
 "use client";
 
-import { exchangeToReward } from "@/utils/wallet/donate";
+import { exchangeToReward, waitForDonation } from "@/utils/wallet/donate";
 import ConnectButton from "./ConnectBtn";
 import TokenSelector from "./TokenSelector";
 import { AvailableToken, stableCoinPrice } from "@/utils/wallet/token";
@@ -21,10 +21,15 @@ import { getUserDonationDataKeyFilter } from "@/api/dws/user/user";
 import { useToggle } from "@/hooks/utils/useToggle";
 import ThankDialog from "./ThankDialog";
 import { TokenPrice } from "@/api/dws/donation/donation.type";
+import { Maybe } from "@/utils";
+import { Address } from "viem";
 
 interface DonateFormProps {
   tokenPrices: TokenPrice[];
   rewardPrice: number;
+  receiver: Maybe<Address>;
+  // Why donating is not possible right now, null when it is
+  blockedReason: Maybe<string>;
 }
 
 export interface DonateFormData {
@@ -34,6 +39,8 @@ export interface DonateFormData {
 const DonateForm = ({
   tokenPrices,
   rewardPrice,
+  receiver,
+  blockedReason,
 }: DonateFormProps): ReactElement<DonateFormProps> => {
   const userWallet = useContext(Wallet);
   const { requestTransaction } = useContext(WalletUtils);
@@ -42,6 +49,7 @@ const DonateForm = ({
   const [receiveAmount, setReceiveAmount] = useState<number | "N/A">(0);
 
   const [isLoading, setLoading] = useState(false);
+  const [isConfirming, setConfirming] = useState(false);
 
   const {
     isOpen: isThankOpen,
@@ -97,6 +105,11 @@ const DonateForm = ({
   }, [selectedToken]);
 
   const handleDonate = async (data: DonateFormData) => {
+    if (blockedReason != null || receiver == null) {
+      toast.error(blockedReason ?? "Donating is not possible right now");
+      return;
+    }
+
     setLoading(true);
 
     if (!userWallet) {
@@ -104,14 +117,48 @@ const DonateForm = ({
     }
 
     try {
-      const txHash = await requestTransaction(data.payAmount, selectedToken);
+      const txHash = await requestTransaction(
+        data.payAmount,
+        selectedToken,
+        receiver
+      );
       if (!txHash) {
         setLoading(false);
         toast.error("Transaction rejected");
         return;
       }
 
-      toast.success("Thank you for your support!");
+      // Only a mined, successful transaction is a donation
+      setConfirming(true);
+      const toastId = toast.loading(
+        "Transaction submitted, waiting for confirmation..."
+      );
+      const outcome = await waitForDonation(txHash);
+
+      if (outcome === "reverted") {
+        toast.error("Your transaction failed. No donation was made.", {
+          id: toastId,
+        });
+        return;
+      }
+
+      if (outcome === "replaced") {
+        toast.error(
+          "Your transaction was cancelled or replaced in your wallet. No donation was made.",
+          { id: toastId }
+        );
+        return;
+      }
+
+      if (outcome === "unknown") {
+        toast.error(
+          "Your transaction could not be confirmed yet. Please check your wallet and your donation history.",
+          { id: toastId }
+        );
+        return;
+      }
+
+      toast.success("Thank you for your support!", { id: toastId });
       setThankOpen();
 
       // Revalidate user donations -- every page that is currently cached, the
@@ -126,6 +173,7 @@ const DonateForm = ({
     } catch (error) {
       console.log(error);
     } finally {
+      setConfirming(false);
       setLoading(false);
     }
   };
@@ -205,17 +253,33 @@ const DonateForm = ({
             )}
           </div>
         )}
+        {blockedReason != null && (
+          <div className="px-2">
+            <TextError>{blockedReason}</TextError>
+          </div>
+        )}
         <div className="p-2">
           <ConnectButton
             disabled={
               receiveAmount === "N/A" ||
               receiveAmount <= 0 ||
-              isNaN(rewardPrice)
+              isNaN(rewardPrice) ||
+              receiver == null ||
+              blockedReason != null
             }
             account={userWallet.wallet}
             loading={isLoading}
             onDonate={handleSubmit(handleDonate)}
           />
+          {isConfirming && (
+            <div className="font-sans text-sm text-center mt-2">
+              Transaction submitted, waiting for confirmation...
+            </div>
+          )}
+          <div className="font-sans text-xs text-center mt-2">
+            Smart-contract wallets (e.g. Safe or account-abstraction wallets)
+            are not supported. Donations sent from them will not be credited.
+          </div>
         </div>
       </form>
       <ThankDialog isOpen={isThankOpen} handleClose={setThankClose} />

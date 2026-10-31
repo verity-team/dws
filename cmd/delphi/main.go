@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	echomiddleware "github.com/labstack/echo/v4/middleware"
@@ -35,6 +36,10 @@ const (
 	// stop a stalled client from pinning a connection indefinitely
 	writeTimeout = 30 * time.Second
 	idleTimeout  = 120 * time.Second
+	// The request line and headers of a legitimate request -- the three
+	// `delphi-*` headers are below 200 bytes together -- fit comfortably;
+	// net/http adds 4 KB of slack on top.
+	maxHeaderBytes = 8 << 10
 	// bound for draining the in-flight requests on SIGTERM; comfortably below
 	// the usual 30s orchestrator grace period
 	shutdownTimeout = 10 * time.Second
@@ -112,29 +117,7 @@ func main() {
 	db.SetConnMaxLifetime(5 * time.Minute)
 	// Create an instance of our handler which satisfies the generated interface
 	ds := server.NewDelphiServer(db)
-
-	blv := echomiddleware.BodyLimitConfig{
-		Limit: "1K",
-	}
-
-	// This is how you set up a basic Echo router
-	e := echo.New()
-	// echo.New() leaves all server timeouts unset i.e. a slow or stalled client
-	// can hold on to a connection forever; the body limit does not help here
-	// since it only covers the request body
-	setServerTimeouts(e.Server)
-	// recover from panics in downstream middleware/handlers; must be first so
-	// that it also covers the middleware registered below
-	e.Use(echomiddleware.Recover())
-	e.Use(echomiddleware.Logger())
-
-	e.Use(echomiddleware.BodyLimitWithConfig(blv))
-	e.Use(echomiddleware.Secure())
-	e.Use(echomiddleware.RateLimiterWithConfig(rateLimiterConfig()))
-
-	e.Use(middleware.OapiRequestValidator(swagger))
-
-	api.RegisterHandlers(e, ds)
+	e := newEcho(swagger, ds)
 
 	// listen for interrupt signals (like Ctrl-C).
 	sigChan := make(chan os.Signal, 1)
@@ -193,6 +176,41 @@ func main() {
 	if failed {
 		os.Exit(1)
 	}
+}
+
+// newEcho sets up the echo server: limits, middleware and the generated
+// handlers.
+func newEcho(swagger *openapi3.T, si api.ServerInterface) *echo.Echo {
+	blv := echomiddleware.BodyLimitConfig{
+		Limit: "1K",
+	}
+
+	e := echo.New()
+	// echo.New() leaves all server timeouts unset i.e. a slow or stalled client
+	// can hold on to a connection forever; the body limit does not help here
+	// since it only covers the request body
+	setServerTimeouts(e.Server)
+	// nor does it cover the request headers: those are bounded by the http
+	// server alone, by default at 1 MB
+	e.Server.MaxHeaderBytes = maxHeaderBytes
+	// recover from panics in downstream middleware/handlers; must be first so
+	// that it also covers the middleware registered below
+	e.Use(echomiddleware.Recover())
+	e.Use(echomiddleware.Logger())
+
+	e.Use(echomiddleware.BodyLimitWithConfig(blv))
+	e.Use(echomiddleware.Secure())
+	e.Use(echomiddleware.RateLimiterWithConfig(rateLimiterConfig()))
+
+	// neither the validator's nor the generated parameter binding's errors
+	// may reach the client verbatim: they repeat the input and the schema
+	e.HTTPErrorHandler = server.HTTPErrorHandler(e)
+	e.Use(middleware.OapiRequestValidatorWithOptions(swagger, &middleware.Options{
+		ErrorHandler: server.ValidationErrorHandler,
+	}))
+
+	api.RegisterHandlers(e, si)
+	return e
 }
 
 // rateLimiterConfig builds the per-IP rate limiter.

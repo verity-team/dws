@@ -66,6 +66,24 @@ func TestNewTokenPrice(t *testing.T) {
 	assert.Equal(t, decimal.NewFromFloat(0.002), np)
 }
 
+func TestIsTierPrice(t *testing.T) {
+	var (
+		c   Context
+		err error
+	)
+	c.SaleParams, err = getSaleParams(spJSON)
+	assert.Nil(t, err)
+
+	// as configured and as read back from the NUMERIC(15,5) column
+	assert.True(t, c.IsTierPrice(decimal.RequireFromString("0.001")))
+	assert.True(t, c.IsTierPrice(decimal.RequireFromString("0.00100")))
+	assert.True(t, c.IsTierPrice(decimal.RequireFromString("0.00240")))
+	// the old schema seed is not a tier of a ladder that starts elsewhere
+	c.SaleParams = []SaleParam{{Limit: 1, Price: decimal.RequireFromString("0.0025")}}
+	assert.False(t, c.IsTierPrice(decimal.RequireFromString("0.00100")))
+	assert.False(t, c.IsTierPrice(decimal.Zero))
+}
+
 const pendingTxJSON = `{
 	"blockHash": null,
 	"blockNumber": null,
@@ -257,6 +275,39 @@ func TestJudge(t *testing.T) {
 
 // the tx set of a finalized block is keyed by normalized hash -- addFBData
 // relies on this to decide whether the block carries a transaction
+// AUD4-16: a transaction found in its finalized block is confirmed only on
+// the word of the receipt from that block; it is failed only on a receipt that
+// reports a revert, and left alone without one.
+func TestJudgeReceipt(t *testing.T) {
+	const (
+		bh = "0x634f3802299d60d38418bad02789a8b36a3051bc62a293b45deeafe5ec51fa34"
+		ob = "0x1111111111111111111111111111111111111111111111111111111111111111"
+	)
+	tx := TxByHash{BlockNumber: 18459476, BlockHash: bh, FBBlockHash: bh, FBContainsTx: true, FBDataAvailable: true}
+	tests := []struct {
+		name     string
+		rcpt     *TxReceipt
+		expected TxVerdict
+	}{
+		{name: "success", rcpt: &TxReceipt{BlockHash: bh, Status: "0x1"}, expected: TxFinalize},
+		{name: "reverted", rcpt: &TxReceipt{BlockHash: bh, Status: "0x0"}, expected: TxFail},
+		{name: "block hash casing differs", rcpt: &TxReceipt{BlockHash: strings.ToUpper(bh), Status: "0x1"}, expected: TxFinalize},
+		{name: "no receipt", rcpt: nil, expected: TxNoReceipt},
+		// a receipt from another block -- e.g. the orphaned one, served by a
+		// lagging node -- says nothing about the finalized one
+		{name: "receipt from another block", rcpt: &TxReceipt{BlockHash: ob, Status: "0x0"}, expected: TxNoReceipt},
+		{name: "receipt without a block hash", rcpt: &TxReceipt{Status: "0x1"}, expected: TxNoReceipt},
+		{name: "receipt without a status", rcpt: &TxReceipt{BlockHash: bh}, expected: TxNoReceipt},
+		{name: "receipt with a garbled status", rcpt: &TxReceipt{BlockHash: bh, Status: "0x2"}, expected: TxNoReceipt},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, tx.JudgeReceipt(tc.rcpt))
+		})
+	}
+	assert.Equal(t, "no tx receipt from the finalized block", TxNoReceipt.String())
+}
+
 func TestTXMapNormalizesHashes(t *testing.T) {
 	const hash = "0xad246b9af8a4bfd4043d6b0a700c70f084c79aa22a8677007716fc70ccefc7e7"
 	fb := FinalizedBlock{Transactions: []string{strings.ToUpper(hash), " " + hash + " "}}
@@ -298,6 +349,13 @@ func TestGetContextValidConfig(t *testing.T) {
 			name:  "single stable coin, single sale param",
 			erc20: `[{"asset": "usdt", "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "scale": 18}]`,
 			sp:    `[{"limit": 1, "price": "0.00001"}]`,
+		},
+		{
+			// trailing zeros beyond the fifth decimal place are not a sixth
+			// decimal, the value is stored exactly
+			name:  "price with trailing zeros",
+			erc20: scJSON,
+			sp:    `[{"limit": 1, "price": "0.00100000"}, {"limit": 2, "price": "9999999999.99999"}]`,
 		},
 		{
 			name:  "lower case contract address",
@@ -453,6 +511,32 @@ func TestGetContextInvalidConfig(t *testing.T) {
 			erc20: scJSON,
 			sp:    `[{"limit": 1050000000, "price": "0.001"}, {"limit": 2625000000, "price": "0"}]`,
 			want:  "sale parameter #2 (limit 2625000000): token price must be greater than zero",
+		},
+		{
+			// stored as 0.00001 in NUMERIC(15,5): ~25% more tokens per dollar
+			name:  "sale param price has more than 5 decimal places",
+			erc20: scJSON,
+			sp:    `[{"limit": 1050000000, "price": "0.0000125"}]`,
+			want:  "token price must have at most 5 decimal places, got 0.0000125",
+		},
+		{
+			// stored as 0 in NUMERIC(15,5): calcTokens divides by zero
+			name:  "sale param price rounds to zero at 5 decimal places",
+			erc20: scJSON,
+			sp:    `[{"limit": 1050000000, "price": "0.000004"}]`,
+			want:  "token price must have at most 5 decimal places, got 0.000004",
+		},
+		{
+			name:  "one of several sale params has more than 5 decimal places",
+			erc20: scJSON,
+			sp:    `[{"limit": 1050000000, "price": "0.001"}, {"limit": 2625000000, "price": "0.002000001"}]`,
+			want:  "sale parameter #2 (limit 2625000000): token price must have at most 5 decimal places",
+		},
+		{
+			name:  "sale param price does not fit NUMERIC(15,5)",
+			erc20: scJSON,
+			sp:    `[{"limit": 1050000000, "price": "10000000000"}]`,
+			want:  "token price 10000000000 does not fit price.price NUMERIC(15,5)",
 		},
 		{
 			name:  "sale param limit is zero",

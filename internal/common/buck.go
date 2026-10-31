@@ -111,6 +111,19 @@ func (c Context) priceBucket(tokens decimal.Decimal) decimal.Decimal {
 	return c.SaleParams[len(c.SaleParams)-1].Price
 }
 
+// IsTierPrice reports whether p is the token price of one of the configured
+// sale tiers. The sale tier prices have at most 5 decimal places (see
+// validateSaleParams), so a price read back from the NUMERIC(15,5) column
+// compares exactly.
+func (c Context) IsTierPrice(p decimal.Decimal) bool {
+	for _, sp := range c.SaleParams {
+		if sp.Price.Equal(p) {
+			return true
+		}
+	}
+	return false
+}
+
 func (c Context) TokenSaleLimit() decimal.Decimal {
 	// sales params slice is sorted
 	max := c.SaleParams[len(c.SaleParams)-1].Limit
@@ -348,6 +361,9 @@ const (
 	// TxDropped -- the transaction has been absent from both the chain and
 	// the mempool for longer than DroppedTxGracePeriod, fail it.
 	TxDropped
+	// TxNoReceipt -- the finalized block carries the transaction, but no
+	// receipt from that block could be fetched, leave it alone.
+	TxNoReceipt
 )
 
 func (v TxVerdict) String() string {
@@ -366,6 +382,8 @@ func (v TxVerdict) String() string {
 		return fmt.Sprintf("absent from chain and mempool for less than %s", DroppedTxGracePeriod)
 	case TxDropped:
 		return fmt.Sprintf("absent from chain and mempool for more than %s", DroppedTxGracePeriod)
+	case TxNoReceipt:
+		return "no tx receipt from the finalized block"
 	}
 	return "invalid tx verdict"
 }
@@ -419,6 +437,41 @@ func (t TxByHash) Judge(mfbn uint64) TxVerdict {
 		return TxFail
 	}
 	return TxFinalize
+}
+
+// JudgeReceipt decides what is to be done with a transaction Judge found in
+// its finalized block (TxFinalize), given the receipt fetched for it (nil if
+// there is none).
+//
+// Block inclusion alone does not confirm a donation: a transaction that
+// succeeded in a block that was later orphaned may be re-mined into another
+// block and revert there. The status on the donation row came from the latest
+// crawler's receipt, i.e. possibly from the orphaned block, and while the
+// finalized crawler is stalled nothing else would ever look again -- a
+// confirmed donation is never downgraded.
+//
+// The receipt is only evidence if it is the one from the finalized block: one
+// from a different block (a lagging provider node) is not, and neither is a
+// missing receipt or a status that is neither success nor failure. All of
+// these leave the donation alone (TxNoReceipt) to be re-examined on the next
+// run; a failure verdict rests on a receipt that reports one.
+func (t TxByHash) JudgeReceipt(rcpt *TxReceipt) TxVerdict {
+	if rcpt == nil || NormalizeHash(rcpt.BlockHash) != NormalizeHash(t.FBBlockHash) {
+		return TxNoReceipt
+	}
+	switch strings.ToLower(strings.TrimSpace(rcpt.Status)) {
+	case "0x1":
+		return TxFinalize
+	case "0x0":
+		return TxFail
+	}
+	return TxNoReceipt
+}
+
+// GetHash makes a TxByHash Hashable, so the receipts of a set of them can be
+// fetched.
+func (t TxByHash) GetHash() string {
+	return t.Hash
 }
 
 func (t *TxByHash) UnmarshalJSON(data []byte) error {
@@ -566,6 +619,23 @@ func validateSaleParams(sps []SaleParam) error {
 			return fmt.Errorf(
 				"sale parameter #%d (limit %d): token price must be greater than zero, got %s",
 				i+1, sp.Limit, sp.Price.String())
+		}
+		// the token price is stored in price.price, NUMERIC(15,5)
+		// (updateTokenPrice writes it with StringFixed(5)), and the tier
+		// lookup compares the stored price against the configured one. A
+		// sixth decimal is silently rounded away on the way in: 0.0000125 is
+		// stored -- and sold -- at 0.00001, ~25% more tokens per dollar, and
+		// a price below 0.000005 is stored as 0, on which calcTokens divides
+		// by zero on every run.
+		if !sp.Price.Equal(sp.Price.Truncate(TokenPriceColumn.Scale)) {
+			return fmt.Errorf(
+				"sale parameter #%d (limit %d): token price must have at most %d decimal places, got %s",
+				i+1, sp.Limit, TokenPriceColumn.Scale, sp.Price.String())
+		}
+		if !TokenPriceColumn.Fits(sp.Price) {
+			return fmt.Errorf(
+				"sale parameter #%d (limit %d): token price %s does not fit price.price %s",
+				i+1, sp.Limit, sp.Price.String(), TokenPriceColumn)
 		}
 	}
 	return nil

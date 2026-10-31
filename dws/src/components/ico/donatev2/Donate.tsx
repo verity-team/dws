@@ -3,16 +3,58 @@
 import Image from "next/image";
 import DonateForm from "./form/DonateForm";
 import { useDonationData } from "@/api/dws/donation/donation";
+import { getVerifiedReceiver } from "@/utils/wallet/donate";
 import { useCallback, useMemo } from "react";
 import { useToggle } from "@/hooks/utils/useToggle";
 import { Dialog, DialogContent, LinearProgress } from "@mui/material";
 import UserDonationStat from "../stats/user/UserDonationStat";
+import { Maybe } from "@/utils";
 
 const Donate = () => {
   const {
     tokenPrices,
     donationStat: { tokens, total },
+    receivingWallet,
+    status,
+    error,
+    isLoading,
   } = useDonationData();
+
+  // Only donate to the address the backend credits
+  const receiver = useMemo(
+    () => getVerifiedReceiver(receivingWallet),
+    [receivingWallet]
+  );
+
+  // Donations are accepted only while the campaign is open: a donation to a
+  // closed campaign gets no tokens, one to a paused campaign is held
+  const blockedReason = useMemo((): Maybe<string> => {
+    if (isLoading) {
+      return "Loading the sale status...";
+    }
+
+    if (error != null && status !== "open") {
+      return "The sale status is unavailable. Please try again later.";
+    }
+
+    if (status === "closed") {
+      return "The sale is closed. New donations are not accepted.";
+    }
+
+    if (status === "paused") {
+      return "The sale is temporarily paused. Please try again later.";
+    }
+
+    if (status !== "open") {
+      return "The sale is not open.";
+    }
+
+    if (receiver == null) {
+      return "The donation address could not be verified. Donating is disabled, please try again later.";
+    }
+
+    return null;
+  }, [isLoading, error, status, receiver]);
 
   const {
     isOpen: isHistoryOpen,
@@ -127,6 +169,8 @@ const Donate = () => {
             <DonateForm
               tokenPrices={tokenPrices}
               rewardPrice={Number(truthTokenPrice)}
+              receiver={receiver}
+              blockedReason={blockedReason}
             />
           </div>
         </div>

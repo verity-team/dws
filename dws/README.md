@@ -54,7 +54,7 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
   - Public environment variables, use on the client side
 
-    - `NEXT_PUBLIC_DONATE_PUBKEY`: A wallet address that will receive donations
+    - `NEXT_PUBLIC_DONATE_PUBKEY`: A wallet address that will receive donations. It must equal the `receiving_address` served by the backend (`/donation/data`), otherwise donating is disabled
     - `NEXT_PUBLIC_MIN_ETH`: Minimum value for ETH token donations
     - `NEXT_PUBLIC_MIN_USDT`: Minimum value for USDT token donations (WIP)
     - `NEXT_PUBLIC_API_TIMEOUT`: Maximum waiting time for a response (before the request get cancelled)

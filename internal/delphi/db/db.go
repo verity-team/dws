@@ -37,7 +37,7 @@ func mostRecentWalletConnection(db *sqlx.DB, address string) (*walletConnection,
 			// not found
 			return nil, nil
 		}
-		err = fmt.Errorf("failed to fetch most recent wallet connection for address '%s', %w", address, err)
+		err = fmt.Errorf("failed to fetch most recent wallet connection for address %q, %w", address, err)
 		log.Error(err)
 		return nil, err
 	}
@@ -99,24 +99,25 @@ func ConnectWallet(db *sqlx.DB, req api.ConnectionRequest) error {
 		var owner string
 		switch lerr := db.Get(&owner, `SELECT address FROM user_data WHERE affiliate_code = $1`, req.Code); {
 		case lerr == nil && owner == req.Address:
-			log.Warnf("rejected self-referral: address '%s' connected with its own affiliate code", req.Address)
+			log.Warnf("rejected self-referral: address %q connected with its own affiliate code", req.Address)
 		case errors.Is(lerr, sql.ErrNoRows):
-			log.Warnf("wallet connection request with unknown affiliate code: '%s'", req.Code)
+			log.Warnf("wallet connection request with unknown affiliate code: %q", req.Code)
 		default:
-			log.Warnf("wallet connection request with an affiliate code that matched no user (code '%s'): %v", req.Code, lerr)
+			log.Warnf("wallet connection request with an affiliate code that matched no user (code %q): %v", req.Code, lerr)
 		}
 	}
 	return nil
 }
 
 func GetDonationData(db *sqlx.DB) (*api.DonationData, error) {
-	// ethereum price
+	// ethereum price: the newest by created_at, not the last inserted -- a
+	// historical backfill writes a past minute after the live price
 	q1 := `
 		SELECT asset, price, created_at FROM price
 		WHERE
 			asset='eth'
 			AND created_at > NOW() - INTERVAL '3 minutes'
-		ORDER BY id DESC
+		ORDER BY created_at DESC
 		LIMIT 1
 		`
 	var (
@@ -148,6 +149,13 @@ func GetDonationData(db *sqlx.DB) (*api.DonationData, error) {
 	var truthp api.Price
 	err := db.Get(&truthp, q2)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// the schema seeds no token price: buck records the price of
+			// the first sale tier when it starts (db.InitTokenPrice). Until
+			// then there is no token price to serve -- say so instead of
+			// passing on a bare "no rows in result set".
+			err = errors.New("no TRUTH price on record, has buck been started?")
+		}
 		err = fmt.Errorf("failed to fetch the TRUTH price, %w", err)
 		log.Error(err)
 		return nil, err
@@ -224,15 +232,15 @@ const userDataQuery = `
 // that a single request cannot materialize an unbounded number of rows.
 func GetUserDonationData(db *sqlx.DB, address string, limit, offset int) ([]api.Donation, error) {
 	if limit <= 0 {
-		return nil, fmt.Errorf("invalid donation page size (%d) for address '%s'", limit, address)
+		return nil, fmt.Errorf("invalid donation page size (%d) for address %q", limit, address)
 	}
 	if offset < 0 {
-		return nil, fmt.Errorf("invalid donation page offset (%d) for address '%s'", offset, address)
+		return nil, fmt.Errorf("invalid donation page offset (%d) for address %q", offset, address)
 	}
 	var result []api.Donation
 	err := db.Select(&result, userDonationQuery, address, limit, offset)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		err = fmt.Errorf("failed to fetch donation records for %s, %w", address, err)
+		err = fmt.Errorf("failed to fetch donation records for %q, %w", address, err)
 		log.Error(err)
 		return nil, err
 	}
@@ -249,7 +257,7 @@ func GetUserData(db *sqlx.DB, address string) (*api.UserData, error) {
 			// not found
 			return nil, nil
 		}
-		err = fmt.Errorf("failed to fetch user data for %s, %w", address, err)
+		err = fmt.Errorf("failed to fetch user data for %q, %w", address, err)
 		log.Error(err)
 		return nil, err
 	}
@@ -272,7 +280,7 @@ func GetAffiliateCode(db *sqlx.DB, address string) (*api.AffiliateCode, error) {
 			// not found
 			return nil, nil
 		}
-		err = fmt.Errorf("failed to fetch affiliate code for address '%s', %w", address, err)
+		err = fmt.Errorf("failed to fetch affiliate code for address %q, %w", address, err)
 		log.Error(err)
 		return nil, err
 	}
@@ -312,7 +320,7 @@ func GenerateAffiliateCode(db *sqlx.DB, address string) (*api.AffiliateCode, err
 		return &result, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		err = fmt.Errorf("failed to set affiliate code for '%s', %w", address, err)
+		err = fmt.Errorf("failed to set affiliate code for %q, %w", address, err)
 		log.Error(err)
 		return nil, err
 	}
@@ -325,7 +333,7 @@ func GenerateAffiliateCode(db *sqlx.DB, address string) (*api.AffiliateCode, err
 		return nil, err
 	}
 	if existing == nil || existing.Code == "" {
-		err = fmt.Errorf("failed to set affiliate code for '%s', no code on record", address)
+		err = fmt.Errorf("failed to set affiliate code for %q, no code on record", address)
 		log.Error(err)
 		return nil, err
 	}

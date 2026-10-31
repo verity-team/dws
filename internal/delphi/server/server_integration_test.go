@@ -1,6 +1,7 @@
 //go:build dbtest
 
-// Integration tests for the shape of the /user/data/{address} response.
+// Integration tests for the shape of the /user/data/{address} response and for
+// the /wallet/connection write path.
 //
 // The response is what the frontend renders, so what matters is the JSON that
 // actually goes over the wire rather than the Go value behind it; that needs a
@@ -19,12 +20,16 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 	_ "github.com/lib/pq"
@@ -185,4 +190,48 @@ func TestUserDataDonationsIsAnArrayPastTheLastPage(t *testing.T) {
 	// sanity: the first page does carry the donation
 	body := userDataBody(t, dbh, integrationAddress)
 	assert.Contains(t, body, `"donations":[{`)
+}
+
+// AUD4-12: the affiliate code is part of the signed /wallet/connection message.
+// A correctly signed request records the code it was signed with; the same
+// signature replayed with another code is rejected and records nothing.
+func TestConnectWalletRecordsTheSignedCode(t *testing.T) {
+	dbh := integrationDB(t)
+	_, err := dbh.Exec(`TRUNCATE user_data, wallet_connection RESTART IDENTITY`)
+	require.NoError(t, err)
+
+	const (
+		referrer  = "0x00000000000000000000000000000000000000ee"
+		signed    = "0123456789abcdef"
+		attackers = "fedcba9876543210"
+	)
+	_, err = dbh.Exec(`INSERT INTO user_data(address, affiliate_code) VALUES($1, $2), ('0x00000000000000000000000000000000000000dd', $3)`, referrer, signed, attackers)
+	require.NoError(t, err)
+
+	key, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	addr := crypto.PubkeyToAddress(key.PublicKey).Hex()
+	authTS := time.Now().UTC()
+	params := api.ConnectWalletParams{
+		DelphiKey:       addr,
+		DelphiTs:        strconv.FormatInt(authTS.Unix(), 10),
+		DelphiSignature: signConnection(t, key, addr, authTS, signed),
+	}
+	s := NewDelphiServer(dbh)
+
+	codes := func() []string {
+		var cc []string
+		require.NoError(t, dbh.Select(&cc, `SELECT code FROM wallet_connection WHERE address=$1 ORDER BY id`, strings.ToLower(addr)))
+		return cc
+	}
+
+	ctx, rec := connectWalletCtx(t, fmt.Sprintf(`{"code":%q,"address":%q}`, signed, addr))
+	require.NoError(t, s.ConnectWallet(ctx, params))
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, []string{signed}, codes())
+
+	ctx, rec = connectWalletCtx(t, fmt.Sprintf(`{"code":%q,"address":%q}`, attackers, addr))
+	require.NoError(t, s.ConnectWallet(ctx, params))
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	assert.Equal(t, []string{signed}, codes(), "a replayed signature must not record another code")
 }

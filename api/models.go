@@ -58,7 +58,8 @@ type ConnectionRequest struct {
 	// Address address of the wallet that connected
 	Address string `db:"address" json:"address"`
 
-	// Code affiliate code, pass `none` if there's no code in the URL
+	// Code affiliate code, pass `none` if there's no code in the URL; it is
+	// part of the message signed in `delphi-signature`
 	Code string `db:"code" json:"code"`
 }
 
@@ -192,6 +193,12 @@ type GenerateCodeParams struct {
 	// up the path of the REST API endpoint called, the lower cased address
 	// in `delphi-key` and the `delphi-ts` timestamp. *Important*: please use
 	// UTC timestamps only.
+	//
+	// For `/wallet/connection` the affiliate code from the request body is
+	// appended, exactly as sent (`none` without one): `wallet connection,
+	// 0xded1fe6b3f61c8f1d874bb86f086d10ffc3f0154, 2023-10-23
+	// 18:45:19+00:00, none`. A signature is thus bound to the code it is
+	// sent with.
 	DelphiSignature DelphiSignature `json:"delphi-signature"`
 }
 
@@ -223,6 +230,12 @@ type ConnectWalletParams struct {
 	// up the path of the REST API endpoint called, the lower cased address
 	// in `delphi-key` and the `delphi-ts` timestamp. *Important*: please use
 	// UTC timestamps only.
+	//
+	// For `/wallet/connection` the affiliate code from the request body is
+	// appended, exactly as sent (`none` without one): `wallet connection,
+	// 0xded1fe6b3f61c8f1d874bb86f086d10ffc3f0154, 2023-10-23
+	// 18:45:19+00:00, none`. A signature is thus bound to the code it is
+	// sent with.
 	DelphiSignature DelphiSignature `json:"delphi-signature"`
 }
 

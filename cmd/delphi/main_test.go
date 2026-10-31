@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +13,8 @@ import (
 	echomiddleware "github.com/labstack/echo/v4/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/verity-team/dws/api"
+	"github.com/verity-team/dws/internal/delphi/server"
 )
 
 // echo.New() leaves every server timeout at zero i.e. a slow or stalled client
@@ -105,4 +110,134 @@ func TestRateLimitLeavesRoomForTheFrontend(t *testing.T) {
 	sessions := rateLimit * 60 / requestsPerSessionPerMinute
 	assert.GreaterOrEqual(t, sessions, 1000, "the per-IP budget is too small for a shared frontend egress address")
 	assert.GreaterOrEqual(t, rateBurst, rateLimit, "the burst must absorb a refresh spike")
+}
+
+// testEcho builds the server the way main() does; the handlers have no
+// database, so only requests that are rejected before the first query may be
+// sent to it.
+func testEcho(t *testing.T) *echo.Echo {
+	t.Helper()
+	swagger, err := api.GetSwagger()
+	require.NoError(t, err)
+	swagger.Servers = nil
+	return newEcho(swagger, server.NewDelphiServer(nil))
+}
+
+// http.Server defaults to 1 MB of request headers
+func TestNewEchoLimitsHeaderBytes(t *testing.T) {
+	e := testEcho(t)
+	assert.Equal(t, maxHeaderBytes, e.Server.MaxHeaderBytes)
+	assert.Less(t, e.Server.MaxHeaderBytes, http.DefaultMaxHeaderBytes)
+	// timeouts are still in place
+	assert.Positive(t, e.Server.ReadHeaderTimeout)
+}
+
+// authRequest builds a POST /affiliate/code request with the given headers.
+func authRequest(key, ts, sig string) *http.Request {
+	req := httptest.NewRequest(http.MethodPost, "/affiliate/code", nil)
+	req.RemoteAddr = "192.0.2.20:54321"
+	req.Header.Set("delphi-key", key)
+	req.Header.Set("delphi-ts", ts)
+	req.Header.Set("delphi-signature", sig)
+	return req
+}
+
+// the authentication headers are logged before the signature is checked; the
+// spec bounds them so that the request validator rejects anything else
+func TestAuthHeadersAreValidated(t *testing.T) {
+	const key = "0xb938f65dfe303edf96a511f1e7e3190f69036860"
+	ts := strconv.FormatInt(time.Now().UTC().Unix(), 10)
+	sig := "0x" + strings.Repeat("ff", 65)
+
+	for _, tc := range []struct {
+		name         string
+		key, ts, sig string
+	}{
+		{"key not hex", "0x" + strings.Repeat("zz", 20), ts, sig},
+		{"key too long", key + "00", ts, sig},
+		{"key without 0x", key[2:], ts, sig},
+		{"key padded", key + strings.Repeat(" ", 4000), ts, sig},
+		{"ts not digits", key, "17x", sig},
+		{"ts negative", key, "-1", sig},
+		{"ts too long", key, strings.Repeat("9", 13), sig},
+		{"sig too long", key, ts, sig + "ff"},
+		{"sig too short", key, ts, sig[:len(sig)-2]},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			testEcho(t).ServeHTTP(rec, authRequest(tc.key, tc.ts, tc.sig))
+			assert.Equal(t, http.StatusBadRequest, rec.Code)
+		})
+	}
+
+	// well formed headers pass the validator and fail the signature check
+	rec := httptest.NewRecorder()
+	testEcho(t).ServeHTTP(rec, authRequest(key, ts, sig))
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+// assertGenericError checks that a rejected request is answered with the
+// numeric code and the generic message, and nothing of the input or the schema
+func assertGenericError(t *testing.T, rec *httptest.ResponseRecorder, status, code int, leaks ...string) {
+	t.Helper()
+	assert.Equal(t, status, rec.Code)
+	var cerr api.Error
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &cerr), rec.Body.String())
+	assert.Equal(t, code, cerr.Code)
+	assert.Equal(t, "invalid request", cerr.Message)
+	for _, leak := range leaks {
+		assert.NotContains(t, rec.Body.String(), leak)
+	}
+}
+
+// AUD4-23: the request validator's error used to be returned verbatim
+func TestValidationErrorsAreGeneric(t *testing.T) {
+	const key = "0xb938f65dfe303edf96a511f1e7e3190f69036860"
+	ts := strconv.FormatInt(time.Now().UTC().Unix(), 10)
+	sig := "0x" + strings.Repeat("ff", 65)
+
+	t.Run("header", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		testEcho(t).ServeHTTP(rec, authRequest("0xLEAKME", ts, sig))
+		assertGenericError(t, rec, http.StatusBadRequest, 116, "LEAKME", "delphi-key", "regular expression", "0x[0-9a-fA-F]")
+	})
+	t.Run("body", func(t *testing.T) {
+		body := `{"code":"LEAKME-LEAKME-LEAKME","address":"` + key + `"}`
+		req := httptest.NewRequest(http.MethodPost, "/wallet/connection", strings.NewReader(body))
+		req.RemoteAddr = "192.0.2.21:54321"
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		req.Header.Set("delphi-key", key)
+		req.Header.Set("delphi-ts", ts)
+		req.Header.Set("delphi-signature", sig)
+		rec := httptest.NewRecorder()
+		testEcho(t).ServeHTTP(rec, req)
+		assertGenericError(t, rec, http.StatusBadRequest, 116, "LEAKME", "maximum", "length")
+	})
+	t.Run("query", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/user/data/"+key+"?limit=LEAKME", nil)
+		req.RemoteAddr = "192.0.2.22:54321"
+		rec := httptest.NewRecorder()
+		testEcho(t).ServeHTTP(rec, req)
+		assertGenericError(t, rec, http.StatusBadRequest, 116, "LEAKME", "limit", "integer")
+	})
+}
+
+// the generated parameter binding used to answer "Expected one value for
+// delphi-key, got 2" and "Invalid format for parameter ...: <input>"
+func TestBindingErrorsAreGeneric(t *testing.T) {
+	const key = "0xb938f65dfe303edf96a511f1e7e3190f69036860"
+	req := authRequest(key, strconv.FormatInt(time.Now().UTC().Unix(), 10), "0x"+strings.Repeat("ff", 65))
+	req.Header.Add("delphi-key", key)
+	rec := httptest.NewRecorder()
+	testEcho(t).ServeHTTP(rec, req)
+	assertGenericError(t, rec, http.StatusBadRequest, 117, "Expected", "delphi-key", "got 2")
+}
+
+// the validator rejects a path the spec does not know of
+func TestUnknownPathIsGeneric(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/no/such/path", nil)
+	req.RemoteAddr = "192.0.2.23:54321"
+	rec := httptest.NewRecorder()
+	testEcho(t).ServeHTTP(rec, req)
+	assertGenericError(t, rec, http.StatusNotFound, 116, "no matching operation")
 }

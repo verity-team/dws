@@ -15,9 +15,13 @@ import {
   writeContract,
 } from "@wagmi/core";
 import {
+  Address,
   formatEther,
   formatUnits,
+  getAddress,
   getContract,
+  isAddress,
+  isHex,
   parseEther,
   parseUnits,
 } from "viem";
@@ -56,13 +60,66 @@ const getContractData = (
   ]);
 };
 
+/**
+ * The chain id donations must be sent on, from NEXT_PUBLIC_TARGET_NETWORK_ID
+ * (hex, e.g. "0x1"); mainnet when unset, like the wagmi chain config.
+ *
+ * @returns the chain id, or null if the configured value is invalid
+ */
+export const getTargetChainId = (): Maybe<number> => {
+  const raw = process.env.NEXT_PUBLIC_TARGET_NETWORK_ID ?? "0x1";
+  if (!/^0x[0-9a-fA-F]+$/.test(raw)) {
+    return null;
+  }
+
+  const chainId = parseInt(raw, 16);
+  return Number.isSafeInteger(chainId) && chainId > 0 ? chainId : null;
+};
+
+/**
+ * Return the donation address, but only if the build-time
+ * NEXT_PUBLIC_DONATE_PUBKEY and the `receiving_address` served by the API are
+ * both valid and the same address. The backend credits only payments to the
+ * address it serves, so a stale or mistyped build must not be paid.
+ *
+ * @param apiAddress [string] `receiving_address` from /donation/data
+ * @returns the checksummed address, or null if they are invalid or differ
+ */
+export const getVerifiedReceiver = (
+  apiAddress: Maybe<string>
+): Maybe<Address> => {
+  const configured = process.env.NEXT_PUBLIC_DONATE_PUBKEY;
+  if (
+    configured == null ||
+    apiAddress == null ||
+    !isAddress(configured) ||
+    !isAddress(apiAddress)
+  ) {
+    return null;
+  }
+
+  const receiver = getAddress(configured);
+  if (receiver !== getAddress(apiAddress)) {
+    console.warn("Donation address does not match the server address");
+    return null;
+  }
+
+  return receiver;
+};
+
 export const donate = async (
   from: string,
   amount: number,
   token: AvailableToken,
+  receiver: Address,
   provider: AvailableWallet = "MetaMask"
 ): Promise<Maybe<string>> => {
   let txHash = null;
+
+  if (!isAddress(receiver)) {
+    console.warn("Invalid donation address");
+    return null;
+  }
 
   const walletBalance = await getBalance(token, from);
   console.log(walletBalance);
@@ -78,17 +135,17 @@ export const donate = async (
 
   if (provider === "MetaMask") {
     if (token === "ETH") {
-      txHash = await donateETH(from, amount);
+      txHash = await donateETH(from, receiver, amount);
     } else {
-      txHash = await donateERC(from, token, amount);
+      txHash = await donateERC(from, receiver, token, amount);
     }
   }
 
   if (provider === "WalletConnect") {
     if (token === "ETH") {
-      txHash = await donateETHWagmi(amount);
+      txHash = await donateETHWagmi(receiver, amount);
     } else {
-      txHash = await donateERCWagmi(token, amount);
+      txHash = await donateERCWagmi(receiver, token, amount);
     }
   }
 
@@ -97,6 +154,7 @@ export const donate = async (
 
 export const donateETH = async (
   from: string,
+  receiver: Address,
   amount: number
 ): Promise<Maybe<string>> => {
   const ethereum = window.ethereum;
@@ -105,18 +163,12 @@ export const donateETH = async (
     return null;
   }
 
-  const receiveWallet = process.env.NEXT_PUBLIC_DONATE_PUBKEY;
-  if (receiveWallet == null) {
-    console.warn("Receive wallet not set");
-    return null;
-  }
-
   return await ethereum.request({
     method: "eth_sendTransaction",
     params: [
       {
         from,
-        to: receiveWallet,
+        to: receiver,
         value: parseInt(toWei(amount, "ether")).toString(16),
         // gasLimit: '0x5028', // Customizable by the user during MetaMask confirmation.
         // maxPriorityFeePerGas: '0x3b9aca00', // Customizable by the user during MetaMask confirmation.
@@ -127,16 +179,19 @@ export const donateETH = async (
 };
 
 export const donateETHWagmi = async (
+  receiver: Address,
   amount: number
 ): Promise<Maybe<string>> => {
-  const receiveWallet = process.env.NEXT_PUBLIC_DONATE_PUBKEY;
-  if (receiveWallet == null) {
-    console.warn("Receive wallet not set");
+  const chainId = getTargetChainId();
+  if (chainId == null) {
+    console.warn("Invalid target network");
     return null;
   }
 
+  // with a chainId wagmi refuses to send if the wallet is on another chain
   const txConfig = await prepareSendTransaction({
-    to: receiveWallet,
+    chainId,
+    to: receiver,
     value: parseEther(amount.toString()),
   });
 
@@ -146,16 +201,12 @@ export const donateETHWagmi = async (
 
 export const donateERC = async (
   from: string,
+  receiver: Address,
   token: AvailableToken,
   amount: number
 ): Promise<Maybe<string>> => {
   const ethereum = window.ethereum;
   if (ethereum == null) {
-    return null;
-  }
-
-  const receiveWallet = process.env.NEXT_PUBLIC_DONATE_PUBKEY;
-  if (receiveWallet == null) {
     return null;
   }
 
@@ -165,7 +216,7 @@ export const donateERC = async (
     return null;
   }
 
-  const data = getContractData(receiveWallet, amount, tokenInfo.decimals);
+  const data = getContractData(receiver, amount, tokenInfo.decimals);
   if (data == null) {
     return;
   }
@@ -183,32 +234,80 @@ export const donateERC = async (
 };
 
 export const donateERCWagmi = async (
+  receiver: Address,
   token: AvailableToken,
   amount: number
 ): Promise<Maybe<string>> => {
-  const receiveWallet = process.env.NEXT_PUBLIC_DONATE_PUBKEY;
-  if (receiveWallet == null) {
-    return null;
-  }
-
   const tokenInfo = contractAddrMap.get(token);
   if (tokenInfo == null) {
     console.warn("Unknown ERC-20 contract address");
     return null;
   }
 
+  const chainId = getTargetChainId();
+  if (chainId == null) {
+    console.warn("Invalid target network");
+    return null;
+  }
+
+  // with a chainId wagmi refuses to send if the wallet is on another chain
   const { request } = await prepareWriteContract({
+    chainId,
     address: tokenInfo.contractAddress as any,
     abi: erc20ABI,
     functionName: "transfer",
-    args: [
-      receiveWallet as any,
-      parseUnits(amount.toString(), tokenInfo.decimals),
-    ],
+    args: [receiver, parseUnits(amount.toString(), tokenInfo.decimals)],
   });
 
   const { hash } = await writeContract(request);
   return hash;
+};
+
+// How long to wait for a donation to be mined before giving up on the receipt
+const RECEIPT_TIMEOUT_MS = 15 * 60 * 1000;
+
+// "replaced": the wallet cancelled the donation or sent another transaction
+// with the same nonce; "unknown": no receipt (timeout or RPC failure)
+export type DonationOutcome = "success" | "reverted" | "replaced" | "unknown";
+
+/**
+ * Wait for a donation transaction to be mined on the target chain.
+ *
+ * Uses the configured public client, so it works for both MetaMask and
+ * WalletConnect. A speed-up (same transaction, higher fee) is followed to the
+ * new hash; any other replacement is not a donation.
+ *
+ * @param hash [string] the donation transaction hash
+ */
+export const waitForDonation = async (
+  hash: string
+): Promise<DonationOutcome> => {
+  const chainId = getTargetChainId();
+  if (chainId == null || !isHex(hash) || hash.length !== 66) {
+    console.warn("Cannot wait for donation receipt: invalid input");
+    return "unknown";
+  }
+
+  let replaced = false;
+  try {
+    const receipt = await getPublicClient({
+      chainId,
+    }).waitForTransactionReceipt({
+      hash,
+      timeout: RECEIPT_TIMEOUT_MS,
+      onReplaced: ({ reason }) => {
+        replaced = reason !== "repriced";
+      },
+    });
+
+    if (replaced) {
+      return "replaced";
+    }
+    return receipt.status === "success" ? "success" : "reverted";
+  } catch (error) {
+    console.error("Cannot get donation receipt", error);
+    return "unknown";
+  }
 };
 
 export const getBalance = async (

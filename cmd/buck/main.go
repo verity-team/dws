@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -21,7 +22,6 @@ import (
 	"github.com/verity-team/dws/internal/buck/db"
 	eth "github.com/verity-team/dws/internal/buck/ethereum"
 	c "github.com/verity-team/dws/internal/common"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -166,6 +166,13 @@ func main() {
 	if numberOfModes == 0 {
 		log.Info("nothing to do, exiting")
 		return
+	}
+
+	// every crawler mode prices donations or moves the token price tier: the
+	// price on record has to be one of the configured tiers (and a fresh
+	// database is given the first one), see db.InitTokenPrice
+	if err = db.InitTokenPrice(*ctxt); err != nil {
+		log.Fatal(err)
 	}
 
 	if *singleBlock > 0 {
@@ -361,6 +368,7 @@ type buckDeps struct {
 	persistTxs            func(ctxt c.Context, bn uint64, ethPrice decimal.Decimal, txs []c.Transaction) error
 	getOldUnconfirmed     func(dbh *sqlx.DB) ([]c.UnconfirmedTx, error)
 	getTxsByHash          func(ctxt c.Context, hs []c.Hashable) ([]c.TxByHash, error)
+	getTxReceipts         func(ctxt c.Context, hs []c.Hashable) ([]c.TxReceipt, error)
 	recordAbsence         func(ctxt c.Context, hash string, absent bool) (int, error)
 	failTx                func(ctxt c.Context, tx c.TxByHash) error
 	finalizeTx            func(ctxt c.Context, tx c.TxByHash) error
@@ -382,6 +390,7 @@ var liveDeps = func() buckDeps {
 		getTxsByHash: func(ctxt c.Context, hs []c.Hashable) ([]c.TxByHash, error) {
 			return eth.GetData[c.TxByHash](ctxt, hs, eth.TXBHFetcher{})
 		},
+		getTxReceipts: eth.GetTxReceipts,
 		recordAbsence: db.RecordAbsence,
 		failTx:        db.FailTx,
 		finalizeTx:    db.FinalizeTx,
@@ -517,6 +526,9 @@ func monitorOldUnconfirmedWith(ctx context.Context, deps buckDeps) error {
 	if err != nil {
 		return err
 	}
+	// the transactions found in their finalized block; they are confirmed
+	// only on the word of their receipts, fetched below in one batch
+	var finalize []c.TxByHash
 	for _, tx := range txs {
 		select {
 		case <-ctx.Done():
@@ -543,22 +555,60 @@ func monitorOldUnconfirmedWith(ctx context.Context, deps buckDeps) error {
 		// c.TxByHash.Judge): a pending tx or a tx we could not fetch the
 		// finalized block for is left untouched and re-examined on a later
 		// run
-		switch verdict := tx.Judge(mfbn); verdict {
-		case c.TxFail, c.TxDropped:
-			log.Warnf("failing old unconfirmed tx (%s), %s", tx.Hash, verdict)
-			err = deps.failTx(*ctxt, tx)
-			if err != nil {
-				return err
-			}
-		case c.TxFinalize:
-			log.Infof("##### finalizing old tx %s", tx.Hash)
-			err = deps.finalizeTx(*ctxt, tx)
-			if err != nil {
-				return err
-			}
-		default:
-			log.Warnf("old unconfirmed tx (%s) left untouched, %s", tx.Hash, verdict)
+		verdict := tx.Judge(mfbn)
+		if verdict == c.TxFinalize {
+			finalize = append(finalize, tx)
+			continue
 		}
+		if err = applyVerdict(*ctxt, deps, tx, verdict); err != nil {
+			return err
+		}
+	}
+	if len(finalize) == 0 {
+		return nil
+	}
+
+	// block inclusion alone does not confirm a donation: the receipt status on
+	// the row may stem from a block that was orphaned since, see
+	// c.TxByHash.JudgeReceipt
+	rcpts, err := deps.getTxReceipts(*ctxt, c.ToHashable(finalize))
+	if err != nil {
+		return err
+	}
+	byHash := make(map[string]*c.TxReceipt, len(rcpts))
+	for i := range rcpts {
+		// a null result or an error object decodes into a zero value receipt
+		if hash := c.NormalizeHash(rcpts[i].TransactionHash); hash != "" {
+			byHash[hash] = &rcpts[i]
+		}
+	}
+	for _, tx := range finalize {
+		select {
+		case <-ctx.Done():
+			log.Info("buck/old-unconfirmed - context canceled")
+			return nil
+		default:
+			// keep going
+		}
+		verdict := tx.JudgeReceipt(byHash[c.NormalizeHash(tx.Hash)])
+		if err = applyVerdict(*ctxt, deps, tx, verdict); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// applyVerdict confirms, fails or leaves alone an old unconfirmed donation.
+func applyVerdict(ctxt c.Context, deps buckDeps, tx c.TxByHash, verdict c.TxVerdict) error {
+	switch verdict {
+	case c.TxFail, c.TxDropped:
+		log.Warnf("failing old unconfirmed tx (%s), %s", tx.Hash, verdict)
+		return deps.failTx(ctxt, tx)
+	case c.TxFinalize:
+		log.Infof("##### finalizing old tx %s", tx.Hash)
+		return deps.finalizeTx(ctxt, tx)
+	default:
+		log.Warnf("old unconfirmed tx (%s) left untouched, %s", tx.Hash, verdict)
 	}
 	return nil
 }
