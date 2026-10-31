@@ -200,7 +200,15 @@ func (s *DelphiServer) ConnectWallet(ctx echo.Context, params api.ConnectWalletP
 	// every read path lowercases the address; do the same before writing so
 	// the duplicate detection in db.ConnectWallet can match
 	cr.Address = strings.ToLower(cr.Address)
-	if err = db.ConnectWallet(s.db, cr); err != nil {
+	// a code that is turned down is reported as such (422): the request was
+	// well formed and authenticated, it just cannot be honoured -- retrying it
+	// will not help, and the frontend tells the user why (see #233)
+	switch err = db.ConnectWallet(s.db, cr); {
+	case errors.Is(err, db.ErrUnknownAffiliateCode):
+		return ctx.JSON(http.StatusUnprocessableEntity, api.Error{Code: 119, Message: "unknown affiliate code"})
+	case errors.Is(err, db.ErrSelfReferral):
+		return ctx.JSON(http.StatusUnprocessableEntity, api.Error{Code: 120, Message: "an affiliate code cannot be used by its owner"})
+	case err != nil:
 		cerr := getError(104, msgInternalError, "failed to log wallet connection", err)
 		return ctx.JSON(http.StatusInternalServerError, cerr)
 	}

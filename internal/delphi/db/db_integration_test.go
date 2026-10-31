@@ -398,7 +398,7 @@ func TestConnectWalletRejectsSelfReferral(t *testing.T) {
 	}
 
 	// self-referral: the code owner connects with his own code -> rejected
-	require.NoError(t, ConnectWallet(dbh, api.ConnectionRequest{Address: owner, Code: code}))
+	require.ErrorIs(t, ConnectWallet(dbh, api.ConnectionRequest{Address: owner, Code: code}), ErrSelfReferral)
 	require.Equal(t, 0, countConn(owner), "self-referral must not create a wallet_connection")
 
 	// a genuine third-party referral -> accepted
@@ -408,7 +408,7 @@ func TestConnectWalletRejectsSelfReferral(t *testing.T) {
 
 	// an unknown code -> rejected, as before
 	const third = "0x00000000000000000000000000000000000000e2"
-	require.NoError(t, ConnectWallet(dbh, api.ConnectionRequest{Address: third, Code: "nosuchcode000000"}))
+	require.ErrorIs(t, ConnectWallet(dbh, api.ConnectionRequest{Address: third, Code: "nosuchcode000000"}), ErrUnknownAffiliateCode)
 	require.Equal(t, 0, countConn(third), "an unknown code must be rejected")
 }
 

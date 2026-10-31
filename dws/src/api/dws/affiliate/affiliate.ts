@@ -1,18 +1,18 @@
 "use client";
 
 import { sleep, getExponentialWaitTime } from "@/utils/utils";
-import { Nullable, Maybe } from "@/utils";
+import { Maybe } from "@/utils";
 import { clientBaseRequest, HttpMethod } from "@/utils/baseAPI";
-import { UserDonationData } from "../user/user.type";
 import {
   WalletAffiliateRequest,
+  WalletConnectionResult,
   GenAffiliateRequest,
   GenAffiliateResponse,
 } from "./affiliate.type";
 
 export const connectWalletWithAffiliate = async (
   walletAffiliateRequest: WalletAffiliateRequest
-): Promise<Nullable<UserDonationData>> => {
+): Promise<WalletConnectionResult> => {
   const response = await withErrorRetry(
     async () => {
       return await clientBaseRequest(
@@ -30,9 +30,11 @@ export const connectWalletWithAffiliate = async (
         response.ok ||
         response.status === 400 ||
         response.status === 401 ||
-        response.status === 404
+        response.status === 404 ||
+        response.status === 422
       ) {
-        // a stale/invalid signature will not become valid on a retry
+        // a stale/invalid signature will not become valid on a retry, nor
+        // will a turned down affiliate code
         return false;
       }
 
@@ -42,21 +44,29 @@ export const connectWalletWithAffiliate = async (
   );
 
   if (response == null) {
-    return null;
+    return "failed";
   }
 
-  // TODO: Add extra logic to handle 404 logic if needed, or else just ignore
-  if (!response.ok) {
-    return null;
+  if (response.ok) {
+    return "connected";
+  }
+
+  if (response.status !== 422) {
+    return "failed";
   }
 
   try {
-    // There should be a body in response
-    const result = await response.json();
-    return result;
+    const { code } = await response.json();
+    if (code === 119) {
+      return "unknown_code";
+    }
+    if (code === 120) {
+      return "self_referral";
+    }
   } catch {
-    return null;
+    // no readable error body
   }
+  return "failed";
 };
 
 export const requestNewAffiliateCode = async (

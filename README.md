@@ -402,7 +402,7 @@ code as well, so a harvested signature cannot be replayed within the
 unchanged): deploy `delphi` and the frontend together -- a frontend that signs
 the old message is rejected with a 401 by the new `delphi`, and vice versa.
 
-`POST /wallet/connection` additionally rejects a *self-referral*: an address cannot connect with an affiliate code that belongs to itself (attaching another wallet's code to your own address is the normal referral and is allowed; the signature already prevents attaching a code to an address you do not control). **Binding the address in changed the message format**: the backend and
+`POST /wallet/connection` additionally rejects a *self-referral*: an address cannot connect with an affiliate code that belongs to itself (attaching another wallet's code to your own address is the normal referral and is allowed; the signature already prevents attaching a code to an address you do not control). A turned down code is reported, not swallowed: an unknown code gets `422` with error code `119`, a self-referral `422` with `120`, and nothing is recorded in either case; the frontend tells the user why the referral did not take. **Binding the address in changed the message format**: the backend and
 the frontend have to be rolled out together, a new frontend talking to an old
 backend (or the other way round) will see every signed request rejected with a
 401.
